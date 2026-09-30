@@ -22,6 +22,8 @@ class Field:
     group: str = ""
     # Tên hiển thị của cột trên list SharePoint có sẵn (mặc định = label)
     sp: str = ""
+    # Lựa chọn có gợi ý nhưng vẫn cho gõ giá trị mới (vd tên trường cũ)
+    free: bool = False
 
     @property
     def sp_title(self) -> str:
@@ -85,11 +87,14 @@ TUYEN_SINH = ListDef(
         Field("GioiTinh", "Giới tính", CHOICE, GIOI_TINH, group=G_HOCSINH),
         Field("CheDo", "Chế độ", CHOICE, CHE_DO, group=G_HOCSINH),
         # --- Trường cũ & kết quả học tập
-        Field("TruongCu", "Trường cũ", group=G_TRUONGCU),
-        Field("TruongCu_QuanHuyen", "Trường cũ - Quận/huyện", sp="Trường cũ_Quận huyện",
-              group=G_TRUONGCU),
-        Field("TruongCu_Tinh", "Trường cũ - Tỉnh", CHOICE, "@tinh", sp="Trường cũ_tỉnh",
-              group=G_TRUONGCU),
+        # Chọn Tỉnh → Phường/Xã (địa giới mới) → gợi ý trường thuộc phường/xã đó.
+        # Cột "Trường cũ_Quận huyện" có sẵn trên list nay lưu Phường/Xã.
+        Field("TruongCu_Tinh", "Trường cũ - Tỉnh/Thành phố", CHOICE, "@tinh",
+              sp="Trường cũ_tỉnh", group=G_TRUONGCU),
+        Field("TruongCu_QuanHuyen", "Trường cũ - Phường/Xã", CHOICE, "@xa:TruongCu_Tinh",
+              sp="Trường cũ_Quận huyện", group=G_TRUONGCU),
+        Field("TruongCu", "Trường cũ", CHOICE, "@truong:TruongCu_Tinh,TruongCu_QuanHuyen",
+              free=True, group=G_TRUONGCU),
         Field("Toan1", "Toán 1", NUMBER, group=G_TRUONGCU),
         Field("Van1", "Văn 1", NUMBER, group=G_TRUONGCU),
         Field("Anh1", "Anh 1", NUMBER, group=G_TRUONGCU),
@@ -136,9 +141,11 @@ NHAP_HOC = ListDef(
         Field("DanToc", "Dân tộc", CHOICE, "@dan_toc", group=G_CHUNG),
         Field("TonGiao", "Tôn giáo", CHOICE, "@ton_giao", group=G_CHUNG),
         # Trường cũ: lấy từ Data tuyển sinh (không có trong biểu mẫu VEMIS)
-        Field("TruongCu", "Trường cũ", group=G_CHUNG),
-        Field("TruongCu_QuanHuyen", "Trường cũ - Quận/huyện", group=G_CHUNG),
-        Field("TruongCu_Tinh", "Trường cũ - Tỉnh", CHOICE, "@tinh", group=G_CHUNG),
+        Field("TruongCu_Tinh", "Trường cũ - Tỉnh/Thành phố", CHOICE, "@tinh", group=G_CHUNG),
+        Field("TruongCu_QuanHuyen", "Trường cũ - Phường/Xã", CHOICE, "@xa:TruongCu_Tinh",
+              group=G_CHUNG),
+        Field("TruongCu", "Trường cũ", CHOICE, "@truong:TruongCu_Tinh,TruongCu_QuanHuyen",
+              free=True, group=G_CHUNG),
         # --- Địa chỉ
         Field("ChoO_SoNha", "Chỗ ở hiện nay - SN/Xóm", group=G_DIACHI),
         Field("ChoO_KhuDanCu", "Chỗ ở hiện nay - Khu dân cư", group=G_DIACHI),

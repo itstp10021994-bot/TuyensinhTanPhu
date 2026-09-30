@@ -144,6 +144,15 @@ def render_detail(item_id: str):
                 st.markdown("**Đối tượng**")
                 values.update(ui.record_form([F(k) for k in ("CanNgheo", "DoanVien", "DoiVien")],
                                              rec, prefix, 3))
+            elif g == G_CHUNG:
+                truong = ("TruongCu_Tinh", "TruongCu_QuanHuyen", "TruongCu")
+                values.update(ui.record_form([f for f in NHAP_HOC.fields
+                                              if f.group == g and f.key not in truong],
+                                             rec, prefix, 3))
+                st.divider()
+                st.markdown("**Trường cũ**")
+                values.update(ui.record_form([F(k) for k in truong], rec, prefix, 3,
+                                             {k: F(k).label.split(" - ")[-1] for k in truong}))
             else:
                 values.update(ui.record_form([f for f in NHAP_HOC.fields if f.group == g],
                                              rec, prefix, 3))

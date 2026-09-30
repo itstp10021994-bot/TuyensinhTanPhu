@@ -175,32 +175,31 @@ def render_detail(item_id: str):
     main, side = st.columns([2.2, 1], gap="medium")
     with main:
         prefix = f"ts_{item_id}_{S.ts_v}"
-        with st.form(f"form_{prefix}", border=False, enter_to_submit=False):
-            values = {}
-            with ui.section("Liên hệ & tư vấn"):
-                values.update(ui.record_form(
-                    [F(k) for k in ("NgayLienHe", "SDT", "NamHoc", "Nguon", "TenLienHe",
-                                    "NguoiGioiThieu", "PhanHe", "NguoiNhanHoSo")], rec, prefix, 3))
-                values.update(ui.record_form([F("GhiChu")], rec, prefix, 1))
-            with ui.section("Học sinh"):
-                values.update(ui.record_form(
-                    [F(k) for k in ("HoTenHS", "NgaySinh", "GioiTinh", "Khoi", "CheDo")],
-                    rec, prefix, 3))
-            with ui.section("Trường cũ & kết quả học tập"):
-                values.update(ui.record_form(
-                    [F(k) for k in ("TruongCu", "TruongCu_QuanHuyen", "TruongCu_Tinh")],
-                    rec, prefix, 3))
-                short = {"Toan1": "Toán", "Van1": "Văn", "Anh1": "Anh", "TV1": "Tiếng Việt",
-                         "HanhKiem1": "Hạnh kiểm", "Toan2": "Toán", "Van2": "Văn",
-                         "Anh2": "Anh", "TV2": "Tiếng Việt", "HanhKiem2": "Hạnh kiểm"}
-                for n in ("1", "2"):
-                    st.markdown(f"**Kết quả {n}**")
-                    keys = [f"Toan{n}", f"Van{n}", f"Anh{n}", f"TV{n}", f"HanhKiem{n}"]
-                    values.update(ui.record_form([F(k) for k in keys], rec, prefix, 5, short))
-            bar = st.container(horizontal=True, vertical_alignment="center")
-            submitted = bar.form_submit_button("Lưu thay đổi", type="primary",
-                                               icon=":material/save:")
-            bar.caption("Các trường có dấu * là bắt buộc.")
+        values = {}
+        with ui.section("Liên hệ & tư vấn"):
+            values.update(ui.record_form(
+                [F(k) for k in ("NgayLienHe", "SDT", "NamHoc", "Nguon", "TenLienHe",
+                                "NguoiGioiThieu", "PhanHe", "NguoiNhanHoSo")], rec, prefix, 3))
+            values.update(ui.record_form([F("GhiChu")], rec, prefix, 1))
+        with ui.section("Học sinh"):
+            values.update(ui.record_form(
+                [F(k) for k in ("HoTenHS", "NgaySinh", "GioiTinh", "Khoi", "CheDo")],
+                rec, prefix, 3))
+        with ui.section("Trường cũ & kết quả học tập"):
+            values.update(ui.record_form(
+                [F(k) for k in ("TruongCu_Tinh", "TruongCu_QuanHuyen", "TruongCu")],
+                rec, prefix, 3, {"TruongCu_Tinh": "Tỉnh/Thành phố",
+                                 "TruongCu_QuanHuyen": "Phường/Xã", "TruongCu": "Tên trường"}))
+            short = {"Toan1": "Toán", "Van1": "Văn", "Anh1": "Anh", "TV1": "Tiếng Việt",
+                     "HanhKiem1": "Hạnh kiểm", "Toan2": "Toán", "Van2": "Văn",
+                     "Anh2": "Anh", "TV2": "Tiếng Việt", "HanhKiem2": "Hạnh kiểm"}
+            for n in ("1", "2"):
+                st.markdown(f"**Kết quả {n}**")
+                keys = [f"Toan{n}", f"Van{n}", f"Anh{n}", f"TV{n}", f"HanhKiem{n}"]
+                values.update(ui.record_form([F(k) for k in keys], rec, prefix, 5, short))
+        bar = st.container(horizontal=True, vertical_alignment="center")
+        submitted = bar.button("Lưu thay đổi", type="primary", icon=":material/save:")
+        bar.caption("Các trường có dấu * là bắt buộc.")
         if submitted:
             values["TrangThai"] = step
             values["NamHoc"] = values.get("NamHoc") or nam_hoc

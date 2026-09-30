@@ -365,19 +365,85 @@ def field_input(f: Field, record: dict, prefix: str, container=st, label: str | 
     if f.type == NOTE:
         return container.text_area(label, value=str(v or ""), key=key, height=96)
     if f.type == CHOICE:
-        # Trường xã phụ thuộc tỉnh: lấy tỉnh đang chọn trên form
-        ctx = dict(record)
-        if isinstance(f.options, str) and f.options.startswith("@xa:"):
-            tinh_key = f.options[4:]
-            ctx[tinh_key] = st.session_state.get(f"{prefix}_{tinh_key}", record.get(tinh_key))
-        opts = danh_muc.options_for(f, ctx)
-        if v and v not in opts:
-            opts = [v] + opts
-        ph = "Chọn tỉnh trước" if isinstance(f.options, str) and f.options.startswith("@xa:") \
-            and not opts else "Chọn…"
-        return container.selectbox(label, opts, index=opts.index(v) if v in opts else None,
-                                   key=key, placeholder=ph, disabled=not opts)
+        return _choice_input(f, record, prefix, container, label, key, v)
     return container.text_input(label, value=str(v or ""), key=key)
+
+
+@st.cache_data(show_spinner=False)
+def _learned_schools(version: int) -> dict:
+    """Tên trường đã nhập trong dữ liệu, theo (tỉnh, xã) và theo tỉnh — dùng làm gợi ý."""
+    from .schema import NHAP_HOC, TUYEN_SINH
+
+    idx: dict[tuple[str, str], dict[str, int]] = {}
+    for ld in (TUYEN_SINH, NHAP_HOC):
+        for r in _load(ld.name, version):
+            ten = str(r.get("TruongCu") or "").strip()
+            if not ten:
+                continue
+            t = danh_muc.fold(danh_muc.normalize_tinh(str(r.get("TruongCu_Tinh") or "")))
+            x = danh_muc.fold(r.get("TruongCu_QuanHuyen") or "")
+            for k in ((t, x), (t, "")):
+                idx.setdefault(k, {})
+                idx[k][ten] = idx[k].get(ten, 0) + 1
+    # sắp theo số lần xuất hiện
+    return {k: [n for n, _ in sorted(v.items(), key=lambda kv: (-kv[1], kv[0]))]
+            for k, v in idx.items()}
+
+
+def school_suggestions(tinh: str, xa: str) -> list[str]:
+    """Danh mục trường (truong_hoc.csv) trước, rồi các trường đã từng nhập ở phường/xã đó."""
+    out = danh_muc.truong_hoc(tinh, xa)
+    try:
+        learned = _learned_schools(data_version()).get(
+            (danh_muc.fold(danh_muc.normalize_tinh(tinh)), danh_muc.fold(xa)), [])
+    except Exception:  # không đọc được dữ liệu -> chỉ dùng danh mục
+        learned = []
+    seen = {danh_muc.fold(x) for x in out}
+    out += [x for x in learned if danh_muc.fold(x) not in seen]
+    return out
+
+
+def _choice_input(f: Field, record: dict, prefix: str, container, label: str, key: str, v):
+    """Ô chọn; hỗ trợ chuỗi phụ thuộc Tỉnh → Phường/Xã → Trường.
+
+    Giá trị của ô cha lấy từ lần vẽ hiện tại (lưu trong `_fv`), nên khi đổi Tỉnh thì
+    danh sách Phường/Xã và gợi ý trường thay đổi ngay; ô con có key gồm giá trị ô cha để
+    tự xóa lựa chọn cũ không còn hợp lệ.
+    """
+    cur = st.session_state.setdefault("_fv", {}).setdefault(prefix, {})
+    parent_keys = danh_muc.parents(f)
+    ctx = dict(record)
+    changed = False
+    for pk in parent_keys:
+        ctx[pk] = cur.get(pk, record.get(pk)) or ""
+        if danh_muc.fold(danh_muc.normalize_tinh(ctx[pk])) != danh_muc.fold(
+                danh_muc.normalize_tinh(record.get(pk) or "")):
+            changed = True
+    if isinstance(f.options, str) and f.options == "@tinh":
+        v = danh_muc.normalize_tinh(v)
+    if isinstance(f.options, str) and f.options.startswith("@truong:"):
+        opts = school_suggestions(ctx[parent_keys[0]], ctx[parent_keys[1]])
+    else:
+        opts = danh_muc.options_for(f, ctx)
+    if changed:  # ô cha vừa đổi: bỏ giá trị cũ
+        v = None
+    elif v and v not in opts:
+        opts = [v] + opts  # giữ giá trị cũ (vd tên theo địa giới trước sáp nhập)
+    if parent_keys:
+        key = f"{key}__{abs(hash(tuple(ctx[pk] for pk in parent_keys))) % 10**8}"
+    if f.free:
+        ph = "Chọn trong gợi ý hoặc gõ tên trường…" if opts else "Gõ tên trường…"
+        val = container.selectbox(label, opts, index=opts.index(v) if v in opts else None,
+                                  key=key, placeholder=ph, accept_new_options=True,
+                                  help="Gợi ý theo Phường/Xã đã chọn. Có thể gõ tên trường "
+                                       "chưa có trong danh sách.")
+    else:
+        waiting = parent_keys and not opts
+        ph = "Chọn Tỉnh/Thành phố trước" if waiting else "Chọn…"
+        val = container.selectbox(label, opts, index=opts.index(v) if v in opts else None,
+                                  key=key, placeholder=ph, disabled=bool(waiting))
+    cur[f.key] = val or ""
+    return val
 
 
 def record_form(fields: list[Field], record: dict, prefix: str, ncols: int = 3,

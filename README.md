@@ -32,8 +32,19 @@ Chọn **năm học** ở thanh bên — mọi trang đều lọc theo năm họ
 | **Data_NhapHoc** (app tạo) | HS đã xác nhận nhập học — đủ 54 cột biểu mẫu VEMIS + *Nam hoc*, liên kết qua `TuyenSinhID` | `NHAP_HOC` |
 
 Cả hai list đều có cột **Nam hoc**; mọi trang lọc theo năm học chọn ở góc trên.
-Danh mục (tỉnh, xã, dân tộc, tôn giáo, quốc tịch, diện chính sách, khuyết tật, nội trú/bán trú)
-lấy từ file mẫu VEMIS, lưu ở `tuyensinh/data/danh_muc.json`.
+## Địa giới hành chính & danh mục trường
+
+- **Tỉnh → Phường/Xã** theo địa giới mới nhất (34 tỉnh/thành, 3.321 phường/xã; bản v5.2.0 theo
+  NQ 388/NQ-UBTVQH16, hiệu lực 20/09/2026 — gồm việc Đồng Nai, Quảng Ninh, Bắc Ninh thành
+  thành phố trực thuộc TW). Chọn tỉnh trước, danh sách phường/xã tự đổi theo; đổi tỉnh thì phường/xã
+  cũ tự xóa. Tên tỉnh cũ trong dữ liệu (vd "Tỉnh Đồng Nai") được tự quy đổi sang tên mới.
+  Cập nhật khi có nghị quyết mới: `python scripts/update_danh_muc.py`
+- **Trường cũ**: chọn Tỉnh → Phường/Xã → gợi ý trường thuộc phường/xã đó. Gợi ý lấy từ
+  `tuyensinh/data/truong_hoc.csv` và từ các trường đã nhập trước đây; vẫn gõ được tên trường mới.
+  Nạp danh mục trường (xuất từ CSDL ngành / Sở GD&ĐT, cột *Tỉnh/Thành phố, Phường/Xã, Tên trường,
+  Cấp học*): `python scripts/import_truong_hoc.py ds_truong.xlsx`
+- Các danh mục khác (dân tộc, tôn giáo, quốc tịch, diện chính sách, khuyết tật, nội trú/bán trú)
+  lấy từ file mẫu VEMIS. Tất cả lưu ở `tuyensinh/data/`.
 
 ## Chạy thử trên máy (không cần SharePoint)
 
