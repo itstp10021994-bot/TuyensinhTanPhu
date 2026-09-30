@@ -5,7 +5,11 @@ from .base import Storage
 
 
 def create_storage() -> Storage:
-    """Tạo kho dữ liệu theo cấu hình BACKEND = "sharepoint" | "local"."""
+    """Tạo kho dữ liệu theo BACKEND = "powerautomate" | "sharepoint" | "local"."""
+    if config.backend() == "powerautomate":
+        from .powerautomate import PowerAutomateStorage
+
+        return PowerAutomateStorage.from_config()
     if config.backend() == "sharepoint":
         from .sharepoint import SharePointStorage
 

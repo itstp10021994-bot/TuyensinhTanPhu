@@ -9,9 +9,9 @@ from openpyxl import load_workbook
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tuyensinh import danh_muc, export_vemis, services  # noqa: E402
-from tuyensinh.schema import NHAP_HOC, THU_PHI, TUYEN_SINH  # noqa: E402
+from tuyensinh.schema import NHAP_HOC, TUYEN_SINH  # noqa: E402
 from tuyensinh.storage.local import LocalStorage  # noqa: E402
-from tuyensinh.storage.sharepoint import from_graph, to_graph  # noqa: E402
+from tuyensinh.storage.convert import ColumnMap, date_in  # noqa: E402
 
 HS = {"NamHoc": "2026-2027", "NgayLienHe": "2026-08-06", "SDT": "0927 666 649",
       "HoTenHS": "Trần Huy Long", "Khoi": "10", "CheDo": "Nội trú", "GioiTinh": "Nam",
@@ -40,7 +40,7 @@ def test_phone_normalized_and_default_status(storage):
 def test_nhap_hoc_creates_enrollment_record(storage):
     rec = services.save_tuyen_sinh(storage, HS)
     rec = services.set_trang_thai(storage, rec["id"], "Nhập học")
-    assert rec["NgayNhapHoc"] and rec["NgayNopHoSo"]
+    assert rec["TrangThai"] == "Nhập học"
     nh = services.nhap_hoc_of(storage, rec["id"])
     assert nh["HoTen"] == "Trần Huy Long"
     assert nh["LopHoc"] == "10" and nh["NoiTruBanTru"] == "Nội trú"
@@ -48,7 +48,8 @@ def test_nhap_hoc_creates_enrollment_record(storage):
     # Chuyển lại không tạo trùng; hồ sơ bị ẩn khi rút hồ sơ
     services.set_trang_thai(storage, rec["id"], "Nhập học")
     assert len(storage.list_items(NHAP_HOC.name)) == 1
-    services.set_trang_thai(storage, rec["id"], "Rút hồ sơ", "Chuyển trường")
+    rec = services.set_trang_thai(storage, rec["id"], "Rút hồ sơ", "Chuyển trường")
+    assert "rút hồ sơ: Chuyển trường" in rec["GhiChu"]
     assert services.nhap_hoc_df(storage, "2026-2027").empty
 
 
@@ -62,21 +63,26 @@ def test_duplicates(storage):
     assert len(services.find_duplicates(storage, {**HS, "SDT": "0927666649"})) == 1
 
 
-def test_payments_summary(storage):
+def test_giu_cho(storage):
     rec = services.save_tuyen_sinh(storage, {**HS, "TrangThai": "Nộp hồ sơ"})
-    p = services.add_payment(storage, {"TuyenSinhID": rec["id"], "NamHoc": "2026-2027",
-                                       "LoaiPhi": "Phí giữ chỗ", "SoTien": 2_000_000})
-    services.add_payment(storage, {"TuyenSinhID": rec["id"], "NamHoc": "2026-2027",
-                                   "LoaiPhi": "Học phí", "SoTien": 5_000_000})
     with pytest.raises(ValueError):
-        services.add_payment(storage, {"TuyenSinhID": rec["id"], "NamHoc": "2026-2027",
-                                       "LoaiPhi": "Học phí", "SoTien": 0})
-    services.confirm_payments(storage, [p["id"]], "Kế toán A")
+        services.xac_nhan_giu_cho(storage, rec["id"], 0, "Kế toán A")
+    services.xac_nhan_giu_cho(storage, rec["id"], 2_000_000, "Kế toán A")
+    r2 = services.save_tuyen_sinh(storage, {**HS, "HoTenHS": "B", "Khoi": "6"})
+    services.xac_nhan_giu_cho(storage, r2["id"], 2_000_000, "Kế toán A", "Hủy giữ chỗ",
+                              NganHang="Vietcombank", SoTaiKhoan="0071")
     ts = services.load_df(storage, TUYEN_SINH, "2026-2027")
-    tp = services.load_df(storage, THU_PHI, "2026-2027")
-    sm = services.payment_summary(ts, tp)
-    assert sm.loc[0, "Phí giữ chỗ"] == 2_000_000
-    assert sm.loc[0, "Tổng đã thu"] == 2_000_000  # học phí chưa xác nhận
+    assert ts.set_index("id").loc[r2["id"], "NganHang"] == "Vietcombank"
+    sm = services.giu_cho_summary(ts).set_index("Khối")
+    assert sm.loc["10", "Tiền đã giữ chỗ"] == 2_000_000 and sm.loc["6", "Hủy giữ chỗ"] == 1
+
+
+def test_scores_empty_vs_zero(storage):
+    rec = services.save_tuyen_sinh(storage, {**HS, "Toan1": 8.5, "Van1": 0})
+    row = services.load_df(storage, TUYEN_SINH).iloc[0]
+    assert row["Toan1"] == 8.5 and row["Van1"] == 0 and pd.isna(row["Anh1"])
+    services.save_tuyen_sinh(storage, row.to_dict(), rec["id"])
+    assert storage.get_item(TUYEN_SINH.name, rec["id"])["Anh1"] == ""
 
 
 def test_export_vemis_layout(storage):
@@ -109,17 +115,49 @@ def test_danh_muc_xa_depends_on_tinh():
     assert "Kinh" in danh_muc.options_for(NHAP_HOC.get("DanToc"))
 
 
-def test_graph_conversion_roundtrip():
-    g = to_graph(TUYEN_SINH, {"id": "5", "HoTenHS": "A", "NgaySinh": "2011-05-02", "Khoi": "10"})
-    assert g == {"HoTenHS": "A", "NgaySinh": "2011-05-02T12:00:00Z", "Khoi": "10", "Title": "A"}
-    back = from_graph(TUYEN_SINH, {"id": "5", "fields": {**g, "@odata.etag": "x"}})
-    assert back["NgaySinh"] == "2011-05-02" and back["id"] == "5"
-    assert to_graph(THU_PHI, {"SoTien": "2000000"})["SoTien"] == 2_000_000.0
+# Cột thật của list "Data tuyển sinh" (file data_tuyen_sinh.xlsx), tên nội bộ bị mã hóa
+SP_COLUMNS = [{"name": "Title", "title": "Title", "type": "Text"}] + [
+    {"name": f"c{i}_x00e0_", "title": t, "type": ty} for i, (t, ty) in enumerate([
+        ("Ngày liên hệ", "DateTime"), ("SĐT", "Text"), ("Nguồn", "Choice"),
+        ("Tài khoản FB", "Text"), ("Người giới thiệu", "Text"), ("Họ tên HS", "Text"),
+        ("Khối", "Choice"), ("Giới tính", "Choice"), ("Chế độ", "Choice"), ("Trường cũ", "Text"),
+        ("Trường cũ_Quận huyện", "Text"), ("Trường cũ_tỉnh", "Text"), ("Tình trạng", "Choice"),
+        ("Nội dung đã trao đổi", "Note"), ("Bước", "Choice"), ("Phân hệ", "Text"),
+        ("Người nhận hồ sơ", "User"), ("Số tiền xác nhận", "Number"),
+        ("Người xác nhận", "Text"), ("Tên chủ tài khoản", "Text"), ("Ngân hàng", "Text"),
+        ("Số tài khoản", "Text"), ("Toán 1", "Text"), ("Văn 1", "Text"), ("Anh 1", "Text"),
+        ("TV 1", "Text"), ("Toán 2", "Text"), ("Văn 2", "Text"), ("Tiếng Anh 2", "Text"),
+        ("TV 2", "Text"), ("Hạnh kiểm 1", "Text"), ("Hạnh kiểm 2", "Text"),
+        ("Ngày sinh", "DateTime"), ("Nam hoc", "Text")])]
+
+
+def test_column_map_matches_existing_list_by_display_name():
+    cm = ColumnMap(TUYEN_SINH.name, SP_COLUMNS)
+    assert cm.missing == []
+    by_title = {c["title"]: c["name"] for c in SP_COLUMNS}
+    assert cm.internal["NamHoc"] == by_title["Nam hoc"]
+    assert cm.internal["TrangThai"] == by_title["Bước"]
+    assert cm.internal["TenLienHe"] == by_title["Tài khoản FB"]
+    out = cm.to_sp({"HoTenHS": "A", "NgaySinh": "2011-05-02", "Toan1": 8.0, "SoTienXacNhan": "2e6",
+                    "NguoiNhanHoSo": "x", "Created": "…", "id": "5"})
+    assert out == {by_title["Họ tên HS"]: "A", by_title["Ngày sinh"]: "2011-05-02T12:00:00Z",
+                   by_title["Toán 1"]: "8", by_title["Số tiền xác nhận"]: 2_000_000.0,
+                   "Title": "A"}  # cột Người (User) không ghi
+    back = cm.from_sp({by_title["Ngày liên hệ"]: "2025-02-10T17:00:00Z",
+                       by_title["Toán 1"]: "8,5", by_title["Người nhận hồ sơ"]: {"Title": "Uyên"},
+                       "OData__x0020_": 1}, 7)
+    assert back["NgayLienHe"] == "2025-02-11"  # 0h 11/2 giờ VN
+    assert back["Toan1"] == 8.5 and back["NguoiNhanHoSo"] == "Uyên" and back["id"] == "7"
+
+
+def test_date_in():
+    assert date_in("2026-08-06") == "2026-08-06"
+    assert date_in("2026-08-06T12:00:00Z") == "2026-08-06"
 
 
 def test_to_df_types():
-    df = services.to_df(THU_PHI, [{"id": "1", "SoTien": "100", "NgayThu": "2026-01-02"}])
-    assert df.loc[0, "SoTien"] == 100 and str(df.loc[0, "NgayThu"]) == "2026-01-02"
+    df = services.to_df(TUYEN_SINH, [{"id": "1", "SoTienXacNhan": "100", "NgaySinh": "2026-01-02"}])
+    assert df.loc[0, "SoTienXacNhan"] == 100 and str(df.loc[0, "NgaySinh"]) == "2026-01-02"
     assert isinstance(df, pd.DataFrame)
 
 

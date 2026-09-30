@@ -40,10 +40,10 @@ g1.altair_chart(
     alt.Chart(long).mark_bar(cornerRadiusEnd=4, stroke="white", strokeWidth=2).encode(
         x=alt.X("Khoi:N", title="Khối", sort=list(KHOI), axis=alt.Axis(labelAngle=0)),
         y=alt.Y("Số HS:Q", title="Số HS"),
-        color=alt.Color("TrangThai:N", title="Trạng thái", scale=status_scale,
+        color=alt.Color("TrangThai:N", title="Bước", scale=status_scale,
                         sort=list(TRANG_THAI), legend=alt.Legend(orient="top")),
         order=alt.Order("TrangThai:N"),
-        tooltip=[alt.Tooltip("Khoi:N", title="Khối"), alt.Tooltip("TrangThai:N", title="Trạng thái"),
+        tooltip=[alt.Tooltip("Khoi:N", title="Khối"), alt.Tooltip("TrangThai:N", title="Bước"),
                  "Số HS:Q"]),
     width="stretch")
 g2.dataframe(pv.reset_index(), hide_index=True, width="stretch",

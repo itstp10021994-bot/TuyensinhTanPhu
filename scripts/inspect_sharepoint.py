@@ -1,24 +1,24 @@
-"""In danh sách list và cột (tên nội bộ) trên site — dùng để đối chiếu list cũ của Power Apps.
+"""In các cột (tên hiển thị -> tên nội bộ, kiểu) của list và cách app đang khớp.
 
-    python scripts/inspect_sharepoint.py [TenList]
+    python scripts/inspect_sharepoint.py            # các list của app
 """
-import sys
-
 import _common  # noqa: F401
 
-from tuyensinh.storage.sharepoint import SharePointStorage
+from tuyensinh import config
+from tuyensinh.schema import ALL_LISTS
+from tuyensinh.storage import create_storage
+from tuyensinh.storage.convert import ColumnMap
 
-sp = SharePointStorage.from_config()
-site = sp.site_id
-lists = sp.request("GET", f"/sites/{site}/lists?$select=id,name,displayName")["value"]
-only = sys.argv[1] if len(sys.argv) > 1 else None
-for l in lists:
-    if only and only not in (l["displayName"], l["name"]):
+sp = create_storage()
+for ld in ALL_LISTS:
+    print(f"\n== {config.list_name(ld.name)} ({ld.title})")
+    if not sp.list_exists(ld.name):
+        print("   (chưa có list)")
         continue
-    print(f"\n== {l['displayName']}  (id={l['id']})")
-    if only or len(lists) < 15:
-        for c in sp.request("GET", f"/sites/{site}/lists/{l['id']}/columns")["value"]:
-            if not c.get("readOnly") and not c.get("hidden"):
-                kind = next((k for k in ("text", "choice", "dateTime", "number", "boolean",
-                                         "lookup", "personOrGroup") if k in c), "?")
-                print(f"   {c['name']:<32} {kind:<14} {c.get('displayName')}")
+    cols = sp.columns(ld.name)
+    cm = ColumnMap(ld.name, cols)
+    for c in cols:
+        key = cm.key_of.get(c["name"], "")
+        print(f"   {c['title']:<28} {c['name']:<40} {c['type']:<10} {key}")
+    if cm.missing:
+        print("   Chưa có cột cho:", ", ".join(ld.get(k).sp_title for k in cm.missing))

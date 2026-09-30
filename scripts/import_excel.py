@@ -1,7 +1,7 @@
 """Nhập dữ liệu từ Excel vào list (chuyển dữ liệu từ Power Apps / file VEMIS).
 
-    # Data tuyển sinh: file xuất từ list cũ; tên cột = key hoặc tên hiển thị trong schema
-    python scripts/import_excel.py tuyensinh du_lieu_cu.xlsx --nam-hoc 2026-2027
+    # Data tuyển sinh: file "Export to Excel" từ list (cột "Nam hoc" có sẵn thì giữ nguyên)
+    python scripts/import_excel.py tuyensinh data_tuyen_sinh.xlsx --nam-hoc 2026-2027
     # Tên cột khác -> khai báo ánh xạ: --map "Họ tên=HoTenHS" --map "Lớp=Khoi"
     # Hồ sơ nhập học từ file mẫu "Danh sách học sinh" (VEMIS, 2 dòng tiêu đề)
     python scripts/import_excel.py nhaphoc hoc_sinh_toan_truong.xls --vemis --nam-hoc 2026-2027
@@ -17,6 +17,15 @@ from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
 from tuyensinh.storage import create_storage
 
 LISTS = {"tuyensinh": TUYEN_SINH, "nhaphoc": NHAP_HOC}
+
+
+def _blank(v) -> bool:
+    try:
+        if pd.isna(v):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return str(v).strip() in ("", "nan", "NaN", "NaT", "None")
 
 
 def read_vemis(path: str) -> pd.DataFrame:
@@ -47,19 +56,21 @@ def main():
     else:
         df = pd.read_excel(args.file, dtype=str) if not args.file.endswith(".csv") \
             else pd.read_csv(args.file, dtype=str)
+        # nhận cả tên hiển thị trên SharePoint (file xuất từ list) lẫn nhãn trong app
         rename = {f.label: f.key for f in ld.fields}
+        rename.update({f.sp_title: f.key for f in ld.fields})
         rename.update(dict(m.split("=", 1) for m in args.map))
         df = df.rename(columns=rename)
     keep = [c for c in df.columns if c in ld.keys]
     print(f"Các cột nhận được: {keep}")
     print(f"Bỏ qua: {[c for c in df.columns if c not in ld.keys]}")
-    df = df[keep].where(df[keep].notna(), None)
+    df = df[keep].dropna(how="all")
 
     storage = create_storage()
     ok = err = 0
     for i, row in df.iterrows():
-        data = {k: v for k, v in row.to_dict().items() if v is not None}
-        data["NamHoc"] = args.nam_hoc
+        data = {k: v for k, v in row.to_dict().items() if not _blank(v)}
+        data.setdefault("NamHoc", args.nam_hoc)
         try:
             if args.dry_run:
                 errs = services.validate(ld, data)

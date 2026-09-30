@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import _common  # noqa: F401
 
 from tuyensinh import config, services
-from tuyensinh.schema import CHE_DO, NGUON, LOAI_PHI
+from tuyensinh.schema import CHE_DO, NGUON
 from tuyensinh.storage import create_storage
 
 assert config.backend() == "local", "Chỉ tạo dữ liệu mẫu cho BACKEND=local"
@@ -22,6 +22,8 @@ for i in range(60):
         "NgayLienHe": date(2026, 3, 1) + timedelta(days=random.randint(0, 150)),
         "SDT": "09" + "".join(random.choices("0123456789", k=8)),
         "Nguon": random.choice(NGUON), "TenLienHe": "PH " + random.choice(HO),
+        "TruongCu": "THCS " + random.choice(TEN), "Toan2": round(random.uniform(5, 10), 1),
+        "Van2": round(random.uniform(5, 10), 1), "HanhKiem2": "Tốt",
         "HoTenHS": f"{random.choice(HO)} {random.choice(DEM)} {random.choice(TEN)}",
         "NgaySinh": date(2010, 1, 1) + timedelta(days=random.randint(0, 3000)),
         "Khoi": random.choice(["6", "8", "10", "10", "10", "11"]), "GioiTinh": gt,
@@ -31,7 +33,9 @@ for i in range(60):
     if tt != "Tư vấn":
         services.set_trang_thai(storage, rec["id"], tt, "Chuyển trường khác" if tt == "Rút hồ sơ" else None)
     if tt in ("Nộp hồ sơ", "Nhập học"):
-        services.add_payment(storage, {"TuyenSinhID": rec["id"], "NamHoc": nam,
-                                       "HoTenHS": rec["HoTenHS"], "Khoi": rec["Khoi"],
-                                       "LoaiPhi": LOAI_PHI[0], "SoTien": 2000000})
+        services.xac_nhan_giu_cho(storage, rec["id"], 2000000, "Kế toán")
+    elif tt == "Rút hồ sơ" and random.random() < .5:
+        services.xac_nhan_giu_cho(storage, rec["id"], 2000000, "Kế toán", "Hủy giữ chỗ",
+                                  TenChuTaiKhoan="PH", NganHang="Vietcombank",
+                                  SoTaiKhoan="0071000000000")
 print("Đã tạo dữ liệu mẫu.")

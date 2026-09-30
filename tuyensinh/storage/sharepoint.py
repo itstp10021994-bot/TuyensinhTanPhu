@@ -6,6 +6,7 @@ Xem README.md mục "Cấu hình SharePoint".
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
 from urllib.parse import urlparse
@@ -14,64 +15,12 @@ import msal
 import requests
 
 from .. import config
-from ..schema import ALL_LISTS, BOOL, DATE, NUMBER, ListDef
+from ..schema import Field
+from . import convert
 from .base import Storage
 
 GRAPH = "https://graph.microsoft.com/v1.0"
-# Trường hệ thống, không gửi lên khi ghi
-_READONLY = {"id", "Created", "Modified", "Author", "Editor", "ContentType", "Attachments",
-             "@odata.etag", "LinkTitle", "LinkTitleNoMenu", "Edit", "ItemChildCount",
-             "FolderChildCount", "_UIVersionString", "_ComplianceFlags", "_ComplianceTag",
-             "_ComplianceTagWrittenTime", "_ComplianceTagUserId", "AppAuthorLookupId",
-             "AppEditorLookupId", "AuthorLookupId", "EditorLookupId"}
 
-
-def _schema_for(list_name: str) -> ListDef | None:
-    for ld in ALL_LISTS:
-        if ld.name == list_name:
-            return ld
-    return None
-
-
-def to_graph(ld: ListDef | None, data: dict) -> dict:
-    """Chuyển dict của ứng dụng sang fields của Graph."""
-    out = {}
-    types = {f.key: f.type for f in ld.fields} if ld else {}
-    for k, v in data.items():
-        if k in _READONLY:
-            continue
-        t = types.get(k)
-        if v == "" or v is None:
-            out[k] = None
-        elif t == DATE:
-            # Lưu 12:00 UTC để không bị lệch ngày do múi giờ của site
-            out[k] = f"{str(v)[:10]}T12:00:00Z"
-        elif t == NUMBER:
-            out[k] = float(v)
-        elif t == BOOL:
-            out[k] = bool(v)
-        else:
-            out[k] = str(v)
-    if ld is not None and "Title" not in out:
-        for key in ("HoTenHS", "HoTen"):
-            if data.get(key):
-                out["Title"] = str(data[key])
-                break
-    return out
-
-
-def from_graph(ld: ListDef | None, item: dict) -> dict:
-    fields = dict(item.get("fields", {}))
-    types = {f.key: f.type for f in ld.fields} if ld else {}
-    out = {"id": str(item["id"]), "Created": item.get("createdDateTime"),
-           "Modified": item.get("lastModifiedDateTime")}
-    for k, v in fields.items():
-        if k in _READONLY or k.startswith("@"):
-            continue
-        if types.get(k) == DATE and isinstance(v, str):
-            v = v[:10]
-        out[k] = v
-    return out
 
 
 class SharePointStorage(Storage):
@@ -86,6 +35,7 @@ class SharePointStorage(Storage):
         self._list_ids: dict[str, str] = {}
         self._lock = threading.Lock()
         self._session = requests.Session()
+        self._maps: dict[str, convert.ColumnMap] = {}
 
     @classmethod
     def from_config(cls) -> "SharePointStorage":
@@ -131,6 +81,9 @@ class SharePointStorage(Storage):
         with self._lock:
             if list_name not in self._list_ids:
                 real = config.list_name(list_name)
+                if re.fullmatch(r"\{?[0-9a-fA-F-]{36}\}?", real):
+                    self._list_ids[list_name] = real.strip("{}")
+                    return self._list_ids[list_name]
                 data = self.request("GET", f"/sites/{self.site_id}/lists?$select=id,name,displayName")
                 for l in data.get("value", []):
                     if real in (l.get("name"), l.get("displayName")):
@@ -144,14 +97,67 @@ class SharePointStorage(Storage):
     def _items_url(self, list_name: str) -> str:
         return f"/sites/{self.site_id}/lists/{self.list_id(list_name)}/items"
 
+    # ------------------------------------------------------------------ cột
+    def columns(self, list_name: str) -> list[dict]:
+        data = self.request("GET", f"/sites/{self.site_id}/lists/{self.list_id(list_name)}/columns")
+        out = []
+        for c in data.get("value", []):
+            if c.get("readOnly") or c.get("hidden"):
+                continue
+            kind = next((k for k in ("text", "choice", "dateTime", "number", "currency",
+                                     "boolean", "lookup", "personOrGroup") if k in c), "text")
+            out.append({"name": c["name"], "title": c.get("displayName", c["name"]), "type": kind})
+        return out
+
+    def colmap(self, list_name: str) -> convert.ColumnMap:
+        if list_name not in self._maps:
+            self._maps[list_name] = convert.ColumnMap(list_name, self.columns(list_name))
+        return self._maps[list_name]
+
+    def _from(self, list_name: str, it: dict) -> dict:
+        return self.colmap(list_name).from_sp(it.get("fields", {}), it["id"],
+                                              it.get("createdDateTime"),
+                                              it.get("lastModifiedDateTime"))
+
+    def list_exists(self, list_name: str) -> bool:
+        try:
+            self.list_id(list_name)
+            return True
+        except RuntimeError:
+            return False
+
+    def create_list(self, list_name: str, description: str = ""):
+        self.request("POST", f"/sites/{self.site_id}/lists", json={
+            "displayName": config.list_name(list_name), "description": description,
+            "list": {"template": "genericList"}})
+
+    def add_column(self, list_name: str, f: Field, internal: str):
+        from ..schema import BOOL, CHOICE, DATE, NOTE, NUMBER
+
+        col = {"name": internal, "displayName": f.sp_title}
+        if f.type == DATE:
+            col["dateTime"] = {"format": "dateOnly"}
+        elif f.type == NUMBER:
+            col["number"] = {}
+        elif f.type == BOOL:
+            col["boolean"] = {}
+        elif f.type == NOTE:
+            col["text"] = {"allowMultipleLines": True}
+        elif f.type == CHOICE and isinstance(f.options, tuple):
+            col["choice"] = {"allowTextEntry": True, "choices": list(f.options)}
+        else:
+            col["text"] = {}
+        self.request("POST", f"/sites/{self.site_id}/lists/{self.list_id(list_name)}/columns",
+                     json=col)
+        self._maps.pop(list_name, None)
+
     # ------------------------------------------------------------------ CRUD
     def list_items(self, list_name):
-        ld = _schema_for(list_name)
         url = self._items_url(list_name) + "?expand=fields&$top=999"
         out = []
         while url:
             data = self.request("GET", url)
-            out.extend(from_graph(ld, it) for it in data.get("value", []))
+            out.extend(self._from(list_name, it) for it in data.get("value", []))
             url = data.get("@odata.nextLink")
         return out
 
@@ -162,17 +168,16 @@ class SharePointStorage(Storage):
             if "404" in str(e):
                 return None
             raise
-        return from_graph(_schema_for(list_name), it)
+        return self._from(list_name, it)
 
     def create_item(self, list_name, data):
-        body = {"fields": to_graph(_schema_for(list_name), data)}
-        body["fields"] = {k: v for k, v in body["fields"].items() if v is not None}
-        it = self.request("POST", self._items_url(list_name), json=body)
-        return from_graph(_schema_for(list_name), it)
+        body = {k: v for k, v in self.colmap(list_name).to_sp(data).items() if v is not None}
+        it = self.request("POST", self._items_url(list_name), json={"fields": body})
+        return self._from(list_name, it)
 
     def update_item(self, list_name, item_id, data):
         self.request("PATCH", f"{self._items_url(list_name)}/{item_id}/fields",
-                     json=to_graph(_schema_for(list_name), data))
+                     json=self.colmap(list_name).to_sp(data))
         return self.get_item(list_name, item_id)
 
     def delete_item(self, list_name, item_id):

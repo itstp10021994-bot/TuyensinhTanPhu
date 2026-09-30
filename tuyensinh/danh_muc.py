@@ -25,6 +25,10 @@ def options_for(f: Field, record: dict | None = None) -> list[str]:
     if isinstance(opts, tuple):
         return list(opts)
     name = opts.lstrip("@")
+    if name == "nam_hoc":
+        from . import config
+
+        return config.school_years()
     if name.startswith("xa:"):
         tinh = (record or {}).get(name[3:]) or ""
         return list(load()["xa_theo_tinh"].get(tinh, []))

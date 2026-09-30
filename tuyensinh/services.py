@@ -6,12 +6,16 @@ from datetime import date
 
 import pandas as pd
 
-from .schema import (BOOL, DATE, NHAP_HOC, NUMBER, THU_PHI, TUYEN_SINH, ListDef)
+from .schema import BOOL, DATE, NHAP_HOC, NUMBER, TUYEN_SINH, ListDef
 from .storage.base import Storage
 
 
 def today() -> str:
     return date.today().isoformat()
+
+
+def _empty(v) -> bool:
+    return v is None or v is pd.NaT or (isinstance(v, float) and pd.isna(v)) or v == ""
 
 
 def normalize_phone(v: str | None) -> str:
@@ -25,9 +29,9 @@ def validate(ld: ListDef, data: dict) -> list[str]:
     errors = []
     for f in ld.fields:
         v = data.get(f.key)
-        if f.required and (v is None or str(v).strip() == ""):
+        if f.required and (_empty(v) or str(v).strip() == ""):
             errors.append(f"Chưa nhập **{f.label}**")
-        elif f.type == NUMBER and v not in (None, ""):
+        elif f.type == NUMBER and not _empty(v):
             try:
                 float(v)
             except (TypeError, ValueError):
@@ -46,8 +50,8 @@ def to_df(ld: ListDef, items: list[dict]) -> pd.DataFrame:
             df[c] = None
     df = df[cols]
     for f in ld.fields:
-        if f.type == NUMBER:
-            df[f.key] = pd.to_numeric(df[f.key], errors="coerce").fillna(0)
+        if f.type == NUMBER:  # để trống = NaN (khác 0)
+            df[f.key] = pd.to_numeric(df[f.key], errors="coerce")
         elif f.type == BOOL:
             df[f.key] = df[f.key].fillna(False).astype(bool)
         elif f.type == DATE:
@@ -71,12 +75,12 @@ def _clean(ld: ListDef, data: dict) -> dict:
             continue
         v = data[f.key]
         if f.type == DATE:
-            if v is None or v is pd.NaT or (isinstance(v, float) and pd.isna(v)):
+            if _empty(v):
                 v = ""
             else:
                 v = v.isoformat()[:10] if isinstance(v, date) else str(v or "")[:10]
         elif f.type == NUMBER:
-            v = float(v) if v not in (None, "") else 0
+            v = "" if _empty(v) else float(v)
         elif f.type == BOOL:
             v = bool(v)
         else:
@@ -122,23 +126,21 @@ def save_tuyen_sinh(storage: Storage, data: dict, item_id: str | None = None) ->
 
 
 def set_trang_thai(storage: Storage, item_id: str, trang_thai: str,
-                   ly_do: str | None = None) -> dict:
-    """Chuyển trạng thái HS: Tư vấn → Nộp hồ sơ → Nhập học, hoặc Rút hồ sơ.
+                   ly_do: str | None = None, nguoi: str = "") -> dict:
+    """Chuyển "Bước": Tư vấn → Nộp hồ sơ → Nhập học, hoặc Rút hồ sơ.
 
     Khi chuyển sang "Nhập học" sẽ tạo hồ sơ trong Data_NhapHoc (nếu chưa có).
+    Lý do rút hồ sơ được ghi thêm vào "Nội dung đã trao đổi".
     """
     rec = storage.get_item(TUYEN_SINH.name, item_id)
     if rec is None:
         raise KeyError(item_id)
     upd = {"TrangThai": trang_thai}
-    date_field = {"Nộp hồ sơ": "NgayNopHoSo", "Nhập học": "NgayNhapHoc",
-                  "Rút hồ sơ": "NgayRutHoSo"}.get(trang_thai)
-    if date_field and not rec.get(date_field):
-        upd[date_field] = today()
-    if trang_thai in ("Nhập học", "Nộp hồ sơ") and not rec.get("NgayNopHoSo"):
-        upd["NgayNopHoSo"] = today()
-    if ly_do is not None:
-        upd["LyDoRut"] = ly_do
+    if trang_thai == "Nộp hồ sơ" and nguoi and not rec.get("NguoiNhanHoSo"):
+        upd["NguoiNhanHoSo"] = nguoi
+    if ly_do:
+        note = f"{date.today():%d/%m/%Y} rút hồ sơ: {ly_do}"
+        upd["GhiChu"] = f"{rec.get('GhiChu') or ''}\n{note}".strip()
     rec = storage.update_item(TUYEN_SINH.name, item_id, upd)
     if trang_thai == "Nhập học":
         sync_nhap_hoc(storage, rec)
@@ -165,10 +167,9 @@ def sync_nhap_hoc(storage: Storage, ts: dict) -> dict:
         "HoTen": ts.get("HoTenHS", ""),
         "NgaySinh": ts.get("NgaySinh", ""),
         "GioiTinh": ts.get("GioiTinh", ""),
-        "NgayVaoTruong": ts.get("NgayNhapHoc") or today(),
+        "NgayVaoTruong": today(),
         "NoiTruBanTru": _che_do_to_vemis(ts.get("CheDo", "")),
         "DienThoaiSLL": ts.get("SDT", ""),
-        "EmailSLL": ts.get("Email", ""),
         "QuocTich": "Việt Nam",
         "DanToc": "Kinh",
         "TonGiao": "Không",
@@ -199,40 +200,26 @@ def nhap_hoc_df(storage: Storage, nam_hoc: str) -> pd.DataFrame:
     return df[~df["TuyenSinhID"].isin(rut)].reset_index(drop=True)
 
 
-# ------------------------------------------------------------------ Kế toán
-def add_payment(storage: Storage, data: dict) -> dict:
-    data = dict(data)
-    data.setdefault("TrangThaiXN", "Chờ xác nhận")
-    data.setdefault("NgayThu", today())
-    errors = validate(THU_PHI, data)
-    if not errors and float(data.get("SoTien") or 0) <= 0:
-        errors.append("**Số tiền** phải lớn hơn 0")
-    if errors:
-        raise ValueError("\n".join(errors))
-    return storage.create_item(THU_PHI.name, _clean(THU_PHI, data))
+# ------------------------------------------------------------------ Kế toán (giữ chỗ)
+def xac_nhan_giu_cho(storage: Storage, item_id: str, so_tien, nguoi: str,
+                     tinh_trang: str = "Đã giữ chỗ", **bank) -> dict:
+    """Kế toán xác nhận số tiền giữ chỗ (ghi vào các cột có sẵn của Data tuyển sinh)."""
+    if tinh_trang == "Đã giữ chỗ" and (_empty(so_tien) or float(so_tien) <= 0):
+        raise ValueError("**Số tiền xác nhận** phải lớn hơn 0")
+    upd = {"TinhTrang": tinh_trang, "NguoiXacNhan": nguoi}
+    if not _empty(so_tien):
+        upd["SoTienXacNhan"] = float(so_tien)
+    upd.update({k: v for k, v in bank.items()
+                if k in ("TenChuTaiKhoan", "NganHang", "SoTaiKhoan")})
+    return storage.update_item(TUYEN_SINH.name, item_id, _clean(TUYEN_SINH, upd))
 
 
-def confirm_payments(storage: Storage, ids: list[str], nguoi: str,
-                     trang_thai: str = "Đã xác nhận") -> int:
-    for i in ids:
-        storage.update_item(THU_PHI.name, i, {"TrangThaiXN": trang_thai, "NguoiXacNhan": nguoi,
-                                              "NgayXacNhan": today()})
-    return len(ids)
-
-
-def payment_summary(ts: pd.DataFrame, tp: pd.DataFrame) -> pd.DataFrame:
-    """Tổng hợp số tiền đã xác nhận theo từng HS và loại phí."""
-    base = ts[ts["TrangThai"].isin(["Nộp hồ sơ", "Nhập học"])][
-        ["id", "HoTenHS", "Khoi", "CheDo", "SDT", "TrangThai"]].rename(columns={"id": "TuyenSinhID"})
-    ok = tp[tp["TrangThaiXN"] == "Đã xác nhận"]
-    if ok.empty:
-        pv = pd.DataFrame(columns=["TuyenSinhID"])
-    else:
-        pv = ok.pivot_table(index="TuyenSinhID", columns="LoaiPhi", values="SoTien",
-                            aggfunc="sum", fill_value=0).reset_index()
-        pv.columns.name = None
-    out = base.merge(pv, on="TuyenSinhID", how="left")
-    fee_cols = [c for c in out.columns if c not in base.columns]
-    out[fee_cols] = out[fee_cols].fillna(0)
-    out["Tổng đã thu"] = out[fee_cols].sum(axis=1) if fee_cols else 0
-    return out
+def giu_cho_summary(ts: pd.DataFrame) -> pd.DataFrame:
+    """Tổng hợp giữ chỗ theo khối: số HS và số tiền theo từng tình trạng."""
+    d = ts.assign(TinhTrang=ts["TinhTrang"].replace("", "Chưa giữ chỗ"),
+                  SoTien=ts["SoTienXacNhan"].fillna(0))
+    so_hs = pd.crosstab(d["Khoi"], d["TinhTrang"])
+    tien = d[d["TinhTrang"] == "Đã giữ chỗ"].groupby("Khoi")["SoTien"].sum()
+    out = so_hs.assign(**{"Tiền đã giữ chỗ": tien}).fillna(0)
+    out.index.name = "Khối"
+    return out.reset_index()

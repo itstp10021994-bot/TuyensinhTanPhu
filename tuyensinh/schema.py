@@ -20,6 +20,12 @@ class Field:
     options: tuple[str, ...] | str = ()
     required: bool = False
     group: str = ""
+    # Tên hiển thị của cột trên list SharePoint có sẵn (mặc định = label)
+    sp: str = ""
+
+    @property
+    def sp_title(self) -> str:
+        return self.sp or self.label
 
 
 @dataclass(frozen=True)
@@ -40,43 +46,67 @@ class ListDef:
 
 
 # ---------------------------------------------------------------- Giá trị chung
+# Cột "Bước" trên list: 4 nút trạng thái của app
 TRANG_THAI = ("Tư vấn", "Nộp hồ sơ", "Nhập học", "Rút hồ sơ")
+# Cột "Tình trạng": tình trạng giữ chỗ (kế toán). Vẫn nhận giá trị khác đã có trong list.
+TINH_TRANG = ("Chưa giữ chỗ", "Đã giữ chỗ", "Hủy giữ chỗ", "Đã hoàn phí")
 KHOI = tuple(str(i) for i in range(1, 13))
 CHE_DO = ("Nội trú", "Bán trú", "Ngoại trú")
 GIOI_TINH = ("Nam", "Nữ")
-NGUON = ("Facebook", "Website", "Zalo", "Hotline", "Người quen giới thiệu",
+NGUON = ("Hotline", "Facebook", "Website", "Zalo", "Người quen giới thiệu",
          "Phụ huynh cũ", "Tờ rơi / Banner", "Hội thảo tư vấn", "Khác")
-LOAI_PHI = ("Phí giữ chỗ", "Phí nhập học", "Học phí", "Phí nội trú / bán trú",
-            "Đồng phục", "Khác")
-HINH_THUC_TT = ("Chuyển khoản", "Tiền mặt")
-XAC_NHAN = ("Chờ xác nhận", "Đã xác nhận", "Hoàn tiền", "Hủy")
+HANH_KIEM = ("Tốt", "Khá", "Đạt", "Chưa đạt")
 
 # ---------------------------------------------------------------- Data tuyển sinh
+# Khớp với list "Data tuyển sinh" hiện có trên site tuyensinh2 (sp = tên hiển thị cột).
+G_LIENHE, G_HOCSINH, G_TRUONGCU, G_KETOAN = (
+    "Liên hệ & tư vấn", "Học sinh", "Trường cũ & kết quả học tập", "Giữ chỗ / kế toán")
+
 TUYEN_SINH = ListDef(
     name="Data_TuyenSinh",
     title="Data tuyển sinh",
     fields=(
-        Field("NamHoc", "Năm học", required=True),
-        Field("NgayLienHe", "Ngày liên hệ", DATE, required=True),
-        Field("SDT", "SĐT", required=True),
-        Field("Nguon", "Nguồn", CHOICE, NGUON),
-        Field("TenLienHe", "Tên liên hệ (phụ huynh)"),
-        Field("HoTenHS", "Họ tên HS", required=True),
-        Field("NgaySinh", "Ngày sinh", DATE),
-        Field("NguoiGioiThieu", "Người giới thiệu"),
-        Field("Khoi", "Khối", CHOICE, KHOI, required=True),
-        Field("GioiTinh", "Giới tính", CHOICE, GIOI_TINH),
-        Field("CheDo", "Chế độ", CHOICE, CHE_DO),
-        Field("TruongCu", "Trường cũ"),
-        Field("DiaChi", "Địa chỉ"),
-        Field("Email", "Email"),
-        Field("TrangThai", "Trạng thái", CHOICE, TRANG_THAI, required=True),
-        Field("NgayNopHoSo", "Ngày nộp hồ sơ", DATE),
-        Field("NgayNhapHoc", "Ngày nhập học", DATE),
-        Field("NgayRutHoSo", "Ngày rút hồ sơ", DATE),
-        Field("LyDoRut", "Lý do rút hồ sơ", NOTE),
-        Field("NguoiTuVan", "Người tư vấn"),
-        Field("GhiChu", "Ghi chú", NOTE),
+        # --- Liên hệ & tư vấn
+        Field("NamHoc", "Năm học", CHOICE, "@nam_hoc", required=True, sp="Nam hoc",
+              group=G_LIENHE),
+        Field("NgayLienHe", "Ngày liên hệ", DATE, required=True, group=G_LIENHE),
+        Field("SDT", "SĐT", required=True, group=G_LIENHE),
+        Field("Nguon", "Nguồn", CHOICE, NGUON, group=G_LIENHE),
+        Field("TenLienHe", "Tên liên hệ (Tài khoản FB)", sp="Tài khoản FB", group=G_LIENHE),
+        Field("NguoiGioiThieu", "Người giới thiệu", group=G_LIENHE),
+        Field("TrangThai", "Bước", CHOICE, TRANG_THAI, required=True, group=G_LIENHE),
+        Field("PhanHe", "Phân hệ", group=G_LIENHE),
+        Field("NguoiNhanHoSo", "Người nhận hồ sơ", group=G_LIENHE),
+        Field("GhiChu", "Nội dung đã trao đổi", NOTE, group=G_LIENHE),
+        # --- Học sinh
+        Field("HoTenHS", "Họ tên HS", required=True, group=G_HOCSINH),
+        Field("NgaySinh", "Ngày sinh", DATE, group=G_HOCSINH),
+        Field("Khoi", "Khối", CHOICE, KHOI, required=True, group=G_HOCSINH),
+        Field("GioiTinh", "Giới tính", CHOICE, GIOI_TINH, group=G_HOCSINH),
+        Field("CheDo", "Chế độ", CHOICE, CHE_DO, group=G_HOCSINH),
+        # --- Trường cũ & kết quả học tập
+        Field("TruongCu", "Trường cũ", group=G_TRUONGCU),
+        Field("TruongCu_QuanHuyen", "Trường cũ - Quận/huyện", sp="Trường cũ_Quận huyện",
+              group=G_TRUONGCU),
+        Field("TruongCu_Tinh", "Trường cũ - Tỉnh", CHOICE, "@tinh", sp="Trường cũ_tỉnh",
+              group=G_TRUONGCU),
+        Field("Toan1", "Toán 1", NUMBER, group=G_TRUONGCU),
+        Field("Van1", "Văn 1", NUMBER, group=G_TRUONGCU),
+        Field("Anh1", "Anh 1", NUMBER, group=G_TRUONGCU),
+        Field("TV1", "TV 1", NUMBER, group=G_TRUONGCU),
+        Field("Toan2", "Toán 2", NUMBER, group=G_TRUONGCU),
+        Field("Van2", "Văn 2", NUMBER, group=G_TRUONGCU),
+        Field("Anh2", "Tiếng Anh 2", NUMBER, group=G_TRUONGCU),
+        Field("TV2", "TV 2", NUMBER, group=G_TRUONGCU),
+        Field("HanhKiem1", "Hạnh kiểm 1", CHOICE, HANH_KIEM, group=G_TRUONGCU),
+        Field("HanhKiem2", "Hạnh kiểm 2", CHOICE, HANH_KIEM, group=G_TRUONGCU),
+        # --- Giữ chỗ / kế toán
+        Field("TinhTrang", "Tình trạng", CHOICE, TINH_TRANG, group=G_KETOAN),
+        Field("SoTienXacNhan", "Số tiền xác nhận", NUMBER, group=G_KETOAN),
+        Field("NguoiXacNhan", "Người xác nhận", group=G_KETOAN),
+        Field("TenChuTaiKhoan", "Tên chủ tài khoản", group=G_KETOAN),
+        Field("NganHang", "Ngân hàng", group=G_KETOAN),
+        Field("SoTaiKhoan", "Số tài khoản", group=G_KETOAN),
     ),
 )
 
@@ -90,8 +120,9 @@ NHAP_HOC = ListDef(
     title="Hồ sơ nhập học",
     fields=(
         Field("TuyenSinhID", "ID tuyển sinh", group="_"),
-        Field("NamHoc", "Năm học", required=True, group="_"),
         # --- Thông tin chung
+        Field("NamHoc", "Năm học", CHOICE, "@nam_hoc", required=True, sp="Nam hoc",
+              group=G_CHUNG),
         Field("LopHoc", "Lớp học", required=True, group=G_CHUNG),
         Field("MaHocSinh", "Mã học sinh", group=G_CHUNG),
         Field("MaVEMIS", "Mã VEMIS", group=G_CHUNG),
@@ -152,26 +183,4 @@ NHAP_HOC = ListDef(
     ),
 )
 
-# ---------------------------------------------------------------- Kế toán (thu phí)
-THU_PHI = ListDef(
-    name="Data_ThuPhi",
-    title="Thu phí",
-    fields=(
-        Field("TuyenSinhID", "ID tuyển sinh", required=True),
-        Field("NamHoc", "Năm học", required=True),
-        Field("HoTenHS", "Họ tên HS"),
-        Field("Khoi", "Khối"),
-        Field("LoaiPhi", "Loại phí", CHOICE, LOAI_PHI, required=True),
-        Field("SoTien", "Số tiền", NUMBER, required=True),
-        Field("NgayThu", "Ngày thu", DATE, required=True),
-        Field("HinhThuc", "Hình thức", CHOICE, HINH_THUC_TT),
-        Field("SoPhieu", "Số phiếu / Mã giao dịch"),
-        Field("NguoiThu", "Người thu"),
-        Field("TrangThaiXN", "Trạng thái xác nhận", CHOICE, XAC_NHAN),
-        Field("NguoiXacNhan", "Người xác nhận"),
-        Field("NgayXacNhan", "Ngày xác nhận", DATE),
-        Field("GhiChu", "Ghi chú", NOTE),
-    ),
-)
-
-ALL_LISTS = (TUYEN_SINH, NHAP_HOC, THU_PHI)
+ALL_LISTS = (TUYEN_SINH, NHAP_HOC)

@@ -28,7 +28,7 @@ with right:
                  icon=":material/person_search:")
     st.page_link("views/ho_so_nhap_hoc.py", label="Hồ sơ nhập học — thông tin HS, xuất VEMIS",
                  icon=":material/assignment_ind:")
-    st.page_link("views/ke_toan.py", label="Kế toán — thu phí, xác nhận, tổng hợp",
+    st.page_link("views/ke_toan.py", label="Kế toán — xác nhận giữ chỗ, hoàn phí, tổng hợp",
                  icon=":material/payments:")
     st.page_link("views/bao_cao.py", label="Báo cáo — thống kê, biểu đồ",
                  icon=":material/bar_chart:")

@@ -2,7 +2,8 @@
 import streamlit as st
 
 from tuyensinh import services, ui
-from tuyensinh.schema import CHE_DO, KHOI, THU_PHI, TRANG_THAI, TUYEN_SINH
+from tuyensinh.schema import (CHE_DO, G_HOCSINH, G_LIENHE, G_TRUONGCU, KHOI, TRANG_THAI,
+                              TUYEN_SINH)
 
 S = st.session_state
 S.setdefault("ts_sel", None)       # id đang chọn, "new" khi thêm mới
@@ -24,7 +25,7 @@ with left:
     f1, f2, f3, f4 = st.columns([2, 2, 2, 1.5], vertical_alignment="bottom")
     lop = f1.selectbox("Lớp", ["Tất cả", *KHOI])
     che_do = f2.selectbox("Chế độ", ["Tất cả", *CHE_DO])
-    trang_thai = f3.selectbox("Trạng thái", ["Tất cả", *TRANG_THAI])
+    trang_thai = f3.selectbox("Bước", ["Tất cả", *TRANG_THAI])
     f4.button("Thêm", icon=":material/add:", type="primary", on_click=_reset, args=("new",),
               width="stretch")
     q = st.text_input("Tìm", placeholder="Nhập tên học sinh, SĐT, tên người đăng ký",
@@ -55,7 +56,7 @@ with left:
             "Khoi": st.column_config.TextColumn("Lớp", width="small"),
             "CheDo": "Chế độ", "SDT": "SĐT",
             "NgayLienHe": st.column_config.DateColumn("Ngày LH", format="DD/MM/YYYY"),
-            "TrangThai": "Trạng thái",
+            "TrangThai": "Bước",
         })
     rows = event.selection.rows
     if rows:
@@ -77,25 +78,22 @@ with right:
         st.rerun()
     if sel == "new":
         record = {"NamHoc": nam_hoc, "NgayLienHe": services.today(), "TrangThai": "Tư vấn",
-                  "NguoiTuVan": ui.current_user()}
+                  "NguoiNhanHoSo": ui.current_user()}
     else:
-        st.markdown(f"<div class='ts-card'><b>{record['HoTenHS']}</b> — Trạng thái: "
+        st.markdown(f"<div class='ts-card'><b>{record['HoTenHS']}</b> — Bước: "
                     f"<b>{record['TrangThai']}</b></div>", unsafe_allow_html=True)
 
     prefix = f"ts_{sel}_{S.ts_table_v}"  # đổi key để form nạp lại sau khi lưu
-    main_keys = ["NgayLienHe", "SDT", "Nguon", "TenLienHe", "HoTenHS", "NgaySinh",
-                 "NguoiGioiThieu", "Khoi", "GioiTinh", "CheDo", "TruongCu", "Email",
-                 "DiaChi", "NguoiTuVan", "TrangThai"]
-    with st.container(height=430):
-        values = ui.record_form([TUYEN_SINH.get(k) for k in main_keys], record, prefix)
-        values.update(ui.record_form([TUYEN_SINH.get("GhiChu")], record, prefix, 1))
-        if record.get("TrangThai") == "Rút hồ sơ":
-            values.update(ui.record_form([TUYEN_SINH.get("LyDoRut")], record, prefix, 1))
-        with st.expander("Mốc thời gian"):
-            values.update(ui.record_form(
-                [TUYEN_SINH.get(k) for k in ("NgayNopHoSo", "NgayNhapHoc", "NgayRutHoSo")],
-                record, prefix))
-    values["NamHoc"] = record.get("NamHoc") or nam_hoc
+    values = {}
+    with st.container(height=470):
+        for g in (G_LIENHE, G_HOCSINH, G_TRUONGCU):
+            st.markdown(f"**{g}**")
+            fields = [f for f in TUYEN_SINH.fields if f.group == g]
+            main = [f for f in fields if f.type != "note"]
+            values.update(ui.record_form(main, record, prefix, 4 if g == G_TRUONGCU else 3))
+            values.update(ui.record_form([f for f in fields if f.type == "note"],
+                                         record, prefix, 1))
+    values["NamHoc"] = values.get("NamHoc") or nam_hoc
 
     b1, b2, b3 = st.columns(3)
     if b1.button("Lưu chỉnh sửa", icon=":material/save:", type="primary", width="stretch"):
@@ -145,7 +143,7 @@ with right:
                 if tt == "Rút hồ sơ":
                     _rut_ho_so()
                 else:
-                    services.set_trang_thai(storage, sel, tt)
+                    services.set_trang_thai(storage, sel, tt, nguoi=ui.current_user())
                     ui.invalidate()
                     _reset(sel)
                     if tt == "Nhập học":
@@ -153,9 +151,7 @@ with right:
                                  "Hồ sơ nhập học", icon="🎓")
                     st.rerun()
 
-        tp = ui.df(THU_PHI)
-        tp = tp[tp["TuyenSinhID"] == sel]
-        if len(tp):
-            ok = tp[tp["TrangThaiXN"] == "Đã xác nhận"]["SoTien"].sum()
-            cho = tp[tp["TrangThaiXN"] == "Chờ xác nhận"]["SoTien"].sum()
-            st.caption(f"Kế toán: đã xác nhận **{ok:,.0f}đ**, chờ xác nhận **{cho:,.0f}đ**")
+        tien = record.get("SoTienXacNhan")
+        tien = f"{tien:,.0f}đ" if isinstance(tien, float) and tien == tien else "—"
+        st.caption(f"Giữ chỗ: **{record.get('TinhTrang') or 'Chưa giữ chỗ'}** · Số tiền xác nhận "
+                   f"**{tien}** · Người xác nhận: {record.get('NguoiXacNhan') or '—'}")

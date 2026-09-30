@@ -48,3 +48,22 @@ def default_year() -> str:
 def list_name(default: str) -> str:
     """Cho phép đổi tên list, vd SP_LIST_Data_TuyenSinh = "Data_tuyensinh"."""
     return str(get(f"SP_LIST_{default}", default))
+
+
+def section(name: str) -> dict:
+    """Một bảng trong secrets.toml, vd [powerautomate] hoặc [field_map.Data_TuyenSinh]."""
+    node: Any = _secrets()
+    for part in name.split("."):
+        node = node.get(part) if isinstance(node, dict) or hasattr(node, "get") else None
+        if node is None:
+            return {}
+    return dict(node)
+
+
+def field_map(list_name: str) -> dict[str, str]:
+    """Ánh xạ key trong app -> tên nội bộ cột trên list SharePoint có sẵn."""
+    return {str(k): str(v) for k, v in section(f"field_map.{list_name}").items()}
+
+
+def timezone() -> str:
+    return str(get("TIMEZONE", "Asia/Ho_Chi_Minh"))

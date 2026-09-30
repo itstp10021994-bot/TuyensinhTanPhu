@@ -102,8 +102,12 @@ def field_input(f: Field, record: dict, prefix: str, container=st):
         return container.date_input(label, value=_to_date(v), key=key, format="DD/MM/YYYY",
                                     min_value=date(1940, 1, 1), max_value=date(2100, 12, 31))
     if f.type == NUMBER:
-        return container.number_input(label, value=float(v or 0), step=100000.0,
-                                      format="%.0f", key=key)
+        empty = v is None or v == "" or (isinstance(v, float) and pd.isna(v))
+        money = f.key.startswith("SoTien")
+        return container.number_input(label, value=None if empty else float(v), key=key,
+                                      min_value=0.0, max_value=None if money else 10.0,
+                                      step=100000.0 if money else 0.1,
+                                      format="%.0f" if money else "%.1f")
     if f.type == BOOL:
         return container.checkbox(label, value=bool(v), key=key)
     if f.type == NOTE:
