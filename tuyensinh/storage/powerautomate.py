@@ -186,7 +186,7 @@ class PowerAutomateStorage(Storage):
                                               "BaseTemplate": 100, "Description": description})
 
     def add_column(self, list_name, f: Field, internal: str):
-        # Options=8: dùng Name làm tên nội bộ
+        # Options: 8 = dùng Name làm tên nội bộ, 16 = hiện cột trong dạng xem mặc định
         self.call("POST", f"{list_path(list_name)}/fields/CreateFieldAsXml",
-                  {"parameters": {"SchemaXml": field_xml(f, internal), "Options": 8}})
+                  {"parameters": {"SchemaXml": field_xml(f, internal), "Options": 8 | 16}})
         self._maps.pop(list_name, None)
