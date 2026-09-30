@@ -52,6 +52,12 @@ def setup_lists(storage: Storage, log: Callable[[str], None] = print) -> None:
             f = ld.get(key)
             log(f"{name}: thêm cột “{f.sp_title}” ({key})")
             storage.add_column(ld.name, f, key)
+        if hasattr(storage, "show_columns"):  # hiện đủ cột khi mở list trên SharePoint
+            cm = ColumnMap(ld.name, storage.columns(ld.name))
+            n = storage.show_columns(ld.name, [cm.internal[f.key] for f in ld.fields
+                                               if f.key in cm.internal])
+            if n:
+                log(f"{name}: hiện thêm {n} cột trong dạng xem “Tất cả các mục”")
     log("Xong.")
 
 

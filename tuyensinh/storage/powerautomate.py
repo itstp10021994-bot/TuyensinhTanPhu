@@ -153,7 +153,7 @@ class PowerAutomateStorage(Storage):
         rows = data.get("value")
         if rows is None and isinstance(data.get("d"), dict):  # odata=verbose
             rows = data["d"].get("results")
-        if not rows:
+        if rows is None:
             raise RuntimeError(
                 "Power Automate: flow chạy nhưng không trả danh sách cột về app. Kiểm tra bước "
                 "Response trong nhánh True: Body = body('Send_an_HTTP_request_to_SharePoint') và "
@@ -184,6 +184,17 @@ class PowerAutomateStorage(Storage):
     def create_list(self, list_name, description=""):
         self.call("POST", "_api/web/lists", {"Title": config.list_name(list_name),
                                               "BaseTemplate": 100, "Description": description})
+
+    def show_columns(self, list_name, names: list[str]) -> int:
+        """Thêm các cột vào dạng xem mặc định của list (list tạo từ Excel chỉ hiện Tiêu đề)."""
+        base = f"{list_path(list_name)}/DefaultView/ViewFields"
+        have = set(self.call("GET", base).get("Items") or [])
+        n = 0
+        for name in names:
+            if name not in have:
+                self.call("POST", f"{base}/AddViewField('{name}')")
+                n += 1
+        return n
 
     def add_column(self, list_name, f: Field, internal: str):
         # Options: 8 = dùng Name làm tên nội bộ, 16 = hiện cột trong dạng xem mặc định

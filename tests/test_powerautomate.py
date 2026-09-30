@@ -20,7 +20,7 @@ class FakeFlow:
     """Nhận payload {key, method, uri, body} như flow thật và thao tác trên list trong bộ nhớ."""
 
     def __init__(self):
-        self.lists = {f"lists(guid'{TS_GUID}')": {"cols": SP_COLUMNS, "items": {}},
+        self.lists = {f"lists(guid'{TS_GUID}')": {"cols": [dict(c) for c in SP_COLUMNS], "items": {}},
                       "lists/GetByTitle('Data_NhapHoc')": {"cols": None, "items": {}}}
         self.next_id = 1
         self.calls = []
@@ -37,6 +37,13 @@ class FakeFlow:
             return 400, {"error": "bad uri"}
         lst = self.lists[m.group(1)]
         rest = m.group(2)
+        if rest.startswith("/DefaultView/ViewFields"):
+            view = lst.setdefault("view", ["LinkTitle"])
+            add = re.search(r"AddViewField\('([^']+)'\)", rest)
+            if add:
+                view.append(add.group(1))
+                return 200, {}
+            return 200, {"Items": list(view)}
         if rest.startswith("/fields"):
             if method == "POST":  # CreateFieldAsXml
                 xml = body["parameters"]["SchemaXml"]
@@ -161,3 +168,16 @@ def test_them_moi_vao_list_tao_tu_excel(pa):
     got = st.list_items(TUYEN_SINH.name)
     assert got[0]["Khoi"] == "10"
     assert "$select=Id,Created,Modified,field_1" in flow.calls[-1][1]
+
+
+
+def test_setup_hien_du_cot(pa):
+    from tuyensinh import importer
+    st, flow = pa
+    flow.lists["lists/GetByTitle('Data_NhapHoc')"]["cols"] = []
+    importer.setup_lists(st, log=lambda m: None)
+    view = flow.lists["lists/GetByTitle('Data_NhapHoc')"]["view"]
+    assert set(NHAP_HOC.keys) <= set(view)
+    n = len(flow.calls)
+    importer.setup_lists(st, log=lambda m: None)  # chạy lại: không thêm trùng
+    assert not any("AddViewField" in u for _, u in flow.calls[n:])
