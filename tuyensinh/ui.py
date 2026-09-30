@@ -223,6 +223,9 @@ def error_state(err: Exception, compact: bool = False):
                    "chi tiết kỹ thuật bên dưới cho người quản trị."
     elif "Thiếu cấu hình" in msg:
         friendly = msg
+    elif "does not exist at site" in msg or ("404" in msg and "List '" in msg):
+        friendly = ("Chưa có list trên SharePoint (flow đã kết nối được). Vào **Hệ thống → Cài đặt "
+                    "& đồng bộ** và bấm **Tạo list / thêm cột**.")
     elif "404" in msg:
         friendly = "Không tìm thấy list hoặc bản ghi trên SharePoint. Có thể đã bị xóa hoặc đổi tên."
     elif "401" in msg or "403" in msg:
@@ -235,6 +238,8 @@ def error_state(err: Exception, compact: bool = False):
     st.error(friendly, icon=icon)
     with st.expander("Chi tiết kỹ thuật"):
         st.code(msg if compact else traceback.format_exc(), language=None)
+    if "Cài đặt" in friendly:
+        st.page_link("views/cai_dat.py", label="Mở Cài đặt & đồng bộ", icon=":material/settings:")
     if not compact:
         st.button("Thử lại", icon=":material/refresh:", on_click=refresh, type="primary")
 
