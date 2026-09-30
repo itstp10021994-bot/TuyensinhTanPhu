@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+import threading
+import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import date, datetime
 from html import escape
@@ -43,7 +46,30 @@ CSS = """
 <style>
 /* ---- khung trang ---- */
 /* chừa chỗ cho thanh header của Streamlit (cao hơn khi chạy trên Streamlit Cloud) */
-.block-container {padding-top: 4.5rem; padding-bottom: 3rem; max-width: 1360px;}
+.block-container {padding-top: 4.25rem; padding-bottom: 3rem; max-width: 1480px;}
+/* thanh công cụ (năm học, người thao tác) nằm trên thanh menu ngang */
+.st-key-tp_toolbar {position: fixed; top: .55rem; right: 4.5rem; z-index: 999991;
+  width: auto !important; background: transparent;}
+.st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 140px;}
+/* danh sách thẻ (bố cục như app cũ: danh sách trái, chi tiết phải) */
+[class*="st-key-cards_"] [data-testid="stVerticalBlockBorderWrapper"] {padding: 2px 0;}
+[class*="st-key-cards_"] button {min-height: 30px; padding: 2px 10px; font-size: .78rem;}
+[class*="st-key-cards_"] [class*="st-key-name_"] button {border: 0; background: none; padding: 0;
+  min-height: 0; font-size: 1rem; font-weight: 600; color: #1D4ED8;
+  text-align: left; justify-content: flex-start;}
+[class*="st-key-cards_"] [class*="st-key-name_"] button p {text-align: left;}
+[class*="st-key-cards_"] [class*="st-key-card_sel"] {border-left: 4px solid #1D4ED8;
+  background: rgba(37, 99, 235, .06); border-radius: 8px;}
+[class*="st-key-cards_"] [class*="st-key-xoa_"] button {background: #DC2626;
+  border-color: #DC2626; color: #fff;}
+[class*="st-key-cards_"] [class*="st-key-rut_"] button {color: #DC2626;}
+.tp-card {font-size: .86rem; line-height: 1.55; margin: 0;}
+.tp-card b {font-weight: 600;} .tp-card .k {opacity: .7;} .tp-card .red {color: #DC2626;}
+.tp-tag {font-size: .75rem; font-weight: 600; margin: 0; align-self: center;}
+/* thanh tiêu đề khung chi tiết */
+[class*="st-key-head_"] {background: #EA580C; border-radius: 8px; padding: 8px 14px;}
+[class*="st-key-head_"] h3 {color: #fff !important; margin: 0; font-size: 1.05rem;}
+[class*="st-key-head_"] button {background: #fff; color: #1D4ED8; border: 0; font-weight: 600;}
 h1, h2, h3 {letter-spacing: -0.01em;}
 [data-testid="stSidebarNav"] {padding-top: .25rem;}
 [data-testid="stSidebarNavSeparator"] {margin: .25rem 0;}
@@ -84,6 +110,10 @@ h1, h2, h3 {letter-spacing: -0.01em;}
 /* mobile */
 @media (max-width: 640px) {
   .block-container {padding: 4.25rem .9rem 2.5rem;}
+  .st-key-tp_toolbar {position: static; justify-content: flex-start !important;
+    flex-wrap: nowrap !important;}
+  .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 110px; flex: 1;}
+  .st-key-tp_toolbar [data-testid="stCaptionContainer"], .st-key-tp_refresh {display: none;}
   /* KPI: 2 thẻ mỗi hàng thay vì xếp dọc từng thẻ */
   [class*="st-key-kpis"] [data-testid="stHorizontalBlock"] {flex-wrap: wrap; gap: .5rem;}
   [class*="st-key-kpis"] [data-testid="stColumn"] {flex: 1 1 calc(50% - .5rem) !important;
@@ -104,9 +134,47 @@ def storage() -> Storage:
     return create_storage()
 
 
-@st.cache_data(ttl=600, show_spinner="Đang tải dữ liệu…")
-def _load(list_name: str, version: int) -> list[dict]:
-    return storage().list_items(list_name)
+TTL = 600  # giây: dữ liệu sửa thẳng trên SharePoint hiện lên app sau tối đa 10 phút
+
+
+@st.cache_resource
+def _data_store() -> dict:
+    """Bộ nhớ đệm dùng chung mọi người dùng: bản ghi + DataFrame đã chuyển đổi của từng list."""
+    return {"lock": threading.Lock(), "lists": {}}
+
+
+def _entry(name: str) -> dict:
+    store = _data_store()
+    with store["lock"]:
+        return store["lists"].setdefault(name, {"lock": threading.Lock()})
+
+
+def _fresh(e: dict, version: int) -> bool:
+    return e.get("version") == version and time.monotonic() - e.get("at", -1e9) < TTL
+
+
+def _fetch(st_obj: Storage, name: str, version: int) -> dict:
+    e = _entry(name)
+    with e["lock"]:  # nhiều người mở cùng lúc: chỉ tải 1 lần
+        if not _fresh(e, version):
+            items = st_obj.list_items(name)
+            e.update(version=version, at=time.monotonic(), items=items, frames={}, memo={})
+    return e
+
+
+def preload(*lds: ListDef):
+    """Tải các list trang cần — song song — vào bộ nhớ đệm (nếu chưa có / đã cũ)."""
+    v = data_version()
+    need = [ld.name for ld in lds if not _fresh(_entry(ld.name), v)]
+    if not need:
+        return
+    s = storage()
+    with st.spinner("Đang tải dữ liệu từ SharePoint…"):
+        if len(need) == 1:
+            _fetch(s, need[0], v)
+        else:
+            with ThreadPoolExecutor(max_workers=len(need)) as pool:
+                list(pool.map(lambda n: _fetch(s, n, v), need))
 
 
 @st.cache_resource
@@ -127,7 +195,9 @@ def invalidate():
 
 
 def refresh():
-    _load.clear()
+    store = _data_store()
+    with store["lock"]:
+        store["lists"].clear()
     invalidate()
 
 
@@ -137,14 +207,32 @@ def loaded_at() -> datetime:
 
 def records(ld: ListDef) -> list[dict]:
     """Bản ghi của list (dùng chung bộ nhớ đệm với df())."""
-    return _load(ld.name, data_version())
+    preload(ld)
+    return _entry(ld.name)["items"]
 
 
 def df(ld: ListDef, nam_hoc: str | None = None) -> pd.DataFrame:
-    out = services.to_df(ld, _load(ld.name, data_version()))
-    if nam_hoc:
-        out = out[out["NamHoc"] == nam_hoc]
-    return out.reset_index(drop=True)
+    """DataFrame của list (đã chuyển đổi sẵn, lưu đệm theo năm học). Trả về bản sao."""
+    preload(ld)
+    e = _entry(ld.name)
+    with e["lock"]:
+        frames = e["frames"]
+        if None not in frames:
+            frames[None] = services.to_df(ld, e["items"])
+        if nam_hoc not in frames:
+            base = frames[None]
+            frames[nam_hoc] = base[base["NamHoc"] == nam_hoc].reset_index(drop=True)
+        return frames[nam_hoc].copy()
+
+
+def memo(ld: ListDef, key, fn):
+    """Lưu đệm kết quả tính toán nặng trên dữ liệu của list (tự xóa khi dữ liệu đổi)."""
+    preload(ld)
+    e = _entry(ld.name)
+    key = (key, data_version())
+    if key not in e["memo"]:
+        e["memo"][key] = fn()
+    return e["memo"][key]
 
 
 def nam_hoc() -> str:
@@ -175,6 +263,41 @@ def mutate(fn, *args, success: str | None = None, **kwargs):
     if success:
         st.toast(success, icon=":material/check_circle:")
     return res
+
+
+# ---------------------------------------------------------------- danh sách thẻ + chi tiết
+def card_list(view: pd.DataFrame, key: str, render_card, selected: str | None,
+              filter_state=None, page_size: int = 20, height: int = 760):
+    """Danh sách thẻ có phân trang (về trang 1 khi bộ lọc đổi)."""
+    S = st.session_state
+    pages = max(1, -(-len(view) // page_size))
+    fkey = hash(repr(filter_state))
+    if S.get(f"_{key}_fkey") != fkey:
+        S[f"_{key}_fkey"], S[f"{key}_page"] = fkey, 1
+    page = min(S.get(f"{key}_page", 1), pages)
+    with st.container(height=height, border=True, key=f"cards_{key}"):
+        if view.empty:
+            empty_state("search_off", "Không có học sinh phù hợp", "Thử từ khóa hoặc bộ lọc khác.")
+        for _, r in view.iloc[(page - 1) * page_size: page * page_size].iterrows():
+            render_card(r.to_dict(), r["id"] == selected)
+    nav = st.container(horizontal=True, vertical_alignment="center")
+    nav.button("", icon=":material/chevron_left:", key=f"{key}_prev", disabled=page <= 1,
+               on_click=lambda: S.update({f"{key}_page": page - 1}))
+    nav.caption(f"Trang **{page}/{pages}** · {len(view)} học sinh")
+    nav.button("", icon=":material/chevron_right:", key=f"{key}_next", disabled=page >= pages,
+               on_click=lambda: S.update({f"{key}_page": page + 1}))
+
+
+def card_box(rid: str, selected: bool):
+    return st.container(border=True, key=f"card_sel_{rid}" if selected else f"card_{rid}")
+
+
+def detail_head(title: str, key: str):
+    """Thanh tiêu đề màu cam của khung chi tiết; trả về cột bên phải để đặt nút."""
+    with st.container(key=f"head_{key}"):
+        h1, h2 = st.columns([4, 1.2], vertical_alignment="center")
+        h1.markdown(f"### {escape(title)}")
+    return h2
 
 
 # ---------------------------------------------------------------- khung trang
@@ -402,7 +525,7 @@ def _learned_schools(version: int) -> dict:
 
     idx: dict[tuple[str, str], dict[str, int]] = {}
     for ld in (TUYEN_SINH, NHAP_HOC):
-        for r in _load(ld.name, version):
+        for r in _fetch(storage(), ld.name, version)["items"]:
             ten = str(r.get("TruongCu") or "").strip()
             if not ten:
                 continue

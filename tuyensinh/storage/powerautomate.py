@@ -132,8 +132,10 @@ class PowerAutomateStorage(Storage):
     def list_items(self, list_name):
         """Đọc cả list: chia theo khoảng ID và gọi flow song song (nhanh gần bằng 1 lần gọi)."""
         base = f"{list_path(list_name)}/items"
-        sel = self._select(list_name)
-        last = self.call("GET", f"{base}?$select=Id&$orderby=Id desc&$top=1").get("value") or []
+        with ThreadPoolExecutor(max_workers=2) as pool:  # cấu trúc cột + ID lớn nhất cùng lúc
+            f_sel = pool.submit(self._select, list_name)
+            last = self.call("GET", f"{base}?$select=Id&$orderby=Id desc&$top=1").get("value") or []
+            sel = f_sel.result()
         if not last:
             return []
         max_id = int(last[0].get("Id", last[0].get("ID")))

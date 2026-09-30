@@ -10,7 +10,7 @@ from tuyensinh import config, ui
 
 ROOT = Path(__file__).parent
 st.set_page_config(page_title="Tuyển sinh · Tân Phú", page_icon=str(ROOT / "static/icon.svg"),
-                   layout="wide", initial_sidebar_state="auto")
+                   layout="wide", initial_sidebar_state="collapsed")
 ui.inject_css()
 st.logo(str(ROOT / "static/logo.svg"), icon_image=str(ROOT / "static/icon.svg"), size="large")
 
@@ -48,24 +48,37 @@ P = {
     "cd": st.Page("views/cai_dat.py", title="Cài đặt & đồng bộ", icon=":material/settings:",
                   url_path="cai-dat"),
 }
-pg = st.navigation({"": [P["home"]], "Tuyển sinh": [P["ts"], P["nh"]],
-                    "Tài chính": [P["kt"]], "Phân tích": [P["bc"]], "Hệ thống": [P["cd"]]},
-                   position="sidebar")
+# Thanh menu ngang như app cũ: Tổng quan · Data tuyển sinh · Hồ sơ nhập học · Kế toán · Báo cáo
+pg = st.navigation([P["home"], P["ts"], P["nh"], P["kt"], P["bc"], P["cd"]], position="top")
 
-with st.sidebar:
-    years = config.school_years()
-    default = config.default_year()
-    st.selectbox("Năm học", years, index=years.index(default) if default in years else 0,
-                 key="nam_hoc", help="Mọi trang đều hiển thị dữ liệu của năm học này.")
+# Thanh công cụ chung: năm học + người thao tác (thay cho thanh bên)
+years = config.school_years()
+default = config.default_year()
+if st.session_state.get("nam_hoc") not in years:
+    st.session_state["nam_hoc"] = default if default in years else years[0]
+with st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center",
+                  key="tp_toolbar", gap="small"):
+    src = "SharePoint" if config.backend() != "local" else "Máy cục bộ (thử nghiệm)"
+    st.caption(f":material/cloud_done: {src}")
+    st.selectbox("Năm học", years, key="nam_hoc", label_visibility="collapsed", width=150,
+                 help="Mọi trang đều hiển thị dữ liệu của năm học này.")
     if _has_auth():
-        st.caption(f"Đăng nhập: **{ui.current_user()}**")
-        st.button("Đăng xuất", icon=":material/logout:", on_click=st.logout, type="tertiary")
+        with st.popover(ui.current_user() or "Tài khoản", icon=":material/account_circle:"):
+            st.button("Đăng xuất", icon=":material/logout:", on_click=st.logout,
+                      type="tertiary")
     else:
-        st.text_input("Người thao tác", key="nguoi_dung", placeholder="Họ tên của bạn",
-                      help="Ghi vào các cột Người nhận hồ sơ / Người xác nhận.")
-    st.caption(f"Dữ liệu: {'SharePoint' if config.backend() != 'local' else 'Máy cục bộ (thử nghiệm)'}")
+        who = st.session_state.get("nguoi_dung") or "Người thao tác"
+        with st.popover(who, icon=":material/account_circle:"):
+            st.text_input("Người thao tác", key="nguoi_dung", placeholder="Họ tên của bạn",
+                          help="Ghi vào các cột Người nhận hồ sơ / Người xác nhận.")
+    st.button("", icon=":material/refresh:", key="tp_refresh", on_click=ui.refresh,
+              help="Tải lại dữ liệu mới nhất từ SharePoint", type="tertiary")
 
 try:
+    if pg.url_path != "cai-dat":  # tải song song 2 list cho mọi trang (trang Cài đặt tự tải)
+        from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
+
+        ui.preload(TUYEN_SINH, NHAP_HOC)
     pg.run()
 except Exception as e:  # lỗi kết nối SharePoint, cấu hình...
     if type(e).__name__ in ("StopException", "RerunException", "RerunData"):

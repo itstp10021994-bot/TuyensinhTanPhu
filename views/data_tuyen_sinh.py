@@ -1,6 +1,6 @@
-"""Data tuyển sinh.
+"""Data tuyển sinh — bố cục như app cũ: danh sách thẻ bên trái, chi tiết bên phải.
 
-Danh sách (lọc theo bước, tìm kiếm) → chọn dòng mở hồ sơ chi tiết (?id=...).
+Lọc theo bước / khối / chế độ / giữ chỗ, tìm kiếm; học sinh đang chọn nằm ở ?id=...
 Thêm liên hệ mới bằng hộp thoại nhập nhanh (?new=1 để mở từ trang khác).
 """
 import streamlit as st
@@ -129,108 +129,127 @@ def delete_dialog(rec: dict):
         st.rerun()
 
 
-# ================================================================== chi tiết
-def render_detail(item_id: str):
+# ================================================================== thẻ danh sách (trái)
+STEP_COLOR = {s: ui.STATUS[s]["hex"] for s in TRANG_THAI if "hex" in ui.STATUS.get(s, {})}
+
+
+def set_step(item_id: str, step: str):
+    if ui.mutate(services.set_trang_thai, storage, item_id, step, nguoi=ui.current_user(),
+                 success=f"Đã chuyển sang {step}") is not None:
+        if step == "Nhập học":
+            st.toast("Đã tạo hồ sơ nhập học. Bổ sung thông tin ở mục Hồ sơ nhập học.",
+                     icon=":material/school:")
+        S.ts_v += 1
+        st.rerun()
+
+
+def card(r: dict, selected: bool):
+    rid = r["id"]
+    step = r["TrangThai"] or "Tư vấn"
+    with ui.card_box(rid, selected):
+        st.button(r["HoTenHS"] or "(Chưa có tên)", key=f"name_{rid}", on_click=open_record,
+                  args=(rid,))
+        color = STEP_COLOR.get(step, "#6B7280")
+        giu = r["GiuCho"] or "Chưa giữ chỗ"
+        st.html(
+            f'<p class="tp-card"><span class="k">Khối:</span> <b>{r["Khoi"] or "—"}</b>'
+            + (f'-{r["PhanHe"]}' if r["PhanHe"] else "")
+            + f' &nbsp;·&nbsp; <span class="k">Chế độ:</span> <b>{r["CheDo"] or "—"}</b>'
+            f' &nbsp;·&nbsp; <span class="k">SĐT:</span> <b>{r["SDT"] or "—"}</b><br>'
+            f'<span class="k">Bước:</span> <b style="color:{color}">{step}</b>'
+            f' &nbsp;·&nbsp; <span class="k">Liên hệ:</span> {ui.fmt_date(r["NgayLienHe"])}'
+            f' &nbsp;·&nbsp; <span class="k">{giu}</span></p>')
+        act = st.container(horizontal=True, gap="small")
+        nxt = ui.next_step(step)
+        if nxt and act.button(f"→ {nxt}", key=f"nxt_{rid}",
+                              help="Xác nhận nhập học" if nxt == "Nhập học" else None):
+            set_step(rid, nxt)
+        if step != "Rút hồ sơ" and act.button("Rút HS", key=f"rut_{rid}"):
+            withdraw_dialog(r)
+        if act.button("Xóa", key=f"xoa_{rid}"):
+            delete_dialog(r)
+
+
+# ================================================================== chi tiết (phải)
+def render_right(item_id: str | None):
+    h2 = ui.detail_head("Thông tin chi tiết học sinh", "ts")
+    save_top = h2.button("Lưu thay đổi", icon=":material/save:", key="ts_save_top",
+                         width="stretch", disabled=not item_id)
+    if not item_id:
+        with st.container(border=True, height=700):
+            ui.empty_state("touch_app", "Chọn một học sinh",
+                           "Bấm vào tên học sinh ở danh sách bên trái để xem, tư vấn và cập nhật.")
+        return
     rec = _find(item_id)
-    st.button("Data tuyển sinh", icon=":material/arrow_back:", type="tertiary",
-              on_click=back_to_list)
     if rec is None:
-        with ui.section():
+        with st.container(border=True):
             ui.empty_state("person_off", "Không tìm thấy học sinh",
-                           "Liên hệ có thể đã bị xóa hoặc đường dẫn không đúng.")
+                           "Liên hệ có thể đã bị xóa hoặc thuộc năm học khác.")
         return
 
     step = rec.get("TrangThai") or "Tư vấn"
-    sub = " · ".join(x for x in [f"Khối {rec['Khoi']}" if rec.get("Khoi") else "", rec.get("SDT"),
-                                 f"Liên hệ {ui.fmt_date(rec.get('NgayLienHe'))}"] if x)
-    actions = ui.page_header(rec["HoTenHS"] or "(Chưa có tên)", sub, eyebrow="Hồ sơ tuyển sinh")
-    nxt = ui.next_step(step)
-    if nxt:
-        label = "Xác nhận nhập học" if nxt == "Nhập học" else f"Chuyển sang {nxt}"
-        if actions.button(label, type="primary", icon=ui.STATUS[nxt]["icon"]):
-            if ui.mutate(services.set_trang_thai, storage, item_id, nxt, nguoi=ui.current_user(),
-                         success=f"Đã chuyển sang {nxt}") is not None:
-                if nxt == "Nhập học":
-                    st.toast("Đã tạo hồ sơ nhập học. Bổ sung thông tin ở mục Hồ sơ nhập học.",
-                             icon=":material/school:")
-                S.ts_v += 1
-                st.rerun()
-    with actions.popover("Thao tác", icon=":material/more_horiz:"):
-        other = [s for s in TRANG_THAI if s not in (step, "Rút hồ sơ")]
-        st.caption("Đổi bước (sửa nhầm)")
-        for s in other:
-            if st.button(s, icon=ui.STATUS[s]["icon"], width="stretch", key=f"set_{s}"):
-                if ui.mutate(services.set_trang_thai, storage, item_id, s,
-                             nguoi=ui.current_user(), success=f"Đã chuyển sang {s}") is not None:
-                    S.ts_v += 1
-                    st.rerun()
-        st.divider()
-        if step != "Rút hồ sơ" and st.button("Rút hồ sơ…", icon=":material/block:",
-                                              width="stretch"):
-            withdraw_dialog(rec)
-        if st.button("Xóa liên hệ…", icon=":material/delete:", width="stretch"):
-            delete_dialog(rec)
+    with st.container(border=True):
+        t1, t2 = st.columns([3, 1.3], vertical_alignment="center")
+        sub = " · ".join(x for x in [f"Khối {rec['Khoi']}" if rec.get("Khoi") else "",
+                                     rec.get("SDT"), rec.get("CheDo"),
+                                     f"Liên hệ {ui.fmt_date(rec.get('NgayLienHe'))}"] if x)
+        t1.markdown(f"**{rec['HoTenHS'] or '(Chưa có tên)'}**  \n:gray[{sub}]")
+        with t2.popover("Thao tác", icon=":material/more_horiz:", width="stretch"):
+            st.caption("Đổi bước (sửa nhầm)")
+            for s in [s for s in TRANG_THAI if s not in (step, "Rút hồ sơ")]:
+                if st.button(s, icon=ui.STATUS[s]["icon"], width="stretch", key=f"set_{s}"):
+                    set_step(item_id, s)
+            st.divider()
+            if step != "Rút hồ sơ" and st.button("Rút hồ sơ…", icon=":material/block:",
+                                                  width="stretch"):
+                withdraw_dialog(rec)
+            if st.button("Xóa liên hệ…", icon=":material/delete:", width="stretch"):
+                delete_dialog(rec)
+        ui.stepper(step)
+        nxt = ui.next_step(step)
+        if nxt:
+            label = "Xác nhận nhập học" if nxt == "Nhập học" else f"Chuyển sang {nxt}"
+            if st.button(label, type="primary", icon=ui.STATUS[nxt]["icon"], key="ts_next"):
+                set_step(item_id, nxt)
+        elif step == "Rút hồ sơ":
+            st.caption("Học sinh đã rút hồ sơ. Dùng **Thao tác → Đổi bước** nếu cần khôi phục.")
 
-    with st.container(horizontal=True, gap="small"):
-        ui.status_badge(step)
-        ui.giu_cho_badge(rec.get("GiuCho"))
-        st.badge(f"Năm học {rec.get('NamHoc') or '—'}", color="gray",
-                 icon=":material/calendar_month:")
-    ui.stepper(step)
-    if step == "Rút hồ sơ":
-        st.caption("Học sinh đã rút hồ sơ. Dùng **Thao tác → Đổi bước** nếu cần khôi phục.")
-    st.space("small")
-
-    main, side = st.columns([2.2, 1], gap="medium")
-    with main:
-        prefix = f"ts_{item_id}_{S.ts_v}"
-        values = {}
-        with ui.section("Liên hệ & tư vấn"):
-            values.update(ui.record_form(
-                [F(k) for k in ("NgayLienHe", "SDT", "NamHoc", "Nguon", "TenLienHe",
-                                "NguoiGioiThieu", "TinhTrang", "NguoiNhanHoSo")], rec, prefix, 3))
-            values.update(ui.record_form([F("GhiChu")], rec, prefix, 1))
-        with ui.section("Học sinh"):
-            values.update(ui.record_form(
-                [F(k) for k in ("HoTenHS", "NgaySinh", "GioiTinh", "Khoi", "PhanHe", "CheDo")],
-                rec, prefix, 3))
-        with ui.section("Trường cũ & kết quả học tập"):
-            values.update(ui.record_form(
-                [F(k) for k in ("TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu")],
-                rec, prefix, 3, {"TruongCu_Tinh": "Tỉnh/Thành phố",
-                                 "TruongCu_PhuongXa": "Phường/Xã", "TruongCu": "Tên trường"}))
-            if rec.get("TruongCu_DiaChiCu"):
-                st.caption(f"Địa chỉ trường cũ trước sáp nhập: {rec['TruongCu_DiaChiCu']}")
-            short = {"Toan1": "Toán", "Van1": "Văn", "Anh1": "Anh", "TV1": "Tiếng Việt",
-                     "HanhKiem1": "Hạnh kiểm", "Toan2": "Toán", "Van2": "Văn",
-                     "Anh2": "Anh", "TV2": "Tiếng Việt", "HanhKiem2": "Hạnh kiểm"}
-            for n in ("1", "2"):
-                st.markdown(f"**Kết quả {n}**")
-                keys = [f"Toan{n}", f"Van{n}", f"Anh{n}", f"TV{n}", f"HanhKiem{n}"]
-                values.update(ui.record_form([F(k) for k in keys], rec, prefix, 5, short))
-        bar = st.container(horizontal=True, vertical_alignment="center")
-        submitted = bar.button("Lưu thay đổi", type="primary", icon=":material/save:")
-        bar.caption("Các trường có dấu * là bắt buộc.")
-        if submitted:
-            values["TrangThai"] = step
-            values["NamHoc"] = values.get("NamHoc") or nam_hoc
-            dups = services.find_duplicates(ui.records(TUYEN_SINH), values, item_id)
-            if ui.mutate(services.save_tuyen_sinh, storage, values, item_id,
-                         success="Đã lưu thay đổi") is not None:
-                if dups:
-                    st.toast(f"Lưu ý: có {len(dups)} liên hệ khác trùng họ tên và SĐT.",
-                             icon=":material/content_copy:")
-                S.ts_v += 1
-                st.rerun()
-
-    with side:
-        with ui.section("Giữ chỗ"):
+    prefix = f"ts_{item_id}_{S.ts_v}"
+    values = {}
+    tabs = st.tabs(["Liên hệ & tư vấn", "Học sinh", "Trường cũ & kết quả", "Giữ chỗ & hồ sơ"])
+    with tabs[0], st.container(border=True):
+        values.update(ui.record_form(
+            [F(k) for k in ("NgayLienHe", "SDT", "NamHoc", "Nguon", "TenLienHe",
+                            "NguoiGioiThieu", "TinhTrang", "NguoiNhanHoSo")], rec, prefix, 3))
+        values.update(ui.record_form([F("GhiChu")], rec, prefix, 1))
+    with tabs[1], st.container(border=True):
+        values.update(ui.record_form(
+            [F(k) for k in ("HoTenHS", "NgaySinh", "GioiTinh", "Khoi", "PhanHe", "CheDo")],
+            rec, prefix, 3))
+    with tabs[2], st.container(border=True):
+        values.update(ui.record_form(
+            [F(k) for k in ("TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu")],
+            rec, prefix, 3, TRUONG_LABELS))
+        if rec.get("TruongCu_DiaChiCu"):
+            st.caption(f"Địa chỉ trường cũ trước sáp nhập: {rec['TruongCu_DiaChiCu']}")
+        short = {"Toan1": "Toán", "Van1": "Văn", "Anh1": "Anh", "TV1": "Tiếng Việt",
+                 "HanhKiem1": "Hạnh kiểm", "Toan2": "Toán", "Van2": "Văn",
+                 "Anh2": "Anh", "TV2": "Tiếng Việt", "HanhKiem2": "Hạnh kiểm"}
+        for n in ("1", "2"):
+            st.markdown(f"**Kết quả {n}**")
+            keys = [f"Toan{n}", f"Van{n}", f"Anh{n}", f"TV{n}", f"HanhKiem{n}"]
+            values.update(ui.record_form([F(k) for k in keys], rec, prefix, 5, short))
+    with tabs[3], st.container(border=True):
+        c1, c2 = st.columns(2, gap="medium")
+        with c1:
+            st.markdown("**Giữ chỗ**")
             ui.kv([("Giữ chỗ", rec.get("GiuCho") or "Chưa giữ chỗ"),
                    ("Số tiền xác nhận", ui.money(rec.get("SoTienXacNhan"))),
                    ("Người xác nhận", rec.get("NguoiXacNhan")),
                    ("Ngân hàng hoàn phí", rec.get("NganHang"))])
             st.page_link("views/ke_toan.py", label="Mở Kế toán", icon=":material/payments:")
-        with ui.section("Hồ sơ nhập học"):
+        with c2:
+            st.markdown("**Hồ sơ nhập học**")
             nh = ui.df(NHAP_HOC)
             mine = nh[nh["TuyenSinhID"] == item_id]
             if mine.empty:
@@ -241,13 +260,25 @@ def render_detail(item_id: str):
                 st.page_link("views/ho_so_nhap_hoc.py", label="Mở hồ sơ nhập học",
                              icon=":material/assignment_ind:",
                              query_params={"id": mine.iloc[0]["id"]})
-        with ui.section("Bản ghi"):
             ui.kv([("Tạo lúc", ui.fmt_date(rec.get("Created"))),
-                   ("Cập nhật", ui.fmt_date(rec.get("Modified"))),
-                   ("Mã", rec.get("id"))])
+                   ("Cập nhật", ui.fmt_date(rec.get("Modified")))])
+
+    save_bottom = st.button("Lưu thay đổi", type="primary", icon=":material/save:",
+                            key="ts_save_bot", width="stretch")
+    if save_top or save_bottom:
+        values["TrangThai"] = step
+        values["NamHoc"] = values.get("NamHoc") or nam_hoc
+        dups = services.find_duplicates(ui.records(TUYEN_SINH), values, item_id)
+        if ui.mutate(services.save_tuyen_sinh, storage, values, item_id,
+                     success="Đã lưu thay đổi") is not None:
+            if dups:
+                st.toast(f"Lưu ý: có {len(dups)} liên hệ khác trùng họ tên và SĐT.",
+                         icon=":material/content_copy:")
+            S.ts_v += 1
+            st.rerun()
 
 
-# ================================================================== danh sách
+# ================================================================== trang
 FILTER_KEYS = ("ts_q", "ts_khoi", "ts_chedo", "ts_giucho")
 
 
@@ -256,36 +287,16 @@ def clear_filters():
     S.ts_khoi = S.ts_chedo = S.ts_giucho = "Tất cả"
 
 
-def render_list():
-    actions = ui.page_header("Data tuyển sinh", f"Liên hệ, tư vấn và hồ sơ học sinh · "
-                             f"năm học {nam_hoc}")
-    export_slot = actions.container(width="content")
-    add = actions.button("Thêm liên hệ", icon=":material/person_add:", type="primary")
-
-    if ts.empty:
-        with ui.section():
-            ui.empty_state("person_search", "Chưa có liên hệ nào",
-                           f"Năm học {nam_hoc} chưa có dữ liệu. Thêm liên hệ đầu tiên hoặc "
-                           "chọn năm học khác ở thanh bên.")
-        if add:
-            new_contact_dialog()
-        return
-
-    counts = ts["TrangThai"].value_counts()
-    step = st.segmented_control(
-        "Bước", ["Tất cả", *TRANG_THAI], default="Tất cả", required=True, key="ts_step",
-        format_func=lambda s: f"{s}  {len(ts) if s == 'Tất cả' else int(counts.get(s, 0))}",
-        label_visibility="collapsed")
-
+def filters(step: str):
     for k in FILTER_KEYS:
         S.setdefault(k, "" if k == "ts_q" else "Tất cả")
-    c = st.columns([3, 1, 1, 1.2], vertical_alignment="bottom")
-    q = c[0].text_input("Tìm kiếm", key="ts_q", icon=":material/search:",
-                        placeholder="Tên học sinh, SĐT hoặc tên liên hệ")
-    khoi = c[1].selectbox("Khối", ["Tất cả", *KHOI], key="ts_khoi")
-    che_do = c[2].selectbox("Chế độ", ["Tất cả", *CHE_DO], key="ts_chedo")
-    giu = c[3].selectbox("Giữ chỗ", ["Tất cả", *GIU_CHO], key="ts_giucho")
-
+    q = st.text_input("Tìm kiếm", key="ts_q", icon=":material/search:",
+                      label_visibility="collapsed",
+                      placeholder="Nhập tên học sinh, SĐT, tên người liên hệ")
+    c = st.columns(3, gap="small")
+    khoi = c[0].selectbox("Khối", ["Tất cả", *KHOI], key="ts_khoi")
+    che_do = c[1].selectbox("Chế độ", ["Tất cả", *CHE_DO], key="ts_chedo")
+    giu = c[2].selectbox("Giữ chỗ", ["Tất cả", *GIU_CHO], key="ts_giucho")
     view = ts
     if step and step != "Tất cả":
         view = view[view["TrangThai"] == step]
@@ -303,50 +314,46 @@ def render_list():
         if phone:
             mask |= view["SDT"].str.contains(phone, regex=False)
         view = view[mask]
-    view = view.sort_values(["NgayLienHe", "id"], ascending=False).reset_index(drop=True)
-    filtered = bool(q.strip()) or any(S[k] != "Tất cả" for k in FILTER_KEYS[1:])
+    if bool(q.strip()) or any(S[k] != "Tất cả" for k in FILTER_KEYS[1:]):
+        st.button("Xóa bộ lọc", icon=":material/filter_alt_off:", type="tertiary",
+                  on_click=clear_filters)
+    return (view.sort_values(["NgayLienHe", "id"], ascending=False).reset_index(drop=True),
+            (step, q, khoi, che_do, giu))
 
-    meta = st.container(horizontal=True, vertical_alignment="center")
-    meta.caption(f"Hiển thị **{len(view)}** / {len(ts)} học sinh")
-    if filtered:
-        meta.button("Xóa bộ lọc", icon=":material/filter_alt_off:", type="tertiary",
-                    on_click=clear_filters)
 
-    if view.empty:
-        with ui.section():
-            ui.empty_state("search_off", "Không có học sinh phù hợp",
-                           "Thử từ khóa khác hoặc bỏ bớt bộ lọc.")
-    else:
-        show = view.assign(Buoc=ui.tag_col(view["TrangThai"]),
-                           GiuCho=ui.tag_col(view["GiuCho"].replace("", "Chưa giữ chỗ")))
-        ev = st.dataframe(
-            show[["HoTenHS", "Khoi", "Buoc", "SDT", "NgayLienHe", "CheDo", "GiuCho"]],
-            key=ui.table_key(f"ts_table_{S.ts_v}", view["id"]), on_select="rerun", selection_mode="single-row",
-            hide_index=True, width="stretch", height=ui.table_height(len(show)),
-            column_config={
-                "HoTenHS": st.column_config.TextColumn("Học sinh", width="medium", pinned=True),
-                "Khoi": st.column_config.TextColumn("Khối", width="small"),
-                "Buoc": ui.status_column(), "SDT": "SĐT",
-                "NgayLienHe": st.column_config.DateColumn("Ngày liên hệ", **ui.DATE_COL),
-                "CheDo": "Chế độ", "GiuCho": ui.giu_cho_column(),
-            })
-        st.caption("Chọn một dòng để mở hồ sơ học sinh.")
-        if ev.selection.rows:
-            open_record(view.loc[ev.selection.rows[0], "id"])
-            st.rerun()
+def render_page():
+    actions = ui.page_header("Data tuyển sinh", f"Năm học {nam_hoc}")
+    export_slot = actions.container(width="content")
+    add = actions.button("Thêm liên hệ", icon=":material/person_add:", type="primary")
+    if add:
+        new_contact_dialog()
+
+    counts = ts["TrangThai"].value_counts()
+    step = st.segmented_control(
+        "Bước", ["Tất cả", *TRANG_THAI], default="Tất cả", required=True, key="ts_step",
+        format_func=lambda s: f"{s}  {len(ts) if s == 'Tất cả' else int(counts.get(s, 0))}",
+        label_visibility="collapsed")
+
+    left, right = st.columns([1, 1.45], gap="medium")
+    with left:
+        if ts.empty:
+            ui.empty_state("person_search", "Chưa có liên hệ nào",
+                           f"Năm học {nam_hoc} chưa có dữ liệu. Bấm **Thêm liên hệ** hoặc chọn "
+                           "năm học khác ở thanh trên.")
+            view = ts
+        else:
+            view, fstate = filters(step)
+            ui.card_list(view, "ts", card, qp.get("id"), filter_state=fstate)
+    with right:
+        render_right(qp.get("id"))
 
     cols = {f.key: f.label for f in TUYEN_SINH.fields}
     ui.download_excel("Xuất Excel", view[list(cols)].rename(columns=cols),
                       f"DataTuyenSinh_{nam_hoc}.xlsx", container=export_slot, key="ts_export")
-    if add:
-        new_contact_dialog()
 
 
 # ================================================================== điều hướng
 if qp.get("new"):
     del qp["new"]
     new_contact_dialog()
-if qp.get("id"):
-    render_detail(qp["id"])
-else:
-    render_list()
+render_page()

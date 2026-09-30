@@ -15,14 +15,13 @@ nh = ui.df(NHAP_HOC, nam_hoc)
 
 actions = ui.page_header("Tổng quan", f"Năm học {nam_hoc} · cập nhật lúc "
                          f"{ui.ago(ui.loaded_at())}")
-actions.button("Làm mới", icon=":material/refresh:", on_click=ui.refresh)
 if actions.button("Thêm liên hệ", icon=":material/person_add:", type="primary"):
     st.switch_page("views/data_tuyen_sinh.py", query_params={"new": "1"})
 
 if ts.empty:
     with ui.section():
         ui.empty_state("person_search", f"Chưa có liên hệ nào trong năm học {nam_hoc}",
-                       "Bắt đầu bằng việc thêm liên hệ đầu tiên, hoặc chọn năm học khác ở thanh bên.")
+                       "Bắt đầu bằng việc thêm liên hệ đầu tiên, hoặc chọn năm học khác ở thanh trên.")
         _, c, _ = st.columns([2, 1, 2])
         if c.button("Thêm liên hệ đầu tiên", type="primary", width="stretch"):
             st.switch_page("views/data_tuyen_sinh.py", query_params={"new": "1"})

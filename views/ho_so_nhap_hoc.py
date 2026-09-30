@@ -29,14 +29,22 @@ TT_COLOR = {"Đang nhập hồ sơ": "blue", "Đang đóng phí": "orange", "Đ�
 DANG_HOC = "Đang theo học"  # bộ lọc mặc định: bỏ HS đã rút / không học tiếp
 
 ts = ui.df(TUYEN_SINH, nam_hoc)
-nh = ui.df(NHAP_HOC, nam_hoc)
-rut = set(ui.df(TUYEN_SINH).query("TrangThai == 'Rút hồ sơ'")["id"])
-if len(nh):
-    nh.loc[nh["TuyenSinhID"].isin(rut), "TinhTrangHS"] = "Rút hồ sơ"
-    nh["HoanThien"] = (services.completeness(nh) * 100).round()
-    nh["KhoiPH"] = nh.apply(lambda r: "-".join(x for x in (r["Khoi"], r["PhanHe"]) if x), axis=1)
-else:
-    nh["HoanThien"], nh["KhoiPH"] = [], []
+rut = ui.memo(TUYEN_SINH, "rut", lambda: set(
+    ui.df(TUYEN_SINH).query("TrangThai == 'Rút hồ sơ'")["id"]))
+
+
+def _nh_frame() -> pd.DataFrame:
+    """Hồ sơ của năm + cột tính sẵn (tình trạng rút, % hoàn thiện, khối-phân hệ)."""
+    df = ui.df(NHAP_HOC, nam_hoc)
+    if df.empty:
+        return df.assign(HoanThien=[], KhoiPH=[])
+    df.loc[df["TuyenSinhID"].isin(rut), "TinhTrangHS"] = "Rút hồ sơ"
+    df["HoanThien"] = (services.completeness(df) * 100).round()
+    df["KhoiPH"] = [f"{k}-{p}" if k and p else k or p for k, p in zip(df["Khoi"], df["PhanHe"])]
+    return df
+
+
+nh = ui.memo(NHAP_HOC, ("nh_view", nam_hoc), _nh_frame).copy()
 
 
 def open_record(item_id: str):
@@ -288,38 +296,16 @@ def mon_dialog(rec: dict):
 
 
 # ================================================================== giao diện (như app cũ)
-CSS = """<style>
-.st-key-nh_cards [data-testid="stVerticalBlockBorderWrapper"] {padding: 2px 0;}
-.st-key-nh_cards button {min-height: 30px; padding: 2px 10px; font-size: .78rem;}
-.st-key-nh_cards [class*="st-key-name_"] button {border: 0; background: none; padding: 0;
-  min-height: 0; font-size: 1rem; font-weight: 600; color: var(--tp-primary, #1D4ED8);
-  text-align: left; justify-content: flex-start;}
-.st-key-nh_cards [class*="st-key-name_"] button p {text-align: left;}
-.st-key-nh_cards [class*="st-key-card_sel"] {border-left: 4px solid #1D4ED8;
-  background: rgba(37, 99, 235, .06); border-radius: 8px;}
-.nh-card {font-size: .86rem; line-height: 1.55; margin: 0;}
-.nh-card b {font-weight: 600;} .nh-card .k {opacity: .7;}
-.nh-card .red {color: #DC2626;}
-.st-key-nh_head {background: #EA580C; border-radius: 8px; padding: 8px 14px;}
-.st-key-nh_head h3 {color: #fff !important; margin: 0; font-size: 1.05rem;}
-.st-key-nh_head button {background: #fff; color: #1D4ED8; border: 0; font-weight: 600;}
-.st-key-nh_cards [class*="st-key-xoa_"] button {background: #DC2626; border-color: #DC2626;
-  color: #fff;}
-.st-key-nh_cards [class*="st-key-rut_"] button {color: #DC2626;}
-.nh-xe {font-size: .75rem; font-weight: 600; margin: 0; align-self: center;}
-</style>"""
-
-
 def card(r: dict, selected: bool):
     """Thẻ học sinh ở cột trái: thông tin + nút thao tác nhanh."""
     rid = r["id"]
-    with st.container(border=True, key=f"card_sel_{rid}" if selected else f"card_{rid}"):
+    with ui.card_box(rid, selected):
         st.button(r["HoTen"] or "(Chưa có tên)", key=f"name_{rid}", on_click=open_record,
                   args=(rid,))
         lop = r["LopHoc"] or '<span class="red">Chưa xếp lớp</span>'
         tt = r["TinhTrangHS"]
         st.html(
-            f'<p class="nh-card"><span class="k">Khối:</span> <b>{r["KhoiPH"] or "—"}</b>'
+            f'<p class="tp-card"><span class="k">Khối:</span> <b>{r["KhoiPH"] or "—"}</b>'
             f' &nbsp;·&nbsp; <span class="k">Chế độ:</span> <b>{r["NoiTruBanTru"] or "—"}</b>'
             f' &nbsp;·&nbsp; <span class="k">Lớp:</span> <b>{lop}</b><br>'
             f'<span class="k">SĐT:</span> <b>{r["DienThoaiSLL"] or "—"}</b>'
@@ -337,7 +323,7 @@ def card(r: dict, selected: bool):
         if act.button("Xóa", key=f"xoa_{rid}"):
             delete_dialog(r)
         if noi_tru(r) and r["DangKyXe"]:
-            act.html(f'<p class="nh-xe">🚌 {r["DangKyXe"]}</p>')
+            act.html(f'<p class="tp-tag">🚌 {r["DangKyXe"]}</p>')
 
 
 def filters() -> pd.DataFrame:
@@ -374,27 +360,10 @@ def filters() -> pd.DataFrame:
     return view.sort_values(["LopHoc", "HoTen"]).reset_index(drop=True)
 
 
-PAGE = 20
 
 
 def render_left(view: pd.DataFrame, selected: str | None):
-    pages = max(1, -(-len(view) // PAGE))
-    fkey = hash(S.get("_nh_filter"))
-    if S.get("_nh_fkey") != fkey:  # đổi bộ lọc -> về trang 1
-        S["_nh_fkey"], S["nh_page"] = fkey, 1
-    page = min(S.get("nh_page", 1), pages)
-    with st.container(height=760, border=True, key="nh_cards"):
-        if view.empty:
-            ui.empty_state("search_off", "Không có học sinh phù hợp",
-                           "Thử từ khóa hoặc bộ lọc khác.")
-        for _, r in view.iloc[(page - 1) * PAGE: page * PAGE].iterrows():
-            card(r.to_dict(), r["id"] == selected)
-    nav = st.container(horizontal=True, vertical_alignment="center")
-    nav.button("", icon=":material/chevron_left:", key="pg_prev", disabled=page <= 1,
-               on_click=lambda: S.update(nh_page=page - 1))
-    nav.caption(f"Trang **{page}/{pages}** · {len(view)} học sinh")
-    nav.button("", icon=":material/chevron_right:", key="pg_next", disabled=page >= pages,
-               on_click=lambda: S.update(nh_page=page + 1))
+    ui.card_list(view, "nh", card, selected, filter_state=S.get("_nh_filter"))
 
 
 def load_record(item_id: str) -> tuple[dict | None, pd.DataFrame]:
@@ -421,10 +390,8 @@ def load_record(item_id: str) -> tuple[dict | None, pd.DataFrame]:
 
 
 def render_right(item_id: str | None):
-    with st.container(key="nh_head"):
-        h1, h2 = st.columns([4, 1], vertical_alignment="center")
-        h1.markdown("### Thông tin chi tiết học sinh đăng ký nhập học")
-        save_top = h2.button("Lưu hồ sơ", icon=":material/save:", key="save_top",
+    h2 = ui.detail_head("Thông tin chi tiết học sinh đăng ký nhập học", "nh")
+    save_top = h2.button("Lưu hồ sơ", icon=":material/save:", key="save_top",
                              width="stretch", disabled=not item_id)
     if not item_id:
         with st.container(border=True, height=700):
@@ -490,7 +457,6 @@ def render_right(item_id: str | None):
 
 
 def render_page():
-    st.html(CSS)
     actions = ui.page_header("Hồ sơ nhập học", f"Năm học {nam_hoc}")
     view_all = nh
     export_slot = actions.container(width="content")

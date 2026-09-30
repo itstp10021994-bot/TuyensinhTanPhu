@@ -15,7 +15,7 @@ Người dùng ─► App (Streamlit) ──POST {key, method, uri, body}──�
 ```
 
 - 1 flow dùng cho mọi thao tác (đọc, thêm, sửa, xóa) trên cả **Data_TuyenSinh** và **Data_NhapHoc**.
-- Sửa trực tiếp trên SharePoint thì app thấy sau tối đa 2 phút (hoặc bấm **Làm mới** ở Tổng quan).
+- Sửa trực tiếp trên SharePoint thì app thấy sau tối đa 10 phút (hoặc bấm nút ⟳ trên thanh menu).
 - Mỗi thao tác = 1 lần chạy flow; nhập 1.700 dòng dữ liệu cũ ≈ 1.700 lần chạy (vài phút).
 
 ---
