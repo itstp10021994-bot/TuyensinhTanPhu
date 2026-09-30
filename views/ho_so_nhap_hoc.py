@@ -49,6 +49,11 @@ def back_to_list():
     S.nh_v += 1
 
 
+def noi_tru(rec: dict) -> bool:
+    """Chỉ học sinh nội trú mới đăng ký xe đưa đón (về nhà cuối tuần)."""
+    return str(rec.get("NoiTruBanTru") or "").startswith("Nội trú")
+
+
 def done(res):
     if res is not None:
         S.nh_v += 1
@@ -265,7 +270,10 @@ def render_tab(name: str, groups: tuple, rec: dict, prefix: str) -> dict:
                                       "SoTienConLai", "NgayDongPhi", "KeToanXacNhan")],
                       rec, prefix, 3))
         st.markdown("**Xe đưa đón**")
-        v.update(form([F("DangKyXe"), F("DiemDonTra")], rec, prefix, 2))
+        if noi_tru(rec):
+            v.update(form([F("DangKyXe"), F("DiemDonTra")], rec, prefix, 2))
+        else:
+            st.caption("Chỉ học sinh nội trú mới đăng ký xe đưa đón.")
     return v
 
 
@@ -321,14 +329,14 @@ def card(r: dict, selected: bool):
             rut_dialog(r)
         if act.button("Xếp lớp", key=f"lop_{rid}"):
             xep_lop_dialog(r)
-        if act.button("Đăng ký xe", key=f"xe_{rid}"):
+        if noi_tru(r) and act.button("Đăng ký xe", key=f"xe_{rid}"):
             xe_dialog(r)
         khoi = int(r["Khoi"]) if str(r["Khoi"]).isdigit() else 0
         if khoi >= 10 and act.button("Nhóm môn", key=f"mon_{rid}"):
             mon_dialog(r)
         if act.button("Xóa", key=f"xoa_{rid}"):
             delete_dialog(r)
-        if r["DangKyXe"]:
+        if noi_tru(r) and r["DangKyXe"]:
             act.html(f'<p class="nh-xe">🚌 {r["DangKyXe"]}</p>')
 
 
