@@ -93,3 +93,11 @@ def test_build_truong_hoc_osm(tmp_path, monkeypatch):
     assert mod.cap_hoc("Trường TH-THCS-THPT Tân Phú", "school") == "Liên cấp"
     assert mod.cap_hoc("Trường THPT Trần Phú", "school") == "THPT"
     assert mod.cap_hoc("Trường Tiểu học Tân Sơn Nhì", "school") == "Tiểu học"
+
+
+def test_cap_truoc_khoi():
+    assert danh_muc.cap_truoc_khoi("1") == ("Mầm non",)
+    assert danh_muc.cap_truoc_khoi("6") == ("Tiểu học",)
+    assert danh_muc.cap_truoc_khoi("10A1") == ("THCS",)
+    assert danh_muc.cap_truoc_khoi("11") == ("THPT",)
+    assert danh_muc.cap_truoc_khoi("") == ()

@@ -43,6 +43,41 @@ def xa_of(tinh: str) -> list[str]:
 
 
 @lru_cache(maxsize=1)
+def _truong_cap() -> dict:
+    """{(fold tỉnh, fold xã, fold tên): cấp học}."""
+    out = {}
+    if TRUONG_CSV.exists():
+        with TRUONG_CSV.open(encoding="utf-8-sig") as fh:
+            for row in csv.DictReader(fh):
+                out[(fold(normalize_tinh(row.get("Tỉnh/Thành phố") or "")),
+                     fold(row.get("Phường/Xã") or ""), fold(row.get("Tên trường") or ""))] = \
+                    (row.get("Cấp học") or "").strip()
+    return out
+
+
+def cap_hoc(ten: str, tinh: str = "", xa: str = "") -> str:
+    idx = _truong_cap()
+    t, n = fold(normalize_tinh(tinh)), fold(ten)
+    return idx.get((t, fold(xa), n)) or next(
+        (c for (tt, _, nn), c in idx.items() if tt == t and nn == n), "")
+
+
+def cap_truoc_khoi(khoi) -> tuple[str, ...]:
+    """Cấp học của trường cũ thường gặp với khối đăng ký (vd khối 10 → THCS)."""
+    m = re.match(r"\s*(\d{1,2})", str(khoi or ""))  # "10", "10A1" -> 10
+    if not m:
+        return ()
+    k = int(m.group(1))
+    if k <= 1:
+        return ("Mầm non",)
+    if k <= 6:
+        return ("Tiểu học",)
+    if k <= 10:
+        return ("THCS",)
+    return ("THPT",)
+
+
+@lru_cache(maxsize=1)
 def _truong_index() -> dict:
     """{(fold tỉnh, fold xã): [tên trường]} và {(fold tỉnh, ""): [...]} từ truong_hoc.csv."""
     idx: dict[tuple[str, str], list[str]] = {}

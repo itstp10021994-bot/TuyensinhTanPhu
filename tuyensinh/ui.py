@@ -390,9 +390,16 @@ def _learned_schools(version: int) -> dict:
             for k, v in idx.items()}
 
 
-def school_suggestions(tinh: str, xa: str) -> list[str]:
-    """Danh mục trường (truong_hoc.csv) trước, rồi các trường đã từng nhập ở phường/xã đó."""
+def school_suggestions(tinh: str, xa: str, khoi: str = "") -> list[str]:
+    """Danh mục trường (truong_hoc.csv) trước, rồi các trường đã từng nhập ở phường/xã đó.
+
+    Nếu biết khối đăng ký, trường đúng cấp học (vd THCS với khối 10) và liên cấp lên đầu.
+    """
     out = danh_muc.truong_hoc(tinh, xa)
+    want = danh_muc.cap_truoc_khoi(khoi)
+    if want:
+        rank = {c: 0 for c in want} | {"Liên cấp": 1}
+        out.sort(key=lambda n: rank.get(danh_muc.cap_hoc(n, tinh, xa), 2))
     try:
         learned = _learned_schools(data_version()).get(
             (danh_muc.fold(danh_muc.normalize_tinh(tinh)), danh_muc.fold(xa)), [])
@@ -421,8 +428,10 @@ def _choice_input(f: Field, record: dict, prefix: str, container, label: str, ke
             changed = True
     if isinstance(f.options, str) and f.options == "@tinh":
         v = danh_muc.normalize_tinh(v)
-    if isinstance(f.options, str) and f.options.startswith("@truong:"):
-        opts = school_suggestions(ctx[parent_keys[0]], ctx[parent_keys[1]])
+    is_school = isinstance(f.options, str) and f.options.startswith("@truong:")
+    if is_school:
+        khoi = cur.get("Khoi", record.get("Khoi")) or record.get("LopHoc", "")
+        opts = school_suggestions(ctx[parent_keys[0]], ctx[parent_keys[1]], khoi)
     else:
         opts = danh_muc.options_for(f, ctx)
     if changed:  # ô cha vừa đổi: bỏ giá trị cũ
@@ -433,8 +442,13 @@ def _choice_input(f: Field, record: dict, prefix: str, container, label: str, ke
         key = f"{key}__{abs(hash(tuple(ctx[pk] for pk in parent_keys))) % 10**8}"
     if f.free:
         ph = "Chọn trong gợi ý hoặc gõ tên trường…" if opts else "Gõ tên trường…"
+        def _fmt(name, _t=ctx.get(parent_keys[0], ""), _x=ctx.get(parent_keys[1], "")):
+            cap = danh_muc.cap_hoc(name, _t, _x) if is_school else ""
+            return f"{name}  ·  {cap}" if cap else name
+
         val = container.selectbox(label, opts, index=opts.index(v) if v in opts else None,
                                   key=key, placeholder=ph, accept_new_options=True,
+                                  format_func=_fmt,
                                   help="Gợi ý theo Phường/Xã đã chọn. Có thể gõ tên trường "
                                        "chưa có trong danh sách.")
     else:

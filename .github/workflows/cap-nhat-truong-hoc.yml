@@ -40,5 +40,6 @@ jobs:
             echo "Không có thay đổi"
           else
             git commit -m "Cập nhật danh mục trường học từ OpenStreetMap"
-            git push
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
