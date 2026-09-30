@@ -106,8 +106,13 @@ with ui.section("3. Nhập dữ liệu từ Excel",
                            if ui.nam_hoc() in config.school_years() else 0)
         vemis = st.checkbox("File theo biểu mẫu VEMIS (Danh sách học sinh, 2 dòng tiêu đề)",
                             value=False, disabled=ld is not NHAP_HOC)
+        mode = st.radio("Cách nhập", ["Thêm dòng mới (bỏ qua dòng đã có)",
+                                      "Bổ sung ô còn trống cho dòng đã có"], horizontal=True,
+                        help="Bổ sung: điền các ô đang trống trên SharePoint (vd cột Khối bị "
+                             "mất khi tạo list từ Excel) — không thêm dòng, không ghi đè ô đã có.")
+        bo_sung = mode.startswith("Bổ sung")
         keep_all = st.checkbox("Giữ nguyên dữ liệu cũ (ghi cả dòng thiếu trường bắt buộc)",
-                               value=True)
+                               value=True, disabled=bo_sung)
         try:
             up.seek(0)
             df, skipped = importer.read_frame(up, ld, sheet, vemis and ld is NHAP_HOC)
@@ -117,8 +122,25 @@ with ui.section("3. Nhập dữ liệu từ Excel",
         st.caption(f"**{len(df)}** dòng · {len(df.columns)} cột nhận được"
                    + (f" · bỏ qua cột: {', '.join(skipped)}" if skipped else ""))
         st.dataframe(df.head(20), hide_index=True, width="stretch", height=260)
-        if st.button(f"Nhập {len(df)} dòng lên {config.list_name(ld.name)}", type="primary",
-                     icon=":material/cloud_upload:", disabled=df.empty):
+        if bo_sung and st.button(f"Bổ sung ô trống từ {len(df)} dòng", type="primary",
+                                 icon=":material/format_color_fill:", disabled=df.empty):
+            bar = st.progress(0.0, text="Đang đọc dữ liệu trên SharePoint…")
+            try:
+                res = importer.fill_blanks(
+                    storage, ld, df, nam,
+                    progress=lambda d, t: bar.progress(d / max(t, 1),
+                                                       text=f"Đã cập nhật {d}/{t} dòng"))
+            except Exception as e:
+                ui.error_state(e, compact=True)
+            else:
+                ui.invalidate()
+                bar.progress(1.0, text="Hoàn tất")
+                st.success(f"Đã bổ sung **{res['cells']}** ô trên **{res['updated']}** dòng · "
+                           f"{res['not_found']} dòng trong file không tìm thấy trên list",
+                           icon=":material/check_circle:")
+        if not bo_sung and st.button(f"Nhập {len(df)} dòng lên {config.list_name(ld.name)}",
+                                     type="primary", icon=":material/cloud_upload:",
+                                     disabled=df.empty):
             bar = st.progress(0.0, text="Đang chuẩn bị…")
 
             def prog(done, total):

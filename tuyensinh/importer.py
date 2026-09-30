@@ -185,6 +185,42 @@ def import_rows(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
             "total": len(rows), "linked": linked}
 
 
+def fill_blanks(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
+                workers: int = 6, progress: Callable[[int, int], None] | None = None) -> dict:
+    """Bổ sung ô còn trống của các dòng đã có trên list từ file (không ghi đè ô đã có dữ liệu).
+
+    Dùng khi tải list lên SharePoint bằng tay bị mất một cột (vd Khối)."""
+    if hasattr(storage, "colmap"):
+        storage.colmap(ld.name)
+    by_sig: dict[tuple, list[dict]] = {}
+    for it in storage.list_items(ld.name):
+        by_sig.setdefault(signature(ld, it), []).append(it)
+    todo, not_found, cells = [], 0, 0
+    for _, row in df.iterrows():
+        data = {k: v for k, v in row.to_dict().items() if not _blank(v)}
+        data.setdefault("NamHoc", nam_hoc)
+        clean = services._clean(ld, data)
+        items = by_sig.get(signature(ld, clean))
+        if not items:
+            not_found += 1
+            continue
+        it = items.pop(0)
+        upd = {k: v for k, v in clean.items()
+               if k in ld.keys and not _blank(v) and v != "" and _blank(it.get(k))}
+        if upd:
+            todo.append((it["id"], upd))
+            cells += len(upd)
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = [pool.submit(storage.update_item, ld.name, i, u) for i, u in todo]
+        for fut in as_completed(futures):
+            fut.result()
+            done += 1
+            if progress:
+                progress(done, len(todo))
+    return {"updated": len(todo), "cells": cells, "not_found": not_found, "total": len(df)}
+
+
 def link_existing(storage: Storage, workers: int = 6,
                   progress: Callable[[int, int], None] | None = None) -> dict:
     """Liên kết các hồ sơ nhập học đã có trên list (vd tải tay từ Excel) với Data tuyển sinh."""

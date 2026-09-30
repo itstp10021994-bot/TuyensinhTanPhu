@@ -64,6 +64,20 @@ SUFFIX_NGUOI = re.compile(r"\s*_\s*TH\s*-\s*THCS\s*-\s*THPT.*$", re.I)
 
 
 # ------------------------------------------------------------------ danh mục cũ / mới
+SO = {"Khoi", "NamSinhCha", "NamSinhMe", "NamSinhNGH"}  # số nguyên: ghi ô dạng số
+
+
+def so_hoa(ws, header: list[str]):
+    """Ghi Khối, năm sinh dạng số: tạo list từ Excel đoán cột là Số sẽ không bỏ trống ô chữ."""
+    for j, k in enumerate(header, 1):
+        if k not in SO:
+            continue
+        for (c,) in ws.iter_rows(min_row=2, min_col=j, max_col=j):
+            if isinstance(c.value, str) and c.value.strip().isdigit():
+                c.value = int(c.value)
+            c.number_format = "0"
+
+
 def load_text(path: str | None, url: str) -> str:
     if path:
         return open(path, encoding="utf-8").read()
@@ -769,6 +783,7 @@ def write_workbook(path, rows, report, stats):
                     cell.number_format = "#,##0.##"
                 else:
                     cell.number_format = "@"  # giữ số 0 đầu SĐT, số tài khoản
+        so_hoa(ws, keys)
         for name in ("Cau_truc_cot", "Bao_cao_chuan_hoa", "Huong_dan", "Thong_ke"):
             s = xw.sheets[name]
             for col in s.columns:

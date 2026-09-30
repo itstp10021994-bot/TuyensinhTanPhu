@@ -439,6 +439,7 @@ def write(path, rows, report, extra, stats):
             else:  # CCCD, SĐT, mã: giữ dạng chữ (không mất số 0 đầu)
                 for (c,) in ws.iter_rows(min_row=2, min_col=j, max_col=j):
                     c.number_format = "@"
+        cc.so_hoa(ws, cols)
 
 
 if __name__ == "__main__":

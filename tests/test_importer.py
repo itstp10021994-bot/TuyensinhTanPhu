@@ -76,3 +76,21 @@ def test_link_existing(tmp_path):
     res = importer.link_existing(st)
     assert res == {"total": 1, "chua_lien_ket": 1, "lien_ket": 1}
     assert str(st.get_item(NHAP_HOC.name, nh["id"])["TuyenSinhID"]) == str(ts["id"])
+
+
+def test_fill_blanks(tmp_path):
+    import pandas as pd
+    from tuyensinh import importer
+    from tuyensinh.schema import NHAP_HOC
+    from tuyensinh.storage.local import LocalStorage
+
+    st = LocalStorage(str(tmp_path / "t.db"))
+    it = st.create_item(NHAP_HOC.name, {"HoTen": "An", "NgaySinh": "2012-01-02",
+                                        "NamHoc": "2026-2027", "LopHoc": "7.1"})
+    df = pd.DataFrame([{"HoTen": "An", "NgaySinh": "2012-01-02", "NamHoc": "2026-2027",
+                        "Khoi": "7", "LopHoc": "7.9"},
+                       {"HoTen": "Không có", "NgaySinh": "2012-01-02", "NamHoc": "2026-2027"}])
+    res = importer.fill_blanks(st, NHAP_HOC, df, "2026-2027")
+    assert res == {"updated": 1, "cells": 1, "not_found": 1, "total": 2}
+    got = st.get_item(NHAP_HOC.name, it["id"])
+    assert got["Khoi"] == "7" and got["LopHoc"] == "7.1"  # không ghi đè ô đã có
