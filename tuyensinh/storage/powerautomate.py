@@ -140,8 +140,17 @@ class PowerAutomateStorage(Storage):
     def columns(self, list_name) -> list[dict]:
         data = self.call("GET", f"{list_path(list_name)}/fields?$filter=Hidden eq false"
                                 "&$select=InternalName,Title,TypeAsString,ReadOnlyField")
+        rows = data.get("value")
+        if rows is None and isinstance(data.get("d"), dict):  # odata=verbose
+            rows = data["d"].get("results")
+        if not rows:
+            raise RuntimeError(
+                "Power Automate: flow chạy nhưng không trả danh sách cột về app. Kiểm tra bước "
+                "Response trong nhánh True: Body = body('Send_an_HTTP_request_to_SharePoint') và "
+                "header Accept = application/json;odata=nometadata. Phản hồi nhận được: "
+                f"{str(data)[:300]}")
         return [{"name": c["InternalName"], "title": c["Title"], "type": c["TypeAsString"]}
-                for c in data.get("value", []) if not c.get("ReadOnlyField")]
+                for c in rows if not c.get("ReadOnlyField")]
 
     def list_exists(self, list_name) -> bool:
         try:

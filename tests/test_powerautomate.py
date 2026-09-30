@@ -127,3 +127,16 @@ def test_full_flow_through_power_automate(pa, monkeypatch):
     st.delete_item(TUYEN_SINH.name, rec["id"])
     assert st.get_item(TUYEN_SINH.name, rec["id"]) is None
     assert all(u.startswith("_api/web/lists") for _, u in flow.calls)
+
+
+def test_colmap_list_tao_tu_excel():
+    """List tạo từ Excel: tên nội bộ field_N, tên hiển thị = key."""
+    from tuyensinh.schema import TUYEN_SINH
+    from tuyensinh.storage.convert import ColumnMap
+    cols = [{"name": "Title", "title": "Title", "type": "Text"}] + [
+        {"name": f"field_{i}", "title": f.key, "type": "Text"}
+        for i, f in enumerate(TUYEN_SINH.fields, 1)]
+    cm = ColumnMap(TUYEN_SINH.name, cols)
+    assert cm.missing == []
+    assert cm.internal["NamHoc"] == "field_1"
+    assert cm.to_sp({"HoTenHS": "A"})[cm.internal["HoTenHS"]] == "A"

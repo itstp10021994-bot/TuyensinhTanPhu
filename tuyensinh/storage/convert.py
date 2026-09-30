@@ -75,7 +75,10 @@ class ColumnMap:
             if f.key in fmap:
                 col = by_name.get(fmap[f.key]) or {"name": fmap[f.key], "type": ""}
             elif columns is not None:
-                col = by_name.get(f.key) or by_title.get(_norm(f.sp_title))
+                # tên nội bộ = key; hoặc tên hiển thị = tên SharePoint / key / nhãn
+                # (list tạo từ Excel có tên nội bộ field_1, field_2… và tên hiển thị = tiêu đề cột)
+                col = (by_name.get(f.key) or by_title.get(_norm(f.sp_title))
+                       or by_title.get(_norm(f.key)) or by_title.get(_norm(f.label)))
             else:
                 col = {"name": f.key, "type": ""}
             if col is None:
