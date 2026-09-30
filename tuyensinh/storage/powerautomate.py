@@ -44,6 +44,10 @@ def field_xml(f: Field, internal: str) -> str:
     return f'<Field Type="Text" MaxLength="255" {attrs}/>'
 
 
+TIMEOUT = 125  # giây; flow HTTP đồng bộ bị Power Automate cắt sau khoảng 120 giây
+PAGE_SIZE = 500  # đọc list theo trang: mỗi lần chạy flow ngắn, không bị quá thời gian
+
+
 class PowerAutomateStorage(Storage):
     def __init__(self, flow_url: str, key: str = "", site_url: str = ""):
         self.flow_url = flow_url
@@ -65,7 +69,18 @@ class PowerAutomateStorage(Storage):
     def call(self, method: str, uri: str, body: dict | None = None):
         payload = {"key": self.key, "method": method, "uri": uri, "body": body or {}}
         for attempt in range(4):
-            r = self._session.post(self.flow_url, json=payload, timeout=120)
+            try:
+                r = self._session.post(self.flow_url, json=payload, timeout=(15, TIMEOUT))
+            except requests.Timeout:
+                # Đọc: thử lại an toàn. Ghi: không thử lại (flow có thể đã ghi xong -> trùng)
+                if method == "GET" and attempt < 2:
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                raise RuntimeError(
+                    f"Power Automate {method} {uri}: quá thời gian chờ ({TIMEOUT} giây) — flow "
+                    "phản hồi chậm." + ("" if method == "GET" else
+                                         " Thao tác có thể đã được ghi; tải lại trang để kiểm "
+                                         "tra trước khi làm lại.")) from None
             if r.status_code in (429, 502, 503, 504):
                 time.sleep(int(r.headers.get("Retry-After", 2 ** attempt)))
                 continue
@@ -104,7 +119,7 @@ class PowerAutomateStorage(Storage):
 
     # ------------------------------------------------------------------ CRUD
     def list_items(self, list_name):
-        uri = f"{list_path(list_name)}/items?$top=5000{self._select(list_name)}"
+        uri = f"{list_path(list_name)}/items?$top={PAGE_SIZE}{self._select(list_name)}"
         out = []
         while uri:
             data = self.call("GET", uri)

@@ -181,3 +181,26 @@ def test_setup_hien_du_cot(pa):
     n = len(flow.calls)
     importer.setup_lists(st, log=lambda m: None)  # chạy lại: không thêm trùng
     assert not any("AddViewField" in u for _, u in flow.calls[n:])
+
+
+def test_timeout_doc_thu_lai_ghi_khong(monkeypatch):
+    import requests
+    monkeypatch.setattr(powerautomate.time, "sleep", lambda s: None)
+
+    class Slow:
+        def __init__(self, fail):
+            self.fail, self.n = fail, 0
+
+        def post(self, url, json, timeout):
+            self.n += 1
+            if self.n <= self.fail:
+                raise requests.ReadTimeout("Read timed out. (read timeout=125)")
+            return FakeResp(200, {"value": []})
+
+    st = PowerAutomateStorage("https://flow.example/invoke", key="bi-mat")
+    st._session = Slow(fail=2)
+    assert st.call("GET", "_api/web/lists/x/items") == {"value": []}  # thử lại 2 lần
+    st._session = Slow(fail=1)
+    with pytest.raises(RuntimeError, match="quá thời gian chờ"):
+        st.call("POST", "_api/web/lists/x/items", {"Title": "a"})
+    assert st._session.n == 1  # không gửi lại lệnh ghi

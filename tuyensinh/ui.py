@@ -104,7 +104,7 @@ def storage() -> Storage:
     return create_storage()
 
 
-@st.cache_data(ttl=120, show_spinner="Đang tải dữ liệu…")
+@st.cache_data(ttl=600, show_spinner="Đang tải dữ liệu…")
 def _load(list_name: str, version: int) -> list[dict]:
     return storage().list_items(list_name)
 
@@ -236,6 +236,10 @@ def error_state(err: Exception, compact: bool = False):
                    "chi tiết kỹ thuật bên dưới cho người quản trị."
     elif "Thiếu cấu hình" in msg:
         friendly = msg
+    elif "quá thời gian chờ" in msg or "timed out" in msg.lower():
+        friendly = ("Power Automate phản hồi quá chậm (quá 2 phút). Thường do flow đang bị giới "
+                    "hạn tốc độ sau nhiều thao tác liên tiếp — chờ 1–2 phút rồi bấm **Thử lại**. "
+                    "Xem Lịch sử chạy của flow để biết bước nào chậm.")
     elif "does not exist at site" in msg or ("404" in msg and "List '" in msg):
         friendly = ("Chưa có list trên SharePoint (flow đã kết nối được). Vào **Hệ thống → Cài đặt "
                     "& đồng bộ** và bấm **Tạo list / thêm cột**.")

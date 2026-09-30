@@ -199,7 +199,7 @@ def sync_nhap_hoc(storage: Storage, ts: dict) -> dict:
     return storage.update_item(NHAP_HOC.name, cur["id"], _clean(NHAP_HOC, missing)) if missing else cur
 
 
-def tao_ho_so_hang_loat(storage: Storage, ts_records: list[dict], workers: int = 6,
+def tao_ho_so_hang_loat(storage: Storage, ts_records: list[dict], workers: int = 4,
                         progress=None) -> int:
     """Tạo hồ sơ nhập học cho nhiều HS: đọc Data_NhapHoc 1 lần, tạo các hồ sơ còn thiếu song song
     (mỗi thao tác là 1 lần gọi flow Power Automate — làm tuần tự sẽ rất chậm)."""

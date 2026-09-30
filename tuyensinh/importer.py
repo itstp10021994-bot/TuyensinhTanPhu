@@ -123,7 +123,7 @@ def signature(ld: ListDef, rec: dict) -> tuple:
 
 
 def import_rows(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
-                keep_all: bool = True, skip_existing: bool = True, workers: int = 6,
+                keep_all: bool = True, skip_existing: bool = True, workers: int = 4,
                 progress: Callable[[int, int], None] | None = None) -> dict:
     """Ghi các dòng vào list.
 
@@ -186,7 +186,7 @@ def import_rows(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
 
 
 def fill_blanks(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
-                workers: int = 6, progress: Callable[[int, int], None] | None = None) -> dict:
+                workers: int = 4, progress: Callable[[int, int], None] | None = None) -> dict:
     """Bổ sung ô còn trống của các dòng đã có trên list từ file (không ghi đè ô đã có dữ liệu).
 
     Dùng khi tải list lên SharePoint bằng tay bị mất một cột (vd Khối)."""
@@ -221,7 +221,7 @@ def fill_blanks(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
     return {"updated": len(todo), "cells": cells, "not_found": not_found, "total": len(df)}
 
 
-def link_existing(storage: Storage, workers: int = 6,
+def link_existing(storage: Storage, workers: int = 4,
                   progress: Callable[[int, int], None] | None = None) -> dict:
     """Liên kết các hồ sơ nhập học đã có trên list (vd tải tay từ Excel) với Data tuyển sinh."""
     items = [dict(it) for it in storage.list_items(NHAP_HOC.name)]
