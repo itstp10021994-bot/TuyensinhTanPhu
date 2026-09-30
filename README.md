@@ -75,18 +75,27 @@ python scripts/setup_sharepoint.py            # tạo list Data_NhapHoc + cột 
 `Sites.ReadWrite.All` hoặc `Sites.Selected`), đặt `BACKEND = "sharepoint"` và điền mục
 `[sharepoint]` trong `secrets.toml`.
 
-### Chuyển dữ liệu cũ
+### Chuyển sang list mới (chuẩn hóa dữ liệu cũ)
 
-List *Data tuyển sinh* đang dùng được giữ nguyên nên không cần chuyển. Nếu có dữ liệu ở file
-Excel (vd *Export to Excel* từ list), nhập bằng:
+1. Xuất list cũ ra Excel (*Export to Excel*), rồi chuẩn hóa:
+   ```bash
+   python scripts/chuan_hoa_du_lieu_cu.py data_tuyensinh.xlsx -o Data_TuyenSinh_chuan_hoa.xlsx
+   ```
+   - Tên cột → tên nội bộ không dấu (`HoTenHS`, `TruongCu_PhuongXa`…); sheet *Cau_truc_cot* ghi tên
+     hiển thị, kiểu cột, lựa chọn và cột cũ tương ứng.
+   - Tỉnh cũ (63) → tỉnh/thành mới (34); quận/huyện cũ được nhận diện và giữ ở `TruongCu_DiaChiCu`;
+     Trường cũ đối chiếu danh mục trường trong đúng tỉnh, quận/huyện cũ → tên chuẩn + Phường/Xã mới.
+     Trường không có trong danh mục được viết đầy đủ ("THCS TT…" → "Trường Trung học cơ sở Thị trấn…").
+   - Khối "10-IEP" → `Khoi`=10 + `PhanHe`=IEP; thêm cột `GiuCho` (tách khỏi Tình trạng tư vấn);
+     chuẩn hóa Nguồn, Ngân hàng, SĐT, họ tên.
+   - Sheet *Bao_cao_chuan_hoa*: đối chiếu gốc ↔ chuẩn hóa từng dòng, lọc "chưa khớp" để rà tay.
+2. Tạo list **Data_TuyenSinh** mới — một trong hai cách (chi tiết ở sheet *Huong_dan*):
+   - `python scripts/setup_sharepoint.py` (đúng kiểu cột, tên hiển thị tiếng Việt), rồi
+     `python scripts/import_excel.py tuyensinh Data_TuyenSinh_chuan_hoa.xlsx --nam-hoc 2026-2027 --giu-nguyen`
+   - hoặc SharePoint → *Mới → Danh sách → Từ Excel* → chọn bảng `Data_TuyenSinh`.
+3. Đặt `SP_LIST_Data_TuyenSinh = "Data_TuyenSinh"` trong `secrets.toml`.
 
-```bash
-python scripts/import_excel.py tuyensinh data_tuyen_sinh.xlsx --nam-hoc 2026-2027 --dry-run
-python scripts/import_excel.py nhaphoc hoc_sinh_toan_truong.xlsx --vemis --nam-hoc 2026-2027
-```
-
-Cột được nhận theo tên hiển thị trên SharePoint; cột "Nam hoc" trong file được giữ, `--nam-hoc`
-chỉ dùng cho dòng để trống. File `.xls` VEMIS cần lưu lại thành `.xlsx` trước.
+`--giu-nguyen` ghi cả những dòng cũ thiếu trường bắt buộc (vd chưa có ngày liên hệ) để không mất dữ liệu.
 
 ### Đăng nhập bằng tài khoản Microsoft 365 (tuỳ chọn)
 

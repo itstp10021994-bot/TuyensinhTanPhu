@@ -50,13 +50,18 @@ class ListDef:
 # ---------------------------------------------------------------- Giá trị chung
 # Cột "Bước" trên list: 4 nút trạng thái của app
 TRANG_THAI = ("Tư vấn", "Nộp hồ sơ", "Nhập học", "Rút hồ sơ")
-# Cột "Tình trạng": tình trạng giữ chỗ (kế toán). Vẫn nhận giá trị khác đã có trong list.
-TINH_TRANG = ("Chưa giữ chỗ", "Đã giữ chỗ", "Hủy giữ chỗ", "Đã hoàn phí")
+# Cột "Tình trạng": mức độ tư vấn (theo dữ liệu thực tế của list cũ)
+TINH_TRANG = ("Cần tư vấn thêm", "Cần tham quan tư vấn tại trường", "Đang cân nhắc",
+              "Chờ HĐTS duyệt", "Đã cấp giấy tiếp nhận", "Nhập học", "Hủy giữ chỗ", "Hủy")
+# Cột "Giữ chỗ" (kế toán)
+GIU_CHO = ("Chưa giữ chỗ", "Đã giữ chỗ", "Hủy giữ chỗ", "Đã hoàn phí")
+PHAN_HE = ("IEP", "ESL")
 KHOI = tuple(str(i) for i in range(1, 13))
 CHE_DO = ("Nội trú", "Bán trú", "Ngoại trú")
 GIOI_TINH = ("Nam", "Nữ")
-NGUON = ("Hotline", "Facebook", "Website", "Zalo", "Người quen giới thiệu",
-         "Phụ huynh cũ", "Tờ rơi / Banner", "Hội thảo tư vấn", "Khác")
+NGUON = ("Ban TS đến trường tư vấn", "Bạn bè - Người thân", "Quảng cáo tự động", "Mạng xã hội",
+         "Hotline", "Trực tiếp", "Gần nhà", "Tự tìm hiểu", "PHHS trường giới thiệu",
+         "CBNV Trường-IGC", "Giáo viên trường cũ", "Đi trường TS")
 HANH_KIEM = ("Tốt", "Khá", "Đạt", "Chưa đạt")
 
 # ---------------------------------------------------------------- Data tuyển sinh
@@ -77,13 +82,15 @@ TUYEN_SINH = ListDef(
         Field("TenLienHe", "Tên liên hệ (Tài khoản FB)", sp="Tài khoản FB", group=G_LIENHE),
         Field("NguoiGioiThieu", "Người giới thiệu", group=G_LIENHE),
         Field("TrangThai", "Bước", CHOICE, TRANG_THAI, required=True, group=G_LIENHE),
-        Field("PhanHe", "Phân hệ", group=G_LIENHE),
+        Field("TinhTrang", "Tình trạng tư vấn", CHOICE, TINH_TRANG, sp="Tình trạng",
+              group=G_LIENHE),
         Field("NguoiNhanHoSo", "Người nhận hồ sơ", group=G_LIENHE),
         Field("GhiChu", "Nội dung đã trao đổi", NOTE, group=G_LIENHE),
         # --- Học sinh
         Field("HoTenHS", "Họ tên HS", required=True, group=G_HOCSINH),
         Field("NgaySinh", "Ngày sinh", DATE, group=G_HOCSINH),
         Field("Khoi", "Khối", CHOICE, KHOI, required=True, group=G_HOCSINH),
+        Field("PhanHe", "Phân hệ", CHOICE, PHAN_HE, free=True, group=G_HOCSINH),
         Field("GioiTinh", "Giới tính", CHOICE, GIOI_TINH, group=G_HOCSINH),
         Field("CheDo", "Chế độ", CHOICE, CHE_DO, group=G_HOCSINH),
         # --- Trường cũ & kết quả học tập
@@ -91,10 +98,12 @@ TUYEN_SINH = ListDef(
         # Cột "Trường cũ_Quận huyện" có sẵn trên list nay lưu Phường/Xã.
         Field("TruongCu_Tinh", "Trường cũ - Tỉnh/Thành phố", CHOICE, "@tinh",
               sp="Trường cũ_tỉnh", group=G_TRUONGCU),
-        Field("TruongCu_QuanHuyen", "Trường cũ - Phường/Xã", CHOICE, "@xa:TruongCu_Tinh",
+        Field("TruongCu_PhuongXa", "Trường cũ - Phường/Xã", CHOICE, "@xa:TruongCu_Tinh",
               sp="Trường cũ_Quận huyện", group=G_TRUONGCU),
-        Field("TruongCu", "Trường cũ", CHOICE, "@truong:TruongCu_Tinh,TruongCu_QuanHuyen",
+        Field("TruongCu", "Trường cũ", CHOICE, "@truong:TruongCu_Tinh,TruongCu_PhuongXa",
               free=True, group=G_TRUONGCU),
+        # Quận/huyện, tỉnh trước sáp nhập (giữ lại từ dữ liệu cũ để tra cứu)
+        Field("TruongCu_DiaChiCu", "Trường cũ - Địa chỉ cũ (trước sáp nhập)", group=G_TRUONGCU),
         Field("Toan1", "Toán 1", NUMBER, group=G_TRUONGCU),
         Field("Van1", "Văn 1", NUMBER, group=G_TRUONGCU),
         Field("Anh1", "Anh 1", NUMBER, group=G_TRUONGCU),
@@ -106,7 +115,7 @@ TUYEN_SINH = ListDef(
         Field("HanhKiem1", "Hạnh kiểm 1", CHOICE, HANH_KIEM, group=G_TRUONGCU),
         Field("HanhKiem2", "Hạnh kiểm 2", CHOICE, HANH_KIEM, group=G_TRUONGCU),
         # --- Giữ chỗ / kế toán
-        Field("TinhTrang", "Tình trạng", CHOICE, TINH_TRANG, group=G_KETOAN),
+        Field("GiuCho", "Giữ chỗ", CHOICE, GIU_CHO, group=G_KETOAN),
         Field("SoTienXacNhan", "Số tiền xác nhận", NUMBER, group=G_KETOAN),
         Field("NguoiXacNhan", "Người xác nhận", group=G_KETOAN),
         Field("TenChuTaiKhoan", "Tên chủ tài khoản", group=G_KETOAN),
@@ -142,9 +151,9 @@ NHAP_HOC = ListDef(
         Field("TonGiao", "Tôn giáo", CHOICE, "@ton_giao", group=G_CHUNG),
         # Trường cũ: lấy từ Data tuyển sinh (không có trong biểu mẫu VEMIS)
         Field("TruongCu_Tinh", "Trường cũ - Tỉnh/Thành phố", CHOICE, "@tinh", group=G_CHUNG),
-        Field("TruongCu_QuanHuyen", "Trường cũ - Phường/Xã", CHOICE, "@xa:TruongCu_Tinh",
+        Field("TruongCu_PhuongXa", "Trường cũ - Phường/Xã", CHOICE, "@xa:TruongCu_Tinh",
               group=G_CHUNG),
-        Field("TruongCu", "Trường cũ", CHOICE, "@truong:TruongCu_Tinh,TruongCu_QuanHuyen",
+        Field("TruongCu", "Trường cũ", CHOICE, "@truong:TruongCu_Tinh,TruongCu_PhuongXa",
               free=True, group=G_CHUNG),
         # --- Địa chỉ
         Field("ChoO_SoNha", "Chỗ ở hiện nay - SN/Xóm", group=G_DIACHI),

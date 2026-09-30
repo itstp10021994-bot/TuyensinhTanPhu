@@ -6,14 +6,14 @@ Tên chủ tài khoản, Ngân hàng, Số tài khoản.
 import streamlit as st
 
 from tuyensinh import services, ui
-from tuyensinh.schema import KHOI, TINH_TRANG, TUYEN_SINH
+from tuyensinh.schema import KHOI, GIU_CHO, TUYEN_SINH
 
 S = st.session_state
 S.setdefault("kt_v", 0)
 nam_hoc = ui.nam_hoc()
 storage = ui.storage()
 ts = ui.df(TUYEN_SINH, nam_hoc)
-ts["TinhTrang"] = ts["TinhTrang"].replace("", "Chưa giữ chỗ")
+ts["GiuCho"] = ts["GiuCho"].replace("", "Chưa giữ chỗ")
 MONEY = st.column_config.TextColumn("Số tiền")  # đã định dạng sẵn, ô trống hiện "—"
 
 
@@ -24,9 +24,9 @@ def with_money(frame):
 actions = ui.page_header("Kế toán", f"Xác nhận giữ chỗ và hoàn phí · năm học {nam_hoc}")
 export_slot = actions.container(width="content")
 
-giu = ts[ts["TinhTrang"] == "Đã giữ chỗ"]
-cho_hoan = ts[ts["TinhTrang"] == "Hủy giữ chỗ"]
-chua = ts[ts["TrangThai"].isin(["Nộp hồ sơ", "Nhập học"]) & (ts["TinhTrang"] == "Chưa giữ chỗ")]
+giu = ts[ts["GiuCho"] == "Đã giữ chỗ"]
+cho_hoan = ts[ts["GiuCho"] == "Hủy giữ chỗ"]
+chua = ts[ts["TrangThai"].isin(["Nộp hồ sơ", "Nhập học"]) & (ts["GiuCho"] == "Chưa giữ chỗ")]
 k = ui.kpi_row(4)
 ui.kpi(k[0], "Đã giữ chỗ", len(giu))
 ui.kpi(k[1], "Tiền giữ chỗ đã xác nhận", ui.money(giu["SoTienXacNhan"].fillna(0).sum()))
@@ -43,10 +43,10 @@ with tab_xn:
     with left:
         # HS cần kế toán xử lý: đã nộp hồ sơ / nhập học, hoặc đã có giao dịch giữ chỗ
         pool = ts[ts["TrangThai"].isin(["Nộp hồ sơ", "Nhập học"])
-                  | (ts["TinhTrang"] != "Chưa giữ chỗ")]
-        counts = pool["TinhTrang"].value_counts()
+                  | (ts["GiuCho"] != "Chưa giữ chỗ")]
+        counts = pool["GiuCho"].value_counts()
         tt = st.segmented_control(
-            "Tình trạng", ["Tất cả", *TINH_TRANG],
+            "Tình trạng", ["Tất cả", *GIU_CHO],
             default="Chưa giữ chỗ" if counts.get("Chưa giữ chỗ", 0) else "Tất cả", required=True,
             key="kt_tt", label_visibility="collapsed",
             format_func=lambda s: f"{s}  {len(pool) if s == 'Tất cả' else int(counts.get(s, 0))}")
@@ -54,7 +54,7 @@ with tab_xn:
         q = c1.text_input("Tìm kiếm", placeholder="Tên học sinh hoặc SĐT", key="kt_q",
                           icon=":material/search:")
         khoi = c2.selectbox("Khối", ["Tất cả", *KHOI], key="kt_khoi")
-        view = pool if tt == "Tất cả" else pool[pool["TinhTrang"] == tt]
+        view = pool if tt == "Tất cả" else pool[pool["GiuCho"] == tt]
         if khoi != "Tất cả":
             view = view[view["Khoi"] == khoi]
         if q.strip():
@@ -71,7 +71,7 @@ with tab_xn:
             ui.empty_state("inbox", "Không có học sinh", "Không có học sinh nào ở tình trạng này.")
         else:
             show = with_money(view).assign(Buoc=ui.tag_col(view["TrangThai"]),
-                                           GiuCho=ui.tag_col(view["TinhTrang"]))
+                                           GiuCho=ui.tag_col(view["GiuCho"]))
             ev = st.dataframe(
                 show[["HoTenHS", "Khoi", "Buoc", "GiuCho", "SoTienXacNhan"]],
                 hide_index=True, width="stretch", height=ui.table_height(len(show), 480),
@@ -94,10 +94,10 @@ with tab_xn:
                 st.caption(f"Khối {r['Khoi']} · {r['SDT']} · {r['TrangThai']}")
                 p = f"kt_{r['id']}_{S.kt_v}"
                 with st.form(f"f_{p}", border=False, enter_to_submit=False):
-                    opts = list(TINH_TRANG) + ([r["TinhTrang"]] if r["TinhTrang"] not in TINH_TRANG
+                    opts = list(GIU_CHO) + ([r["GiuCho"]] if r["GiuCho"] not in GIU_CHO
                                                else [])
-                    suggest = "Đã giữ chỗ" if r["TinhTrang"] == "Chưa giữ chỗ" else r["TinhTrang"]
-                    tinh_trang = st.selectbox("Tình trạng", opts, index=opts.index(suggest))
+                    suggest = "Đã giữ chỗ" if r["GiuCho"] == "Chưa giữ chỗ" else r["GiuCho"]
+                    tinh_trang = st.selectbox("Giữ chỗ", opts, index=opts.index(suggest))
                     cur = r.get("SoTienXacNhan")
                     so_tien = st.number_input(
                         "Số tiền xác nhận (đ)", min_value=0.0, step=100000.0, format="%.0f",
@@ -125,8 +125,8 @@ with tab_xn:
 
 # ------------------------------------------------------------------ Hoàn phí
 with tab_hp:
-    hp = ts[ts["TinhTrang"].isin(["Hủy giữ chỗ", "Đã hoàn phí"])].sort_values(
-        ["TinhTrang", "HoTenHS"], ascending=[False, True])
+    hp = ts[ts["GiuCho"].isin(["Hủy giữ chỗ", "Đã hoàn phí"])].sort_values(
+        ["GiuCho", "HoTenHS"], ascending=[False, True])
     if hp.empty:
         with ui.section():
             ui.empty_state("task_alt", "Không có yêu cầu hoàn phí",
@@ -134,7 +134,7 @@ with tab_hp:
     else:
         st.caption("Sau khi chuyển khoản hoàn phí, chọn học sinh ở tab **Xác nhận giữ chỗ** và "
                    "đổi Tình trạng thành **Đã hoàn phí**.")
-        show = with_money(hp).assign(GiuCho=ui.tag_col(hp["TinhTrang"]))
+        show = with_money(hp).assign(GiuCho=ui.tag_col(hp["GiuCho"]))
         st.dataframe(show[["HoTenHS", "Khoi", "SDT", "GiuCho", "SoTienXacNhan", "TenChuTaiKhoan",
                            "NganHang", "SoTaiKhoan", "GhiChu"]],
                      hide_index=True, width="stretch", height=ui.table_height(len(show)),
@@ -146,7 +146,7 @@ with tab_hp:
                                     "GhiChu": st.column_config.TextColumn("Nội dung đã trao đổi",
                                                                           width="large")})
         ui.download_excel("Tải danh sách hoàn phí", hp[
-            ["HoTenHS", "Khoi", "SDT", "TinhTrang", "SoTienXacNhan", "TenChuTaiKhoan", "NganHang",
+            ["HoTenHS", "Khoi", "SDT", "GiuCho", "SoTienXacNhan", "TenChuTaiKhoan", "NganHang",
              "SoTaiKhoan"]], f"HoanPhi_{nam_hoc}.xlsx", key="hp_export")
 
 # ------------------------------------------------------------------ Tổng hợp

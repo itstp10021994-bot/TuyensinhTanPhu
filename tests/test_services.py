@@ -106,7 +106,7 @@ def test_export_vemis_layout(storage):
 def test_every_enrollment_field_is_exported():
     exported = {k for _, _, k in export_vemis.COLUMNS if k}
     assert exported == set(NHAP_HOC.keys) - {"TuyenSinhID", "NamHoc", "TruongCu",
-                                             "TruongCu_QuanHuyen", "TruongCu_Tinh"}
+                                             "TruongCu_PhuongXa", "TruongCu_Tinh"}
 
 
 def test_danh_muc_xa_depends_on_tinh():
@@ -135,7 +135,7 @@ SP_COLUMNS = [{"name": "Title", "title": "Title", "type": "Text"}] + [
 
 def test_column_map_matches_existing_list_by_display_name():
     cm = ColumnMap(TUYEN_SINH.name, SP_COLUMNS)
-    assert cm.missing == []
+    assert cm.missing == ["TruongCu_DiaChiCu", "GiuCho"]  # 2 cột chỉ có ở list mới
     by_title = {c["title"]: c["name"] for c in SP_COLUMNS}
     assert cm.internal["NamHoc"] == by_title["Nam hoc"]
     assert cm.internal["TrangThai"] == by_title["Bước"]
@@ -168,3 +168,10 @@ def test_empty_dates_roundtrip_from_dataframe(storage):
     row = services.load_df(storage, TUYEN_SINH).iloc[0].to_dict()
     services.save_tuyen_sinh(storage, row, rec["id"])
     assert storage.get_item(TUYEN_SINH.name, rec["id"])["NgaySinh"] == ""
+
+
+def test_column_map_new_list_uses_internal_names():
+    # List mới tạo từ file chuẩn hóa: tên nội bộ = key, tên hiển thị tùy ý
+    cols = [{"name": f.key, "title": "x" + f.key, "type": "Text"} for f in TUYEN_SINH.fields]
+    cm = ColumnMap(TUYEN_SINH.name, cols)
+    assert cm.missing == [] and cm.internal["TruongCu_PhuongXa"] == "TruongCu_PhuongXa"

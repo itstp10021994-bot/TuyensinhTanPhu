@@ -171,7 +171,7 @@ def sync_nhap_hoc(storage: Storage, ts: dict) -> dict:
         "NoiTruBanTru": _che_do_to_vemis(ts.get("CheDo", "")),
         "DienThoaiSLL": ts.get("SDT", ""),
         "TruongCu": ts.get("TruongCu", ""),
-        "TruongCu_QuanHuyen": ts.get("TruongCu_QuanHuyen", ""),
+        "TruongCu_PhuongXa": ts.get("TruongCu_PhuongXa", ""),
         "TruongCu_Tinh": ts.get("TruongCu_Tinh", ""),
         "QuocTich": "Việt Nam",
         "DanToc": "Kinh",
@@ -209,7 +209,7 @@ def xac_nhan_giu_cho(storage: Storage, item_id: str, so_tien, nguoi: str,
     """Kế toán xác nhận số tiền giữ chỗ (ghi vào các cột có sẵn của Data tuyển sinh)."""
     if tinh_trang == "Đã giữ chỗ" and (_empty(so_tien) or float(so_tien) <= 0):
         raise ValueError("**Số tiền xác nhận** phải lớn hơn 0")
-    upd = {"TinhTrang": tinh_trang, "NguoiXacNhan": nguoi}
+    upd = {"GiuCho": tinh_trang, "NguoiXacNhan": nguoi}
     if not _empty(so_tien):
         upd["SoTienXacNhan"] = float(so_tien)
     upd.update({k: v for k, v in bank.items()
@@ -219,10 +219,10 @@ def xac_nhan_giu_cho(storage: Storage, item_id: str, so_tien, nguoi: str,
 
 def giu_cho_summary(ts: pd.DataFrame) -> pd.DataFrame:
     """Tổng hợp giữ chỗ theo khối: số HS và số tiền theo từng tình trạng."""
-    d = ts.assign(TinhTrang=ts["TinhTrang"].replace("", "Chưa giữ chỗ"),
+    d = ts.assign(GiuCho=ts["GiuCho"].replace("", "Chưa giữ chỗ"),
                   SoTien=ts["SoTienXacNhan"].fillna(0))
-    so_hs = pd.crosstab(d["Khoi"], d["TinhTrang"])
-    tien = d[d["TinhTrang"] == "Đã giữ chỗ"].groupby("Khoi")["SoTien"].sum()
+    so_hs = pd.crosstab(d["Khoi"], d["GiuCho"])
+    tien = d[d["GiuCho"] == "Đã giữ chỗ"].groupby("Khoi")["SoTien"].sum()
     out = so_hs.assign(**{"Tiền đã giữ chỗ": tien}).fillna(0)
     out.index.name = "Khối"
     return out.reset_index()

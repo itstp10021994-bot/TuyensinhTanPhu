@@ -78,7 +78,7 @@ def render_detail(item_id: str):
         # Hồ sơ tạo trước khi có cột Trường cũ: lấy từ Data tuyển sinh (lưu khi bấm Lưu)
         src = ts[ts["id"] == rec.get("TuyenSinhID")]
         if len(src):
-            for k in ("TruongCu", "TruongCu_QuanHuyen", "TruongCu_Tinh"):
+            for k in ("TruongCu", "TruongCu_PhuongXa", "TruongCu_Tinh"):
                 if not rec.get(k):
                     rec[k] = src.iloc[0].get(k, "")
 
@@ -145,7 +145,7 @@ def render_detail(item_id: str):
                 values.update(ui.record_form([F(k) for k in ("CanNgheo", "DoanVien", "DoiVien")],
                                              rec, prefix, 3))
             elif g == G_CHUNG:
-                truong = ("TruongCu_Tinh", "TruongCu_QuanHuyen", "TruongCu")
+                truong = ("TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu")
                 values.update(ui.record_form([f for f in NHAP_HOC.fields
                                               if f.group == g and f.key not in truong],
                                              rec, prefix, 3))

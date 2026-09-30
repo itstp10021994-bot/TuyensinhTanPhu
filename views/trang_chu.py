@@ -35,7 +35,7 @@ nop = int(counts.get("Nộp hồ sơ", 0)) + int(counts.get("Nhập học", 0))
 nhap = int(counts.get("Nhập học", 0))
 week_ago = date.today() - timedelta(days=7)
 new_week = int((pd.to_datetime(ts["NgayLienHe"]).dt.date >= week_ago).sum())
-giu = ts[ts["TinhTrang"] == "Đã giữ chỗ"]
+giu = ts[ts["GiuCho"] == "Đã giữ chỗ"]
 
 k = ui.kpi_row(5)
 ui.kpi(k[0], "Liên hệ", total, f"+{new_week} trong 7 ngày" if new_week else "Không có mới trong 7 ngày")
@@ -66,11 +66,11 @@ with left, ui.section("Phễu tuyển sinh", "Số học sinh đang ở từng b
 
 with right, ui.section("Cần xử lý", "Việc đang chờ trong năm học này"):
     nop_chua_giu = ts[(ts["TrangThai"].isin(["Nộp hồ sơ", "Nhập học"]))
-                      & (ts["TinhTrang"].isin(["", "Chưa giữ chỗ"]))]
+                      & (ts["GiuCho"].isin(["", "Chưa giữ chỗ"]))]
     rut = set(ts.loc[ts["TrangThai"] == "Rút hồ sơ", "id"])
     nh_live = nh[~nh["TuyenSinhID"].isin(rut)]
     thieu = int((services.completeness(nh_live) < 1).sum()) if len(nh_live) else 0
-    hoan_phi = int((ts["TinhTrang"] == "Hủy giữ chỗ").sum())
+    hoan_phi = int((ts["GiuCho"] == "Hủy giữ chỗ").sum())
     cu = pd.to_datetime(ts["NgayLienHe"]).dt.date < date.today() - timedelta(days=14)
     tu_van_cu = int(((ts["TrangThai"] == "Tư vấn") & cu).sum())
     todo = [

@@ -5,3 +5,7 @@ __pycache__/
 data_local.sqlite3
 *.sqlite3
 .pytest_cache/
+
+# Dữ liệu học sinh (SĐT, số tài khoản) — không đưa lên git
+*chuan_hoa*.xlsx
+data_tuyensinh*.xlsx

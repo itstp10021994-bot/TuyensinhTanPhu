@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 
 from . import config, danh_muc, services
-from .schema import BOOL, CHOICE, DATE, NOTE, NUMBER, TINH_TRANG, TRANG_THAI, Field, ListDef
+from .schema import BOOL, CHOICE, DATE, GIU_CHO, NOTE, NUMBER, TRANG_THAI, Field, ListDef
 from .storage import Storage, create_storage
 
 # ---------------------------------------------------------------- tokens
@@ -29,7 +29,7 @@ STATUS = {
     "Nhập học": {"color": "green", "hex": "#059669", "icon": ":material/school:"},
     "Rút hồ sơ": {"color": "gray", "hex": "#6B7280", "icon": ":material/block:"},
 }
-GIU_CHO = {
+GIU_CHO_COLOR = {
     "Chưa giữ chỗ": "gray",
     "Đã giữ chỗ": "green",
     "Hủy giữ chỗ": "red",
@@ -248,7 +248,7 @@ def status_badge(status: str, container=st):
 
 def giu_cho_badge(tinh_trang: str, container=st):
     tinh_trang = tinh_trang or "Chưa giữ chỗ"
-    container.badge(tinh_trang, color=GIU_CHO.get(tinh_trang, "gray"),
+    container.badge(tinh_trang, color=GIU_CHO_COLOR.get(tinh_trang, "gray"),
                     icon=":material/payments:")
 
 
@@ -323,7 +323,7 @@ def status_column(label: str = "Bước"):
 
 def giu_cho_column(label: str = "Giữ chỗ"):
     return st.column_config.MultiselectColumn(
-        label, options=list(TINH_TRANG), color=[GIU_CHO[s] for s in TINH_TRANG])
+        label, options=list(GIU_CHO), color=[GIU_CHO_COLOR[s] for s in GIU_CHO])
 
 
 def table_height(n: int, max_h: int = 560) -> int:
@@ -381,7 +381,7 @@ def _learned_schools(version: int) -> dict:
             if not ten:
                 continue
             t = danh_muc.fold(danh_muc.normalize_tinh(str(r.get("TruongCu_Tinh") or "")))
-            x = danh_muc.fold(r.get("TruongCu_QuanHuyen") or "")
+            x = danh_muc.fold(r.get("TruongCu_PhuongXa") or "")
             for k in ((t, x), (t, "")):
                 idx.setdefault(k, {})
                 idx[k][ten] = idx[k].get(ten, 0) + 1
@@ -441,16 +441,20 @@ def _choice_input(f: Field, record: dict, prefix: str, container, label: str, ke
     if parent_keys:
         key = f"{key}__{abs(hash(tuple(ctx[pk] for pk in parent_keys))) % 10**8}"
     if f.free:
-        ph = "Chọn trong gợi ý hoặc gõ tên trường…" if opts else "Gõ tên trường…"
-        def _fmt(name, _t=ctx.get(parent_keys[0], ""), _x=ctx.get(parent_keys[1], "")):
-            cap = danh_muc.cap_hoc(name, _t, _x) if is_school else ""
+        ph = ("Chọn trong gợi ý hoặc gõ tên trường…" if opts else "Gõ tên trường…") \
+            if is_school else "Chọn hoặc gõ giá trị khác…"
+        tinh_ctx = ctx.get(parent_keys[0], "") if is_school else ""
+        xa_ctx = ctx.get(parent_keys[1], "") if is_school else ""
+
+        def _fmt(name):
+            cap = danh_muc.cap_hoc(name, tinh_ctx, xa_ctx) if is_school else ""
             return f"{name}  ·  {cap}" if cap else name
 
         val = container.selectbox(label, opts, index=opts.index(v) if v in opts else None,
                                   key=key, placeholder=ph, accept_new_options=True,
                                   format_func=_fmt,
                                   help="Gợi ý theo Phường/Xã đã chọn. Có thể gõ tên trường "
-                                       "chưa có trong danh sách.")
+                                       "chưa có trong danh sách." if is_school else None)
     else:
         waiting = parent_keys and not opts
         ph = "Chọn Tỉnh/Thành phố trước" if waiting else "Chọn…"

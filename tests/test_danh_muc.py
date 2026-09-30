@@ -25,10 +25,10 @@ def test_dia_gioi_moi_nhat():
 
 
 def test_chuoi_phu_thuoc():
-    assert danh_muc.parents(TUYEN_SINH.get("TruongCu")) == ["TruongCu_Tinh", "TruongCu_QuanHuyen"]
+    assert danh_muc.parents(TUYEN_SINH.get("TruongCu")) == ["TruongCu_Tinh", "TruongCu_PhuongXa"]
     assert danh_muc.parents(NHAP_HOC.get("ChoO_Xa")) == ["ChoO_Tinh"]
     keys = [f.key for f in TUYEN_SINH.fields]
-    assert keys.index("TruongCu_Tinh") < keys.index("TruongCu_QuanHuyen") < keys.index("TruongCu")
+    assert keys.index("TruongCu_Tinh") < keys.index("TruongCu_PhuongXa") < keys.index("TruongCu")
 
 
 def _load_script(name):
@@ -56,7 +56,7 @@ def test_import_va_goi_y_truong(tmp_path, monkeypatch):
     assert danh_muc.truong_hoc("Thành phố Hồ Chí Minh") == ["THCS A"]  # cả tỉnh
     assert danh_muc.options_for(TUYEN_SINH.get("TruongCu"),
                                 {"TruongCu_Tinh": "Thành phố Hồ Chí Minh",
-                                 "TruongCu_QuanHuyen": "Phường Tân Phú"}) == ["THCS A"]
+                                 "TruongCu_PhuongXa": "Phường Tân Phú"}) == ["THCS A"]
     danh_muc._truong_index.cache_clear()
 
 
@@ -103,3 +103,17 @@ def test_cap_truoc_khoi():
     assert danh_muc.cap_truoc_khoi("10A1") == ("THCS",)
     assert danh_muc.cap_truoc_khoi("11") == ("THPT",)
     assert danh_muc.cap_truoc_khoi("") == ()
+
+
+def test_chuan_hoa_helpers():
+    c = _load_script("chuan_hoa_du_lieu_cu")
+    assert c.bank("Vietcombank, CN Vung Tau") == "Vietcombank"
+    assert c.bank("Techcomank") == "Techcombank" and c.bank("Ngân hàng TMCP Á Châu") == "ACB"
+    assert c.bank("Ngân Hàng Quân Đội MB Bank") == "MB Bank"
+    assert c.person("Nguyễn Ngọc Phương Uyên_TH-THCS-THPT Tân Phú") == "Nguyễn Ngọc Phương Uyên"
+    assert c.person("NGUYỄN VĂN A") == "Nguyễn Văn A"
+    assert c.clean_school("Trống") == ""
+    assert c.full_school_name("THCS TT Long Thành") == "Trường Trung học cơ sở Thị trấn Long Thành"
+    assert c.full_school_name("Ruby School") == "Ruby School"
+    assert c.school_key("THCS TT Tân Châu") == c.school_key("Trường Trung học cơ sở Thị trấn Tân Châu")
+    assert c.canon("Bạn Bè - Người Thân", ("Bạn bè - Người thân",)) == "Bạn bè - Người thân"

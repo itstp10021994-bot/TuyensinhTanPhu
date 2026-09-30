@@ -48,22 +48,29 @@ def main():
     ap.add_argument("--vemis", action="store_true", help="file theo biểu mẫu VEMIS")
     ap.add_argument("--map", action="append", default=[], help='"Cột Excel=KeyTrongSchema"')
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--sheet", help="tên sheet (mặc định: sheet Data_TuyenSinh/Data_NhapHoc nếu có)")
+    ap.add_argument("--giu-nguyen", action="store_true",
+                    help="chuyển dữ liệu cũ: ghi cả dòng thiếu trường bắt buộc, không kiểm tra")
     args = ap.parse_args()
     ld = LISTS[args.list]
 
     if args.vemis:
         df = read_vemis(args.file)
     else:
-        df = pd.read_excel(args.file, dtype=str) if not args.file.endswith(".csv") \
-            else pd.read_csv(args.file, dtype=str)
+        if args.file.endswith(".csv"):
+            df = pd.read_csv(args.file, dtype=str)
+        else:
+            sheets = pd.ExcelFile(args.file).sheet_names
+            sheet = args.sheet or (ld.name if ld.name in sheets else sheets[0])
+            df = pd.read_excel(args.file, sheet_name=sheet, dtype=str)
         # nhận cả tên hiển thị trên SharePoint (file xuất từ list) lẫn nhãn trong app
         rename = {f.label: f.key for f in ld.fields}
         rename.update({f.sp_title: f.key for f in ld.fields})
         rename.update(dict(m.split("=", 1) for m in args.map))
         df = df.rename(columns=rename)
-    keep = [c for c in df.columns if c in ld.keys]
+    keep = [c for c in df.columns if c in ld.keys or c == "Title"]
     print(f"Các cột nhận được: {keep}")
-    print(f"Bỏ qua: {[c for c in df.columns if c not in ld.keys]}")
+    print(f"Bỏ qua: {[c for c in df.columns if c not in ld.keys and c != 'Title']}")
     df = df[keep].dropna(how="all")
 
     storage = create_storage()
@@ -72,7 +79,12 @@ def main():
         data = {k: v for k, v in row.to_dict().items() if not _blank(v)}
         data.setdefault("NamHoc", args.nam_hoc)
         try:
-            if args.dry_run:
+            if args.giu_nguyen and not args.dry_run:
+                clean = services._clean(ld, data)
+                if data.get("Title"):
+                    clean["Title"] = data["Title"]
+                storage.create_item(ld.name, clean)
+            elif args.dry_run:
                 errs = services.validate(ld, data)
                 if errs:
                     raise ValueError("; ".join(errs))

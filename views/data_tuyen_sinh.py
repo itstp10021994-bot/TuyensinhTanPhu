@@ -6,7 +6,7 @@ Thêm liên hệ mới bằng hộp thoại nhập nhanh (?new=1 để mở từ
 import streamlit as st
 
 from tuyensinh import services, ui
-from tuyensinh.schema import CHE_DO, KHOI, NHAP_HOC, TINH_TRANG, TRANG_THAI, TUYEN_SINH
+from tuyensinh.schema import CHE_DO, GIU_CHO, KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
 
 S = st.session_state
 S.setdefault("ts_v", 0)  # tăng để nạp lại form / xóa lựa chọn trong bảng
@@ -36,7 +36,7 @@ def _find(item_id: str) -> dict | None:
 
 
 # ================================================================== hộp thoại
-TRUONG_LABELS = {"TruongCu_Tinh": "Tỉnh/Thành phố", "TruongCu_QuanHuyen": "Phường/Xã",
+TRUONG_LABELS = {"TruongCu_Tinh": "Tỉnh/Thành phố", "TruongCu_PhuongXa": "Phường/Xã",
                  "TruongCu": "Tên trường"}
 
 
@@ -50,14 +50,15 @@ def new_contact_dialog():
                "trong hồ sơ.")
     # Không dùng st.form: ô Phường/Xã và gợi ý trường phải đổi ngay khi chọn Tỉnh
     st.markdown("**Học sinh**")
-    values = ui.record_form([F(k) for k in ("HoTenHS", "Khoi", "GioiTinh")], record, prefix, 3)
+    values = ui.record_form([F(k) for k in ("HoTenHS", "Khoi", "PhanHe", "GioiTinh")],
+                            record, prefix, 4)
     st.markdown("**Liên hệ**")
     values.update(ui.record_form([F(k) for k in ("SDT", "TenLienHe", "Nguon")],
                                  record, prefix, 3))
     values.update(ui.record_form([F(k) for k in ("NgayLienHe", "NamHoc", "CheDo")],
                                  record, prefix, 3))
     st.markdown("**Trường cũ**")
-    values.update(ui.record_form([F(k) for k in ("TruongCu_Tinh", "TruongCu_QuanHuyen",
+    values.update(ui.record_form([F(k) for k in ("TruongCu_Tinh", "TruongCu_PhuongXa",
                                                  "TruongCu")], record, prefix, 3, TRUONG_LABELS))
     values.update(ui.record_form([F("GhiChu")], record, prefix, 1))
     ui.required_hint()
@@ -101,7 +102,7 @@ def withdraw_dialog(rec: dict):
     st.write(f"Chuyển **{rec['HoTenHS']}** sang trạng thái **Rút hồ sơ**.")
     ly_do = st.text_area("Lý do rút hồ sơ *", placeholder="Ví dụ: chuyển sang trường khác gần nhà",
                          help="Được ghi thêm vào mục Nội dung đã trao đổi.")
-    if rec.get("TinhTrang") == "Đã giữ chỗ":
+    if rec.get("GiuCho") == "Đã giữ chỗ":
         st.info("Học sinh đã giữ chỗ. Nhớ báo kế toán đổi Tình trạng sang **Hủy giữ chỗ** "
                 "để hoàn phí.", icon=":material/payments:")
     c1, c2 = st.columns(2)
@@ -172,7 +173,7 @@ def render_detail(item_id: str):
 
     with st.container(horizontal=True, gap="small"):
         ui.status_badge(step)
-        ui.giu_cho_badge(rec.get("TinhTrang"))
+        ui.giu_cho_badge(rec.get("GiuCho"))
         st.badge(f"Năm học {rec.get('NamHoc') or '—'}", color="gray",
                  icon=":material/calendar_month:")
     ui.stepper(step)
@@ -187,17 +188,19 @@ def render_detail(item_id: str):
         with ui.section("Liên hệ & tư vấn"):
             values.update(ui.record_form(
                 [F(k) for k in ("NgayLienHe", "SDT", "NamHoc", "Nguon", "TenLienHe",
-                                "NguoiGioiThieu", "PhanHe", "NguoiNhanHoSo")], rec, prefix, 3))
+                                "NguoiGioiThieu", "TinhTrang", "NguoiNhanHoSo")], rec, prefix, 3))
             values.update(ui.record_form([F("GhiChu")], rec, prefix, 1))
         with ui.section("Học sinh"):
             values.update(ui.record_form(
-                [F(k) for k in ("HoTenHS", "NgaySinh", "GioiTinh", "Khoi", "CheDo")],
+                [F(k) for k in ("HoTenHS", "NgaySinh", "GioiTinh", "Khoi", "PhanHe", "CheDo")],
                 rec, prefix, 3))
         with ui.section("Trường cũ & kết quả học tập"):
             values.update(ui.record_form(
-                [F(k) for k in ("TruongCu_Tinh", "TruongCu_QuanHuyen", "TruongCu")],
+                [F(k) for k in ("TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu")],
                 rec, prefix, 3, {"TruongCu_Tinh": "Tỉnh/Thành phố",
-                                 "TruongCu_QuanHuyen": "Phường/Xã", "TruongCu": "Tên trường"}))
+                                 "TruongCu_PhuongXa": "Phường/Xã", "TruongCu": "Tên trường"}))
+            if rec.get("TruongCu_DiaChiCu"):
+                st.caption(f"Địa chỉ trường cũ trước sáp nhập: {rec['TruongCu_DiaChiCu']}")
             short = {"Toan1": "Toán", "Van1": "Văn", "Anh1": "Anh", "TV1": "Tiếng Việt",
                      "HanhKiem1": "Hạnh kiểm", "Toan2": "Toán", "Van2": "Văn",
                      "Anh2": "Anh", "TV2": "Tiếng Việt", "HanhKiem2": "Hạnh kiểm"}
@@ -222,7 +225,7 @@ def render_detail(item_id: str):
 
     with side:
         with ui.section("Giữ chỗ"):
-            ui.kv([("Tình trạng", rec.get("TinhTrang") or "Chưa giữ chỗ"),
+            ui.kv([("Giữ chỗ", rec.get("GiuCho") or "Chưa giữ chỗ"),
                    ("Số tiền xác nhận", ui.money(rec.get("SoTienXacNhan"))),
                    ("Người xác nhận", rec.get("NguoiXacNhan")),
                    ("Ngân hàng hoàn phí", rec.get("NganHang"))])
@@ -281,7 +284,7 @@ def render_list():
                         placeholder="Tên học sinh, SĐT hoặc tên liên hệ")
     khoi = c[1].selectbox("Khối", ["Tất cả", *KHOI], key="ts_khoi")
     che_do = c[2].selectbox("Chế độ", ["Tất cả", *CHE_DO], key="ts_chedo")
-    giu = c[3].selectbox("Giữ chỗ", ["Tất cả", *TINH_TRANG], key="ts_giucho")
+    giu = c[3].selectbox("Giữ chỗ", ["Tất cả", *GIU_CHO], key="ts_giucho")
 
     view = ts
     if step and step != "Tất cả":
@@ -291,7 +294,7 @@ def render_list():
     if che_do != "Tất cả":
         view = view[view["CheDo"] == che_do]
     if giu != "Tất cả":
-        view = view[view["TinhTrang"].replace("", "Chưa giữ chỗ") == giu]
+        view = view[view["GiuCho"].replace("", "Chưa giữ chỗ") == giu]
     if q.strip():
         ql = q.strip().lower()
         phone = services.normalize_phone(q)
@@ -315,7 +318,7 @@ def render_list():
                            "Thử từ khóa khác hoặc bỏ bớt bộ lọc.")
     else:
         show = view.assign(Buoc=ui.tag_col(view["TrangThai"]),
-                           GiuCho=ui.tag_col(view["TinhTrang"].replace("", "Chưa giữ chỗ")))
+                           GiuCho=ui.tag_col(view["GiuCho"].replace("", "Chưa giữ chỗ")))
         ev = st.dataframe(
             show[["HoTenHS", "Khoi", "Buoc", "SDT", "NgayLienHe", "CheDo", "GiuCho"]],
             key=f"ts_table_{S.ts_v}", on_select="rerun", selection_mode="single-row",
