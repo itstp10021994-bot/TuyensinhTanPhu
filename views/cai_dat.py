@@ -49,8 +49,18 @@ with ui.section("1. Kết nối", "App ghi/đọc SharePoint thông qua một fl
             ui.error_state(RuntimeError(row["loi"]), compact=True)
             continue
         if not row["co_list"]:
-            st.warning(f"**{row['ten']}**: chưa có list — bấm *Tạo list / thêm cột* ở bước 2.",
-                       icon=":material/playlist_add:")
+            site = row.get("site") or "site đang cấu hình trong flow"
+            msg = f"**{row['ten']}**: chưa có list trên **{site}**."
+            others = row.get("lists_on_site")
+            if others is not None:
+                msg += (" Các list đang có trên site này: " + (", ".join(others) or "(không có)")
+                        + ". Nếu list của bạn nằm ở site khác, sửa **Site Address** trong bước "
+                          "*Send an HTTP request to SharePoint* của flow; nếu tên list khác, sửa "
+                          f"`SP_LIST_{ld.name}` trong Secrets. Chưa có thì bấm *Tạo list / thêm "
+                          "cột* ở bước 2.")
+            else:
+                msg += " Bấm *Tạo list / thêm cột* ở bước 2."
+            st.warning(msg, icon=":material/playlist_add:")
         elif row["thieu"]:
             st.warning(f"**{row['ten']}**: kết nối được, khớp {len(row['khop'])} cột, thiếu "
                        f"{len(row['thieu'])} cột: "

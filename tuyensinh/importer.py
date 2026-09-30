@@ -28,6 +28,12 @@ def check_lists(storage: Storage) -> list[dict]:
                 row["khop"], row["thieu"] = cm.internal, cm.missing
             else:
                 row["thieu"] = list(ld.keys)
+                row["site"] = getattr(storage, "site_seen", "")
+                if hasattr(storage, "list_titles"):
+                    try:
+                        row["lists_on_site"] = storage.list_titles()
+                    except Exception:
+                        pass
         except Exception as e:  # lỗi kết nối
             row["loi"] = str(e)
         out.append(row)

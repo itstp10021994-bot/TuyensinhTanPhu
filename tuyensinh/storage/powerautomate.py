@@ -157,9 +157,19 @@ class PowerAutomateStorage(Storage):
             self.call("GET", f"{list_path(list_name)}?$select=Id")
             return True
         except RuntimeError as e:
-            if "404" in str(e) or "does not exist" in str(e):
+            # chỉ coi là "chưa có list" khi chính SharePoint báo vậy; 404 khác (URL flow sai,
+            # flow bị tắt…) là lỗi kết nối
+            if "does not exist" in str(e):
+                m = re.search(r"at site with URL '([^'\\]+)", str(e))
+                if m:
+                    self.site_seen = m.group(1)
                 return False
             raise
+
+    def list_titles(self) -> list[str]:
+        """Các list đang có trên site mà flow kết nối (để chẩn đoán sai site / sai tên)."""
+        data = self.call("GET", "_api/web/lists?$filter=Hidden eq false&$select=Title")
+        return sorted(c["Title"] for c in data.get("value", []))
 
     def create_list(self, list_name, description=""):
         self.call("POST", "_api/web/lists", {"Title": config.list_name(list_name),
