@@ -15,7 +15,7 @@ from tuyensinh.storage.convert import ColumnMap, date_in  # noqa: E402
 
 HS = {"NamHoc": "2026-2027", "NgayLienHe": "2026-08-06", "SDT": "0927 666 649",
       "HoTenHS": "Trần Huy Long", "Khoi": "10", "CheDo": "Nội trú", "GioiTinh": "Nam",
-      "NgaySinh": "2011-05-02"}
+      "NgaySinh": "2011-05-02", "TruongCu": "THCS Tân Phú"}
 
 
 @pytest.fixture
@@ -45,6 +45,7 @@ def test_nhap_hoc_creates_enrollment_record(storage):
     assert nh["HoTen"] == "Trần Huy Long"
     assert nh["LopHoc"] == "10" and nh["NoiTruBanTru"] == "Nội trú"
     assert nh["DienThoaiSLL"] == "0927666649"
+    assert nh["TruongCu"] == "THCS Tân Phú"
     # Chuyển lại không tạo trùng; hồ sơ bị ẩn khi rút hồ sơ
     services.set_trang_thai(storage, rec["id"], "Nhập học")
     assert len(storage.list_items(NHAP_HOC.name)) == 1
@@ -104,7 +105,8 @@ def test_export_vemis_layout(storage):
 
 def test_every_enrollment_field_is_exported():
     exported = {k for _, _, k in export_vemis.COLUMNS if k}
-    assert exported == set(NHAP_HOC.keys) - {"TuyenSinhID", "NamHoc"}
+    assert exported == set(NHAP_HOC.keys) - {"TuyenSinhID", "NamHoc", "TruongCu",
+                                             "TruongCu_QuanHuyen", "TruongCu_Tinh"}
 
 
 def test_danh_muc_xa_depends_on_tinh():

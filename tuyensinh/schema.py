@@ -135,6 +135,10 @@ NHAP_HOC = ListDef(
         Field("QuocTich", "Quốc tịch", CHOICE, "@quoc_tich", group=G_CHUNG),
         Field("DanToc", "Dân tộc", CHOICE, "@dan_toc", group=G_CHUNG),
         Field("TonGiao", "Tôn giáo", CHOICE, "@ton_giao", group=G_CHUNG),
+        # Trường cũ: lấy từ Data tuyển sinh (không có trong biểu mẫu VEMIS)
+        Field("TruongCu", "Trường cũ", group=G_CHUNG),
+        Field("TruongCu_QuanHuyen", "Trường cũ - Quận/huyện", group=G_CHUNG),
+        Field("TruongCu_Tinh", "Trường cũ - Tỉnh", CHOICE, "@tinh", group=G_CHUNG),
         # --- Địa chỉ
         Field("ChoO_SoNha", "Chỗ ở hiện nay - SN/Xóm", group=G_DIACHI),
         Field("ChoO_KhuDanCu", "Chỗ ở hiện nay - Khu dân cư", group=G_DIACHI),

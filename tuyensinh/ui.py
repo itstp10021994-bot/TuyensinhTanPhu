@@ -41,7 +41,8 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 CSS = """
 <style>
 /* ---- khung trang ---- */
-.block-container {padding-top: 2.25rem; padding-bottom: 3rem; max-width: 1360px;}
+/* chừa chỗ cho thanh header của Streamlit (cao hơn khi chạy trên Streamlit Cloud) */
+.block-container {padding-top: 4.5rem; padding-bottom: 3rem; max-width: 1360px;}
 h1, h2, h3 {letter-spacing: -0.01em;}
 [data-testid="stSidebarNav"] {padding-top: .25rem;}
 [data-testid="stSidebarNavSeparator"] {margin: .25rem 0;}
@@ -81,7 +82,7 @@ h1, h2, h3 {letter-spacing: -0.01em;}
 .tp-muted {opacity: .7; font-size: .875rem;}
 /* mobile */
 @media (max-width: 640px) {
-  .block-container {padding: 3.75rem .9rem 2.5rem;}
+  .block-container {padding: 4.25rem .9rem 2.5rem;}
   /* KPI: 2 thẻ mỗi hàng thay vì xếp dọc từng thẻ */
   [class*="st-key-kpis"] [data-testid="stHorizontalBlock"] {flex-wrap: wrap; gap: .5rem;}
   [class*="st-key-kpis"] [data-testid="stColumn"] {flex: 1 1 calc(50% - .5rem) !important;

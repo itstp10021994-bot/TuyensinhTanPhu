@@ -75,6 +75,12 @@ def render_detail(item_id: str):
                                "Hồ sơ có thể đã bị xóa hoặc đường dẫn không đúng.")
             return
         rec = hit.iloc[0].to_dict()
+        # Hồ sơ tạo trước khi có cột Trường cũ: lấy từ Data tuyển sinh (lưu khi bấm Lưu)
+        src = ts[ts["id"] == rec.get("TuyenSinhID")]
+        if len(src):
+            for k in ("TruongCu", "TruongCu_QuanHuyen", "TruongCu_Tinh"):
+                if not rec.get(k):
+                    rec[k] = src.iloc[0].get(k, "")
 
     title = rec.get("HoTen") or "Hồ sơ mới"
     sub = " · ".join(x for x in [f"Lớp {rec['LopHoc']}" if rec.get("LopHoc") else "",
