@@ -223,3 +223,27 @@ def giu_cho_summary(ts: pd.DataFrame) -> pd.DataFrame:
     out = so_hs.assign(**{"Tiền đã giữ chỗ": tien}).fillna(0)
     out.index.name = "Khối"
     return out.reset_index()
+
+
+# ------------------------------------------------------------------ Mức hoàn thiện hồ sơ nhập học
+# Các thông tin tối thiểu để nộp dữ liệu lên VEMIS / CSDL ngành
+NHAP_HOC_CAN_CO = ["LopHoc", "HoTen", "NgaySinh", "GioiTinh", "DanToc", "QuocTich",
+                   "ChoO_Tinh", "ChoO_Xa", "NoiSinh_Tinh", "TenCha", "TenMe", "DienThoaiSLL"]
+
+
+NHAP_HOC_NHAN_NGAN = {"LopHoc": "Lớp", "HoTen": "Họ tên", "NgaySinh": "Ngày sinh",
+                      "GioiTinh": "Giới tính", "DanToc": "Dân tộc", "QuocTich": "Quốc tịch",
+                      "ChoO_Tinh": "Tỉnh (chỗ ở)", "ChoO_Xa": "Xã (chỗ ở)",
+                      "NoiSinh_Tinh": "Nơi sinh", "TenCha": "Tên cha", "TenMe": "Tên mẹ",
+                      "DienThoaiSLL": "SĐT liên lạc"}
+
+
+def missing_fields(row: dict) -> list[str]:
+    return [k for k in NHAP_HOC_CAN_CO if _empty(row.get(k)) or str(row.get(k)).strip() == ""]
+
+
+def completeness(df: pd.DataFrame) -> pd.Series:
+    """Tỷ lệ (0–1) thông tin tối thiểu đã có của từng hồ sơ nhập học."""
+    if df.empty:
+        return pd.Series(dtype=float)
+    return df.apply(lambda r: 1 - len(missing_fields(r)) / len(NHAP_HOC_CAN_CO), axis=1)

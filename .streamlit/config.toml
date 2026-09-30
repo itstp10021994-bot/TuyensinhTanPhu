@@ -1,6 +1,55 @@
-[theme]
-primaryColor = "#1f6fd1"
-base = "light"
+# Hệ thống thiết kế — xem tuyensinh/ui.py (TOKENS) để biết màu trạng thái dùng chung.
 
 [server]
 maxUploadSize = 50
+enableStaticServing = true
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+# Không gửi thống kê sử dụng ra ngoài (dữ liệu học sinh)
+gatherUsageStats = false
+
+[theme]
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+baseFontSize = 15
+baseRadius = "0.5rem"
+buttonRadius = "0.5rem"
+showWidgetBorder = true
+showSidebarBorder = true
+headingFontSizes = ["1.625rem", "1.25rem", "1.0625rem", "0.9375rem", "0.875rem", "0.8125rem"]
+headingFontWeights = [700, 600, 600, 600, 600, 600]
+metricValueFontSize = "1.625rem"
+metricValueFontWeight = 600
+linkUnderline = false
+chartCategoricalColors = ["#2563EB", "#D97706", "#059669", "#6B7280", "#7C3AED", "#DB2777"]
+
+[theme.light]
+primaryColor = "#1D4ED8"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F5F8"
+textColor = "#111827"
+borderColor = "#E3E7ED"
+dataframeHeaderBackgroundColor = "#F8FAFC"
+linkColor = "#1D4ED8"
+
+[theme.light.sidebar]
+backgroundColor = "#F8FAFC"
+secondaryBackgroundColor = "#FFFFFF"
+borderColor = "#E3E7ED"
+
+[theme.dark]
+primaryColor = "#2563EB"
+backgroundColor = "#0F141B"
+secondaryBackgroundColor = "#1A212B"
+textColor = "#E6EAF0"
+borderColor = "#2A3340"
+dataframeHeaderBackgroundColor = "#161C24"
+linkColor = "#93C5FD"
+
+[theme.dark.sidebar]
+backgroundColor = "#131921"
+secondaryBackgroundColor = "#1A212B"
+borderColor = "#2A3340"
