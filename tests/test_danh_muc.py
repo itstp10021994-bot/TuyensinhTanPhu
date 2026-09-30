@@ -58,3 +58,38 @@ def test_import_va_goi_y_truong(tmp_path, monkeypatch):
                                 {"TruongCu_Tinh": "Thành phố Hồ Chí Minh",
                                  "TruongCu_QuanHuyen": "Phường Tân Phú"}) == ["THCS A"]
     danh_muc._truong_index.cache_clear()
+
+
+def test_build_truong_hoc_osm(tmp_path, monkeypatch):
+    import json
+
+    code = next(k for k, v in danh_muc.load()["ma_xa"].items()
+                if v == ["Thành phố Hồ Chí Minh", "Phường Tân Phú"])
+    square = {"type": "Polygon", "coordinates": [[[106.63, 10.76], [106.65, 10.76],
+                                                    [106.65, 10.79], [106.63, 10.79],
+                                                    [106.63, 10.76]]]}
+    gis = tmp_path / "gis.ndjson"
+    gis.write_text('{"index":{}}\n' + json.dumps(
+        {"Code": "79", "Wards": [{"Code": code, "FullName": "Phường Tân Phú",
+                                  "GIS": {"Geometry": square}}]}, ensure_ascii=False) + "\n",
+        encoding="utf-8")
+    osm = tmp_path / "osm.json"
+    osm.write_text(json.dumps({"elements": [
+        {"lat": 10.77, "lon": 106.64, "tags": {"amenity": "school", "name": "Trường THCS Thử"}},
+        {"center": {"lat": 10.771, "lon": 106.641},
+         "tags": {"amenity": "kindergarten", "name": "Hoa Sen"}},
+        {"lat": 10.772, "lon": 106.64, "tags": {"amenity": "school", "name": "Trung tâm Anh ngữ X"}},
+        {"lat": 21.0, "lon": 105.8, "tags": {"amenity": "school", "name": "Trường Tiểu học Xa"}},
+    ]}, ensure_ascii=False), encoding="utf-8")
+    out = tmp_path / "truong_hoc.csv"
+    monkeypatch.setattr(danh_muc, "TRUONG_CSV", out)
+    mod = _load_script("build_truong_hoc_osm")
+    monkeypatch.setattr(mod, "OUT", out)
+    monkeypatch.setattr(sys, "argv", ["x", "--osm", str(osm), "--gis", str(gis)])
+    mod.main()
+    rows = out.read_text(encoding="utf-8").splitlines()
+    assert rows[1:] == ["Thành phố Hồ Chí Minh,Phường Tân Phú,Hoa Sen,Mầm non",
+                        "Thành phố Hồ Chí Minh,Phường Tân Phú,Trường THCS Thử,THCS"]
+    assert mod.cap_hoc("Trường TH-THCS-THPT Tân Phú", "school") == "Liên cấp"
+    assert mod.cap_hoc("Trường THPT Trần Phú", "school") == "THPT"
+    assert mod.cap_hoc("Trường Tiểu học Tân Sơn Nhì", "school") == "Tiểu học"

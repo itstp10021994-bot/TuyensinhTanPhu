@@ -1,0 +1,44 @@
+# Cập nhật danh mục trường học theo Phường/Xã mới từ OpenStreetMap.
+# Chạy tay: tab Actions → "Cập nhật danh mục trường học" → Run workflow.
+name: Cập nhật danh mục trường học
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/build_truong_hoc_osm.py
+      - .github/workflows/cap-nhat-truong-hoc.yml
+  schedule:
+    - cron: "17 2 1 * *"   # ngày 1 hằng tháng
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cap-nhat-truong-hoc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cài thư viện
+        run: pip install shapely pandas
+      - name: Tải trường từ OpenStreetMap và gán Phường/Xã
+        run: python scripts/build_truong_hoc_osm.py
+      - name: Commit danh mục (nếu có thay đổi)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tuyensinh/data/truong_hoc.csv tuyensinh/data/truong_hoc.meta.json
+          if git diff --cached --quiet; then
+            echo "Không có thay đổi"
+          else
+            git commit -m "Cập nhật danh mục trường học từ OpenStreetMap"
+            git push
+          fi

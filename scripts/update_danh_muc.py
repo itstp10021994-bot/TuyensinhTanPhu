@@ -54,11 +54,14 @@ def main():
             meta = {}
 
     dm = json.loads(OUT.read_text(encoding="utf-8"))
+    if not meta:  # giữ thông tin phiên bản cũ khi chạy từ file
+        prev = dm.get("nguon_dia_gioi", {})
+        meta = {"DatasetVersion": prev.get("phien_ban", ""), "LatestDecree": prev.get("nghi_quyet", "")}
     old_xa = dm["xa_theo_tinh"]
     old_by_key = {prov_key(t): t for t in old_xa}
     alias = dict(dm.get("tinh_cu", {}))
 
-    xa_theo_tinh, tinh = {}, []
+    xa_theo_tinh, tinh, ma_xa = {}, [], {}
     for p in data:
         name = clean(p["FullName"])
         old_name = old_by_key.get(prov_key(name))
@@ -72,13 +75,14 @@ def main():
         for w in p["Wards"]:
             n = clean(w["FullName"])
             wards.append(spelled.get(key(n), n))
+            ma_xa[w["Code"]] = [name, wards[-1]]
         tinh.append(name)
         xa_theo_tinh[name] = wards
 
     changed_prov = sorted(set(tinh) ^ set(old_xa))
     n_old = sum(len(v) for v in old_xa.values())
     n_new = sum(len(v) for v in xa_theo_tinh.values())
-    dm.update(tinh=tinh, xa_theo_tinh=xa_theo_tinh, tinh_cu=alias,
+    dm.update(tinh=tinh, xa_theo_tinh=xa_theo_tinh, tinh_cu=alias, ma_xa=ma_xa,
               nguon_dia_gioi={"nguon": "Tổng cục Thống kê qua thanglequoc/vietnamese-provinces-database",
                               "phien_ban": meta.get("DatasetVersion", ""),
                               "nghi_quyet": meta.get("LatestDecree", ""),
