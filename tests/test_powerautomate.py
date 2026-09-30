@@ -58,7 +58,14 @@ class FakeFlow:
         mi = re.match(r"/items\((\d+)\)", rest)
         if rest.startswith("/items") and not mi:
             if method == "GET":
-                return 200, {"value": list(lst["items"].values())}
+                items = sorted(lst["items"].values(), key=lambda x: x["Id"])
+                f = re.search(r"Id gt (\d+) and Id le (\d+)", rest)
+                if f:
+                    lo, hi = int(f.group(1)), int(f.group(2))
+                    items = [x for x in items if lo < x["Id"] <= hi]
+                if "orderby=Id desc" in rest:
+                    items = items[::-1][:1]
+                return 200, {"value": items}
             item = {**body, "Id": self.next_id, "ID": self.next_id}
             lst["items"][self.next_id] = item
             self.next_id += 1
@@ -204,3 +211,13 @@ def test_timeout_doc_thu_lai_ghi_khong(monkeypatch):
     with pytest.raises(RuntimeError, match="quá thời gian chờ"):
         st.call("POST", "_api/web/lists/x/items", {"Title": "a"})
     assert st._session.n == 1  # không gửi lại lệnh ghi
+
+
+def test_list_items_doc_song_song_theo_khoang_id(pa, monkeypatch):
+    monkeypatch.setattr(powerautomate, "PAGE_SIZE", 3)
+    st, flow = pa
+    for i in range(8):
+        st.create_item(TUYEN_SINH.name, {"HoTenHS": f"HS {i}", "NamHoc": "2026-2027"})
+    st.delete_item(TUYEN_SINH.name, "4")  # ID bị hở
+    got = st.list_items(TUYEN_SINH.name)
+    assert sorted(int(x["id"]) for x in got) == [1, 2, 3, 5, 6, 7, 8]

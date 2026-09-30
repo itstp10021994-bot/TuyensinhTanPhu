@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -46,6 +47,7 @@ def field_xml(f: Field, internal: str) -> str:
 
 TIMEOUT = 125  # giây; flow HTTP đồng bộ bị Power Automate cắt sau khoảng 120 giây
 PAGE_SIZE = 500  # đọc list theo trang: mỗi lần chạy flow ngắn, không bị quá thời gian
+PARALLEL = 4  # số trang đọc cùng lúc
 
 
 class PowerAutomateStorage(Storage):
@@ -118,15 +120,28 @@ class PowerAutomateStorage(Storage):
         return f"&$select={','.join(dict.fromkeys(cols))}{exp}"
 
     # ------------------------------------------------------------------ CRUD
-    def list_items(self, list_name):
-        uri = f"{list_path(list_name)}/items?$top={PAGE_SIZE}{self._select(list_name)}"
+    def _pages(self, uri: str) -> list[dict]:
         out = []
         while uri:
             data = self.call("GET", uri)
-            out.extend(self._item(list_name, it) for it in data.get("value", []))
+            out.extend(data.get("value", []))
             nxt = data.get("odata.nextLink") or data.get("@odata.nextLink")
             uri = self._relative(nxt) if nxt else None
         return out
+
+    def list_items(self, list_name):
+        """Đọc cả list: chia theo khoảng ID và gọi flow song song (nhanh gần bằng 1 lần gọi)."""
+        base = f"{list_path(list_name)}/items"
+        sel = self._select(list_name)
+        last = self.call("GET", f"{base}?$select=Id&$orderby=Id desc&$top=1").get("value") or []
+        if not last:
+            return []
+        max_id = int(last[0].get("Id", last[0].get("ID")))
+        uris = [f"{base}?$filter=Id gt {lo} and Id le {lo + PAGE_SIZE}&$top={PAGE_SIZE}{sel}"
+                for lo in range(0, max_id, PAGE_SIZE)]
+        with ThreadPoolExecutor(max_workers=min(PARALLEL, len(uris))) as pool:
+            pages = list(pool.map(self._pages, uris))
+        return [self._item(list_name, it) for page in pages for it in page]
 
     def get_item(self, list_name, item_id):
         sel = self._select(list_name).lstrip("&")
