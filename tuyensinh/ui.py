@@ -135,6 +135,11 @@ def loaded_at() -> datetime:
     return _shared_state()["loaded_at"]
 
 
+def records(ld: ListDef) -> list[dict]:
+    """Bản ghi của list (dùng chung bộ nhớ đệm với df())."""
+    return _load(ld.name, data_version())
+
+
 def df(ld: ListDef, nam_hoc: str | None = None) -> pd.DataFrame:
     out = services.to_df(ld, _load(ld.name, data_version()))
     if nam_hoc:
@@ -216,6 +221,14 @@ def _is_connection_error(err: Exception) -> bool:
         k in msg for k in ("Graph ", "Power Automate", "token", "Thiếu cấu hình"))
 
 
+def _sp_message(msg: str) -> str:
+    """Lấy câu báo lỗi gốc của SharePoint trong phản hồi của flow."""
+    import re
+
+    m = re.search(r'\\*"value\\*"\s*:\s*\\*"(.+?)\\*"', msg)
+    return m.group(1).replace("\\'", "'") if m else ""
+
+
 def error_state(err: Exception, compact: bool = False):
     msg = str(err)
     if not _is_connection_error(err):
@@ -232,6 +245,9 @@ def error_state(err: Exception, compact: bool = False):
         friendly = "Không có quyền truy cập SharePoint. Kiểm tra key / quyền của tài khoản chạy flow."
     else:
         friendly = "Không kết nối được tới SharePoint. Kiểm tra mạng hoặc cấu hình flow rồi thử lại."
+    sp = _sp_message(msg)
+    if sp and "Cài đặt" not in friendly:
+        friendly += f"\n\nSharePoint báo: *{sp}*"
     icon = ":material/cloud_off:" if _is_connection_error(err) else ":material/error:"
     if not compact:
         st.markdown("### Không tải được trang")

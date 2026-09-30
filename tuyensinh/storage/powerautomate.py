@@ -94,11 +94,13 @@ class PowerAutomateStorage(Storage):
         return self.colmap(list_name).from_sp(it, item_id, it.get("Created"), it.get("Modified"))
 
     def _select(self, list_name: str) -> str:
-        people = self.colmap(list_name).person_columns
-        if not people:
-            return ""
-        sel = ",".join(["*"] + [f"{p}/Title" for p in people])
-        return f"&$select={sel}&$expand={','.join(people)}"
+        """Chỉ lấy các cột app dùng (bỏ hơn 30 cột hệ thống) để đọc nhanh hơn."""
+        cm = self.colmap(list_name)
+        people = set(cm.person_columns)
+        cols = ["Id", "Created", "Modified"] + [
+            f"{c}/Title" if c in people else c for c in cm.internal.values()]
+        exp = f"&$expand={','.join(people)}" if people else ""
+        return f"&$select={','.join(dict.fromkeys(cols))}{exp}"
 
     # ------------------------------------------------------------------ CRUD
     def list_items(self, list_name):
@@ -125,8 +127,16 @@ class PowerAutomateStorage(Storage):
     def create_item(self, list_name, data):
         body = {k: v for k, v in self.colmap(list_name).to_sp(data).items() if v is not None}
         it = self.call("POST", f"{list_path(list_name)}/items", body)
-        new_id = it.get("Id", it.get("ID"))
-        return self.get_item(list_name, new_id) if new_id else it
+        new_id = it.get("Id", it.get("ID")) if isinstance(it, dict) else None
+        if new_id:  # SharePoint trả về luôn bản ghi vừa tạo: không cần đọc lại
+            return self._item(list_name, it)
+        # Flow không trả nội dung (thiếu Body ở bước Response): tìm bản ghi mới nhất vừa ghi
+        latest = self.call("GET", f"{list_path(list_name)}/items?$orderby=Id desc&$top=1"
+                                  f"{self._select(list_name)}").get("value") or []
+        if latest:
+            return self._item(list_name, latest[0])
+        raise RuntimeError("Power Automate: đã gửi lệnh thêm nhưng flow không trả kết quả. Kiểm "
+                           "tra bước Response: Body = body('Send_an_HTTP_request_to_SharePoint').")
 
     def update_item(self, list_name, item_id, data):
         self.call("PATCH", f"{list_path(list_name)}/items({int(item_id)})",

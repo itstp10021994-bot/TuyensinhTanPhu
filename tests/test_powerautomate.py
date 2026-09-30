@@ -140,3 +140,24 @@ def test_colmap_list_tao_tu_excel():
     assert cm.missing == []
     assert cm.internal["NamHoc"] == "field_1"
     assert cm.to_sp({"HoTenHS": "A"})[cm.internal["HoTenHS"]] == "A"
+
+
+def test_them_moi_vao_list_tao_tu_excel(pa):
+    """List tạo từ Excel: field_N, Khối là cột Số; thêm mới chỉ tốn 1 lần gọi flow."""
+    st, flow = pa
+    lst = flow.lists[f"lists(guid'{TS_GUID}')"]
+    lst["cols"] = [{"name": "Title", "title": "Title", "type": "Text"}] + [
+        {"name": f"field_{i}", "title": f.key,
+         "type": "Number" if f.key == "Khoi" else "DateTime" if f.type == "date" else "Text"}
+        for i, f in enumerate(TUYEN_SINH.fields, 1)]
+    st.colmap(TUYEN_SINH.name)
+    n = len(flow.calls)
+    rec = services.save_tuyen_sinh(st, dict(HS))
+    assert len(flow.calls) - n == 1  # chỉ POST, dùng luôn bản ghi SharePoint trả về
+    raw = lst["items"][int(rec["id"])]
+    khoi = st.colmap(TUYEN_SINH.name).internal["Khoi"]
+    assert raw[khoi] == 10.0 and raw["Title"] == "Trần Huy Long"
+    assert rec["Khoi"] == "10" and rec["HoTenHS"] == "Trần Huy Long"
+    got = st.list_items(TUYEN_SINH.name)
+    assert got[0]["Khoi"] == "10"
+    assert "$select=Id,Created,Modified,field_1" in flow.calls[-1][1]

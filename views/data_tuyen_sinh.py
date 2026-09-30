@@ -73,7 +73,7 @@ def new_contact_dialog():
         return
     if not confirmed:
         S.pop("_dup_pending", None)
-        dups = services.find_duplicates(storage, values)
+        dups = services.find_duplicates(ui.records(TUYEN_SINH), values)
         if dups:
             S["_dup_pending"] = (save_open, len(dups))
             st.warning(f"Đã có {len(dups)} liên hệ trùng họ tên và SĐT trong năm học "
@@ -214,7 +214,7 @@ def render_detail(item_id: str):
         if submitted:
             values["TrangThai"] = step
             values["NamHoc"] = values.get("NamHoc") or nam_hoc
-            dups = services.find_duplicates(storage, values, item_id)
+            dups = services.find_duplicates(ui.records(TUYEN_SINH), values, item_id)
             if ui.mutate(services.save_tuyen_sinh, storage, values, item_id,
                          success="Đã lưu thay đổi") is not None:
                 if dups:

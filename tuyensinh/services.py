@@ -97,12 +97,15 @@ def _clean(ld: ListDef, data: dict) -> dict:
 
 
 # ------------------------------------------------------------------ Tuyển sinh
-def find_duplicates(storage: Storage, data: dict, exclude_id: str | None = None) -> list[dict]:
-    """HS trùng SĐT + họ tên trong cùng năm học."""
+def find_duplicates(source, data: dict, exclude_id: str | None = None) -> list[dict]:
+    """HS trùng SĐT + họ tên trong cùng năm học.
+
+    `source`: Storage hoặc danh sách bản ghi đã tải sẵn (tránh đọc lại cả list)."""
     phone = normalize_phone(data.get("SDT"))
     name = str(data.get("HoTenHS", "")).strip().lower()
+    items = source.list_items(TUYEN_SINH.name) if hasattr(source, "list_items") else source
     return [
-        it for it in storage.list_items(TUYEN_SINH.name)
+        it for it in items
         if it.get("NamHoc") == data.get("NamHoc") and it["id"] != exclude_id
         and normalize_phone(it.get("SDT")) == phone
         and str(it.get("HoTenHS", "")).strip().lower() == name

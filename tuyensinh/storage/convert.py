@@ -152,5 +152,9 @@ class ColumnMap:
                     v = ""
             elif types.get(key) == BOOL and isinstance(v, str):
                 v = _norm(v) in ("x", "true", "1", "có")
+            elif types.get(key) not in (NUMBER, BOOL) and isinstance(v, (int, float)) \
+                    and not isinstance(v, bool):
+                # cột Số trên SharePoint (vd Khối trong list tạo từ Excel) -> "10", không "10.0"
+                v = str(int(v)) if float(v).is_integer() else str(v)
             out[key] = v
         return out
