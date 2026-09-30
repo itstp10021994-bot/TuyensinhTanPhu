@@ -36,8 +36,8 @@ def _find(item_id: str) -> dict | None:
 
 
 # ================================================================== hộp thoại
-QUICK = ["HoTenHS", "SDT", "Khoi", "NgayLienHe", "Nguon", "TenLienHe", "CheDo", "GioiTinh",
-         "NamHoc", "GhiChu"]
+TRUONG_LABELS = {"TruongCu_Tinh": "Tỉnh/Thành phố", "TruongCu_QuanHuyen": "Phường/Xã",
+                 "TruongCu": "Tên trường"}
 
 
 @st.dialog("Thêm liên hệ mới", width="large", on_dismiss="rerun")
@@ -48,16 +48,24 @@ def new_contact_dialog():
               "NguoiNhanHoSo": ui.current_user()}
     st.caption("Nhập thông tin tối thiểu để lưu liên hệ. Các thông tin khác bổ sung sau "
                "trong hồ sơ.")
-    with st.form(f"f_{prefix}", border=False, enter_to_submit=False):
-        values = ui.record_form([F(k) for k in QUICK[:4]], record, prefix, 2)
-        values.update(ui.record_form([F(k) for k in QUICK[4:9]], record, prefix, 3))
-        values.update(ui.record_form([F("GhiChu")], record, prefix, 1))
-        ui.required_hint()
-        c1, c2 = st.columns(2)
-        save_open = c1.form_submit_button("Lưu và mở hồ sơ", type="primary", width="stretch",
-                                          icon=":material/check:")
-        save_more = c2.form_submit_button("Lưu và thêm tiếp", width="stretch",
-                                          icon=":material/add:")
+    # Không dùng st.form: ô Phường/Xã và gợi ý trường phải đổi ngay khi chọn Tỉnh
+    st.markdown("**Học sinh**")
+    values = ui.record_form([F(k) for k in ("HoTenHS", "Khoi", "GioiTinh")], record, prefix, 3)
+    st.markdown("**Liên hệ**")
+    values.update(ui.record_form([F(k) for k in ("SDT", "TenLienHe", "Nguon")],
+                                 record, prefix, 3))
+    values.update(ui.record_form([F(k) for k in ("NgayLienHe", "NamHoc", "CheDo")],
+                                 record, prefix, 3))
+    st.markdown("**Trường cũ**")
+    values.update(ui.record_form([F(k) for k in ("TruongCu_Tinh", "TruongCu_QuanHuyen",
+                                                 "TruongCu")], record, prefix, 3, TRUONG_LABELS))
+    values.update(ui.record_form([F("GhiChu")], record, prefix, 1))
+    ui.required_hint()
+    c1, c2 = st.columns(2)
+    save_open = c1.button("Lưu và mở hồ sơ", type="primary", width="stretch",
+                          icon=":material/check:", key=f"{prefix}_save_open")
+    save_more = c2.button("Lưu và thêm tiếp", width="stretch", icon=":material/add:",
+                          key=f"{prefix}_save_more")
     values.update(TrangThai="Tư vấn", NguoiNhanHoSo=ui.current_user())
     confirmed = S.pop("_dup_confirm", False)
     if not (save_open or save_more or confirmed):
