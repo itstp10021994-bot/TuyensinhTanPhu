@@ -91,6 +91,8 @@ def test_build_truong_hoc_osm(tmp_path, monkeypatch):
     assert rows[1:] == ["Thành phố Hồ Chí Minh,Phường Tân Phú,Hoa Sen,Mầm non",
                         "Thành phố Hồ Chí Minh,Phường Tân Phú,Trường THCS Thử,THCS"]
     assert mod.cap_hoc("Trường TH-THCS-THPT Tân Phú", "school") == "Liên cấp"
+    assert mod.cap_hoc("Trường Trung học cơ sở - Trung học phổ thông Tân Phú",
+                       "school") == "Liên cấp"
     assert mod.cap_hoc("Trường THPT Trần Phú", "school") == "THPT"
     assert mod.cap_hoc("Trường Tiểu học Tân Sơn Nhì", "school") == "Tiểu học"
 

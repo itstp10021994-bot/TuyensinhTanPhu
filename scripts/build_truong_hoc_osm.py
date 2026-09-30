@@ -36,23 +36,26 @@ GIS_PARTS = [("https://raw.githubusercontent.com/ThangLeQuoc/vietnamese-province
               f"elasticsearch/provinces-gis-part-{i:02d}.ndjson") for i in range(1, 6)]
 OUT = danh_muc.TRUONG_CSV
 
-CAP = [  # (mẫu trong tên, cấp học) — kiểm tra theo thứ tự
-    (r"liên cấp|tiểu học.*(thcs|trung học)|th\s*[-–&,]\s*thcs|thcs\s*[-–&,]\s*thpt|"
-     r"th,?\s*thcs|nhiều cấp", "Liên cấp"),
-    (r"mầm non|mẫu giáo|nhà trẻ|kindergarten|preschool|mầm", "Mầm non"),
+CAP = [  # (mẫu trong tên, cấp học)
+    (r"mầm non|mẫu giáo|nhà trẻ|kindergarten|preschool", "Mầm non"),
     (r"tiểu học|\bth\b|primary", "Tiểu học"),
     (r"\bthcs\b|trung học cơ sở|secondary school|junior high", "THCS"),
-    (r"\bthpt\b|trung học phổ thông|high school|phổ thông", "THPT"),
+    (r"\bthpt\b|trung học phổ thông|high school", "THPT"),
 ]
 EXCLUDE = re.compile(r"đại học|cao đẳng|trung cấp|university|college|lái xe|trung tâm|"
                      r"anh ngữ|ngoại ngữ|tin học|driving|dạy nghề|học viện|academy", re.I)
 
 
 def cap_hoc(name: str, amenity: str) -> str:
+    """Cấp học suy ra từ tên; tên có từ 2 cấp trở lên (vd "THCS - THPT") là Liên cấp."""
     n = name.lower()
-    for pat, cap in CAP:
-        if re.search(pat, n):
-            return cap
+    caps = [cap for pat, cap in CAP if re.search(pat, n)]
+    if len(caps) > 1 or re.search(r"liên cấp|nhiều cấp", n):
+        return "Liên cấp"
+    if caps:
+        return caps[0]
+    if re.search(r"phổ thông", n):
+        return "THPT"
     return "Mầm non" if amenity == "kindergarten" else ""
 
 

@@ -39,8 +39,11 @@ Cả hai list đều có cột **Nam hoc**; mọi trang lọc theo năm học ch
   thành phố trực thuộc TW). Chọn tỉnh trước, danh sách phường/xã tự đổi theo; đổi tỉnh thì phường/xã
   cũ tự xóa. Tên tỉnh cũ trong dữ liệu (vd "Tỉnh Đồng Nai") được tự quy đổi sang tên mới.
   Cập nhật khi có nghị quyết mới: `python scripts/update_danh_muc.py`
-- **Trường cũ**: chọn Tỉnh → Phường/Xã → gợi ý trường thuộc phường/xã đó. Gợi ý lấy từ
-  `tuyensinh/data/truong_hoc.csv` và từ các trường đã nhập trước đây; vẫn gõ được tên trường mới.
+- **Trường cũ**: chọn Tỉnh → Phường/Xã → gợi ý trường thuộc phường/xã đó (trường đúng cấp với
+  khối đăng ký lên đầu, vd khối 10 → THCS). Danh mục `tuyensinh/data/truong_hoc.csv` (~8.600 trường
+  mầm non → THPT toàn quốc) được **tự động lấy từ OpenStreetMap** và gán Phường/Xã theo tọa độ trong
+  ranh giới sau sáp nhập — GitHub Actions *Cập nhật danh mục trường học* chạy hằng tháng, hoặc bấm
+  *Run workflow* để chạy ngay. Kèm các trường đã nhập trước đây; vẫn gõ được tên trường mới.
   Nạp danh mục trường (xuất từ CSDL ngành / Sở GD&ĐT, cột *Tỉnh/Thành phố, Phường/Xã, Tên trường,
   Cấp học*): `python scripts/import_truong_hoc.py ds_truong.xlsx`
 - Các danh mục khác (dân tộc, tôn giáo, quốc tịch, diện chính sách, khuyết tật, nội trú/bán trú)
