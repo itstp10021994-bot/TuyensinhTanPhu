@@ -1,131 +1,224 @@
-"""Báo cáo thống kê tuyển sinh."""
+"""Báo cáo: 24 mẫu báo cáo (tuyển sinh, tài chính, nhập học) — xem biểu đồ, bảng, xuất Excel.
+
+Tính toán nằm ở tuyensinh/reports.py; trang này chỉ chọn mẫu, lọc, vẽ và xuất file.
+"""
+from datetime import date
+
 import altair as alt
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import ui
-from tuyensinh.schema import KHOI, TRANG_THAI, TUYEN_SINH
+from tuyensinh import reports, ui
+from tuyensinh.schema import KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
 
+S = st.session_state
 nam_hoc = ui.nam_hoc()
-ts_all = ui.df(TUYEN_SINH, nam_hoc)
-actions = ui.page_header("Báo cáo", f"Thống kê tuyển sinh · năm học {nam_hoc}")
-export_slot = actions.container(width="content")
+SCHOOL = "Trường TH, THCS và THPT Tân Phú"
 
-if ts_all.empty:
-    with ui.section():
-        ui.empty_state("monitoring", "Chưa có dữ liệu để báo cáo",
-                       f"Năm học {nam_hoc} chưa có liên hệ nào.")
-    st.stop()
-
+# Bảng màu phân loại (thứ tự cố định, đã kiểm tra mù màu) — bước tuyển sinh dùng màu trạng thái
+CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
+ONE = CAT[0]
 STATUS_SCALE = alt.Scale(domain=list(TRANG_THAI), range=[ui.STATUS[s]["hex"] for s in TRANG_THAI])
-AXIS = {"labelFontSize": 12, "titleFontSize": 12, "titleFontWeight": 500}
+AXIS = {"labelFontSize": 12, "titleFontSize": 12, "titleFontWeight": 500, "gridOpacity": .35,
+        "domainOpacity": .4, "tickOpacity": .4}
+MONEY_WORDS = ("tiền", "thanh toán", "còn lại", "đã thu")
+
+ts_all = ui.df(TUYEN_SINH)
+nh_year = ui.df(NHAP_HOC, nam_hoc)
+ts_year = ts_all[ts_all["NamHoc"] == nam_hoc].reset_index(drop=True)
 
 
-def chart(c: alt.Chart, height: int = 280) -> alt.Chart:
+# ------------------------------------------------------------------ biểu đồ
+def _cfg(c: alt.Chart, height: int) -> alt.Chart:
     return (c.properties(height=height).configure_axis(**AXIS).configure_view(strokeWidth=0)
             .configure_legend(orient="top", title=None, labelFontSize=12, symbolType="circle"))
 
 
-# ------------------------------------------------------------------ bộ lọc
-d = pd.to_datetime(ts_all["NgayLienHe"])
-f1, f2 = st.columns([1.2, 3], vertical_alignment="bottom")
-rng = f1.date_input("Ngày liên hệ", value=(d.min().date(), d.max().date()), format="DD/MM/YYYY",
-                    key="bc_rng")
-khois = [k for k in KHOI if k in set(ts_all["Khoi"])]
-sel_khoi = f2.pills("Khối (bỏ trống = tất cả)", khois, selection_mode="multi", key="bc_khoi")
-ts = ts_all
-if isinstance(rng, tuple) and len(rng) == 2:
-    ts = ts[(d.dt.date >= rng[0]) & (d.dt.date <= rng[1])]
-if sel_khoi:
-    ts = ts[ts["Khoi"].isin(sel_khoi)]
-
-if ts.empty:
-    with ui.section():
-        ui.empty_state("filter_alt_off", "Không có dữ liệu trong bộ lọc",
-                       "Mở rộng khoảng ngày hoặc bỏ chọn khối.")
-    st.stop()
-
-# ------------------------------------------------------------------ KPI
-counts = ts["TrangThai"].value_counts()
-total, nhap = len(ts), int(counts.get("Nhập học", 0))
-nop = nhap + int(counts.get("Nộp hồ sơ", 0))
-k = ui.kpi_row(4)
-ui.kpi(k[0], "Liên hệ", total)
-ui.kpi(k[1], "Nộp hồ sơ", nop, f"{nop / total:.0%} số liên hệ")
-ui.kpi(k[2], "Nhập học", nhap, f"{nhap / nop:.0%} số hồ sơ" if nop else None)
-ui.kpi(k[3], "Rút hồ sơ", int(counts.get("Rút hồ sơ", 0)))
-
-# ------------------------------------------------------------------ theo khối
-pv = pd.crosstab(ts["Khoi"], ts["TrangThai"]).reindex(columns=list(TRANG_THAI), fill_value=0)
-pv = pv.reindex([k for k in KHOI if k in pv.index])
-pv["Tổng"] = pv.sum(axis=1)
-pv["Tỷ lệ nhập học"] = (pv["Nhập học"] / pv["Tổng"]).fillna(0)
-pv.index.name = "Khối"
-
-g1, g2 = st.columns([3, 2], gap="medium")
-with g1, ui.section("Học sinh theo khối và bước"):
-    long = ts.groupby(["Khoi", "TrangThai"]).size().reset_index(name="Số HS")
-    long["thứ tự"] = long["TrangThai"].map({s: i for i, s in enumerate(TRANG_THAI)})
-    st.altair_chart(chart(alt.Chart(long).mark_bar(stroke="white", strokeWidth=1.5).encode(
-        x=alt.X("Khoi:N", title="Khối", sort=list(KHOI), axis=alt.Axis(labelAngle=0)),
-        y=alt.Y("Số HS:Q", title="Số học sinh"),
-        color=alt.Color("TrangThai:N", scale=STATUS_SCALE, sort=list(TRANG_THAI)),
-        order=alt.Order("thứ tự:Q"),
-        tooltip=[alt.Tooltip("Khoi:N", title="Khối"), alt.Tooltip("TrangThai:N", title="Bước"),
-                 "Số HS:Q"])), width="stretch")
-with g2, ui.section("Tỷ lệ nhập học theo khối"):
-    st.dataframe(pv.reset_index()[["Khối", "Tổng", "Nhập học", "Tỷ lệ nhập học"]].assign(
-                     **{"Tỷ lệ nhập học": (pv["Tỷ lệ nhập học"].values * 100).round()}),
-                 hide_index=True, width="stretch",
-                 column_config={"Tỷ lệ nhập học": st.column_config.ProgressColumn(
-                     format="%d%%", min_value=0, max_value=100)})
-
-# ------------------------------------------------------------------ nguồn + thời gian
-n1, n2 = st.columns(2, gap="medium")
-src = ts.assign(Nguon=ts["Nguon"].replace("", "Chưa rõ")).groupby("Nguon").agg(
-    **{"Liên hệ": ("id", "count"),
-       "Nhập học": ("TrangThai", lambda s: int((s == "Nhập học").sum()))}).reset_index()
-src["Tỷ lệ"] = src["Nhập học"] / src["Liên hệ"]
-with n1, ui.section("Nguồn tuyển sinh", "Số liên hệ và số nhập học theo nguồn"):
-    src_long = src.melt(["Nguon", "Tỷ lệ"], ["Liên hệ", "Nhập học"], var_name="Chỉ số",
-                        value_name="Số HS")
-    st.altair_chart(chart(alt.Chart(src_long).mark_bar(cornerRadiusEnd=3, height=10).encode(
-        y=alt.Y("Nguon:N", title=None, sort=alt.EncodingSortField("Số HS", "sum", "descending")),
-        x=alt.X("Số HS:Q", title="Số học sinh"),
-        yOffset=alt.YOffset("Chỉ số:N", sort=["Liên hệ", "Nhập học"]),
-        color=alt.Color("Chỉ số:N", scale=alt.Scale(
-            domain=["Liên hệ", "Nhập học"], range=[ui.STATUS["Tư vấn"]["hex"],
-                                                   ui.STATUS["Nhập học"]["hex"]])),
-        tooltip=[alt.Tooltip("Nguon:N", title="Nguồn"), "Chỉ số:N", "Số HS:Q",
-                 alt.Tooltip("Tỷ lệ:Q", title="Tỷ lệ nhập học", format=".0%")]),
-        height=max(220, 34 * len(src))), width="stretch")
-
-with n2, ui.section("Liên hệ mới theo tuần"):
-    wk = ts.assign(Tuan=pd.to_datetime(ts["NgayLienHe"]).dt.to_period("W").dt.start_time)
-    wk = wk.groupby("Tuan").size().reset_index(name="Số liên hệ")
-    line = alt.Chart(wk).encode(
-        x=alt.X("Tuan:T", title=None, axis=alt.Axis(format="%d/%m", labelAngle=0)),
-        y=alt.Y("Số liên hệ:Q", title="Số liên hệ"),
-        tooltip=[alt.Tooltip("Tuan:T", title="Tuần bắt đầu", format="%d/%m/%Y"), "Số liên hệ:Q"])
-    st.altair_chart(chart(line.mark_line(strokeWidth=2, color=ui.STATUS["Tư vấn"]["hex"])
-                          + line.mark_point(size=40, filled=True,
-                                            color=ui.STATUS["Tư vấn"]["hex"]),
-                          height=max(220, 34 * len(src))), width="stretch")
-
-# ------------------------------------------------------------------ chế độ
-cd = ts[ts["TrangThai"] == "Nhập học"]
-with ui.section("Chế độ của học sinh nhập học"):
-    if cd.empty:
-        ui.empty_state("hotel", "Chưa có học sinh nhập học")
+def draw(spec: dict):
+    data = spec["data"]
+    if data is None or len(data) == 0:
+        return
+    kind, x, y = spec["kind"], spec["x"], spec["y"]
+    color = spec.get("color")
+    horiz = spec.get("horizontal") or kind == "hbar"
+    yfmt = ",.0f"
+    tip = [alt.Tooltip(f"{x}:N", title=x)] + ([alt.Tooltip(f"{color}:N", title=color)]
+                                                if color else []) + \
+        [alt.Tooltip(f"{y}:Q", title=y, format=yfmt)]
+    n = data[x].nunique()
+    if kind == "line":
+        fmt = "%m/%Y" if spec.get("fmt") == "%m/%Y" else "%d/%m"
+        base = alt.Chart(data).encode(
+            x=alt.X(f"{x}:T", title=None, axis=alt.Axis(format=fmt, labelAngle=0)),
+            y=alt.Y(f"{y}:Q", title=None),
+            color=alt.Color(f"{color}:N", scale=alt.Scale(range=[CAT[0], CAT[2]])),
+            tooltip=[alt.Tooltip(f"{x}:T", title="Kỳ", format=spec.get("fmt", "%d/%m/%Y")),
+                     alt.Tooltip(f"{color}:N", title="Chỉ số"), alt.Tooltip(f"{y}:Q", title="Số HS")])
+        c = base.mark_line(strokeWidth=2) + base.mark_point(size=60, filled=True, stroke="white",
+                                                            strokeWidth=1.5)
+        st.altair_chart(_cfg(c, 300), width="stretch")
+        return
+    cat_axis = alt.Axis(labelLimit=260, labelAngle=0) if horiz else \
+        alt.Axis(labelAngle=0 if n <= 12 else -40, labelLimit=140)
+    # thanh ngang: xếp giảm dần; cột đứng: giữ thứ tự của bảng (khối, lớp, năm học…)
+    sort = alt.EncodingSortField(y, "sum", "descending") if horiz else list(
+        dict.fromkeys(data[x]))
+    cat = alt.Y(f"{x}:N", title=None, sort=sort, axis=cat_axis) if horiz else \
+        alt.X(f"{x}:N", title=None, sort=sort, axis=cat_axis)
+    money = spec.get("money")
+    vax = alt.Axis(labelExpr="format(datum.value / 1e6, ',.0f') + ' tr'") if money else \
+        alt.Axis(format="d")
+    val = alt.X(f"{y}:Q", title=None, axis=vax) if horiz else alt.Y(f"{y}:Q", title=None, axis=vax)
+    if money:  # nhãn "89,8 tr" (triệu đồng)
+        data = data.assign(_lbl=[f"{v / 1e6:,.1f} tr".replace(",", "#").replace(".", ",")
+                                 .replace("#", ".") for v in data[y]])
+    enc = {"x": val, "y": cat} if horiz else {"x": cat, "y": val}
+    mark = alt.Chart(data).mark_bar(cornerRadiusEnd=4, stroke="white", strokeWidth=2,
+                                    **({"height": {"band": .7}} if horiz else
+                                       {"width": {"band": .7}}))
+    if kind == "stack":
+        enc["color"] = alt.Color(f"{color}:N", scale=STATUS_SCALE, sort=list(TRANG_THAI))
+        enc["order"] = alt.Order("_o:Q")
+        data = data.assign(_o=data[color].map({s: i for i, s in enumerate(TRANG_THAI)}))
+        mark = alt.Chart(data).mark_bar(stroke="white", strokeWidth=2)
+    elif kind in ("stack_cat", "group"):
+        doms = list(dict.fromkeys(data[color]))
+        enc["color"] = alt.Color(f"{color}:N", scale=alt.Scale(
+            domain=doms, range=[CAT[0], CAT[2]] if kind == "group" and len(doms) == 2
+            else CAT[:len(doms)]))
+        if kind == "group":
+            if horiz:
+                enc["yOffset"] = alt.YOffset(f"{color}:N")
+            else:
+                enc["xOffset"] = alt.XOffset(f"{color}:N")
+        else:
+            mark = alt.Chart(data).mark_bar(stroke="white", strokeWidth=2)
     else:
-        st.dataframe(pd.crosstab(cd["Khoi"].replace("", "Chưa rõ"),
-                                 cd["CheDo"].replace("", "Chưa rõ"), margins=True,
-                                 margins_name="Tổng")
-                     .rename_axis(index="Khối", columns=None).reset_index(),
-                     hide_index=True, width="stretch")
+        mark = mark.encode(color=alt.value(ONE))
+    h = max(240, min(700, 30 * n * (2 if kind == "group" else 1))) if horiz else 300
+    labels = None
+    if kind in ("hbar", "bar") and n <= 25:  # nhãn giá trị ở đầu thanh
+        labels = alt.Chart(data).mark_text(
+            align="left" if horiz else "center", baseline="middle" if horiz else "bottom",
+            dx=4 if horiz else 0, dy=0 if horiz else -4, fontSize=11, color="#64748B").encode(
+            **({"x": val, "y": cat} if horiz else {"x": cat, "y": val}),
+            text=alt.Text("_lbl:N") if money else alt.Text(f"{y}:Q", format=",.0f"))
+    c = mark.encode(**enc, tooltip=tip)
+    st.altair_chart(_cfg(c + labels if labels is not None else c, h), width="stretch")
 
-ui.download_excel("Tải báo cáo Excel", {
-    "Khoi_Buoc": pv.reset_index(),
-    "Nguon": src.rename(columns={"Nguon": "Nguồn"}),
-    "Data_TuyenSinh": ts.drop(columns=["Created", "Modified"]),
-}, f"BaoCaoTuyenSinh_{nam_hoc}.xlsx", container=export_slot, primary=True, key="bc_export")
+
+def fmt_kpi(label: str, v) -> str:
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        if any(w in label.lower() for w in MONEY_WORDS):
+            return ui.money(v)
+        return f"{v:,.0f}".replace(",", ".") if float(v).is_integer() else f"{v:,.1f}"
+    return str(v)
+
+
+def table(df: pd.DataFrame):
+    cfg = {}
+    for c in df.columns:
+        if "(đ)" in c:
+            cfg[c] = st.column_config.NumberColumn(format="localized")
+        elif "(%)" in c:
+            cfg[c] = st.column_config.ProgressColumn(format="%.1f%%", min_value=0, max_value=100)
+        elif df[c].dtype == object and len(df) and isinstance(df[c].dropna().iloc[0]
+                                                             if df[c].notna().any() else None,
+                                                             date):
+            cfg[c] = st.column_config.DateColumn(format="DD/MM/YYYY")
+    st.dataframe(df, hide_index=True, width="stretch", column_config=cfg,
+                 height=min(560, 38 + 35 * max(len(df), 1)))
+
+
+# ------------------------------------------------------------------ trang
+actions = ui.page_header("Báo cáo", f"{len(reports.REPORTS)} mẫu báo cáo · năm học {nam_hoc}")
+all_slot = actions.container(width="content")
+
+nav, main = st.columns([1, 3.3], gap="medium")
+with nav:
+    groups = list(dict.fromkeys(r.group for r in reports.REPORTS))
+    grp = st.segmented_control("Nhóm", groups, default=groups[0], required=True, key="bc_grp",
+                               label_visibility="collapsed")
+    in_grp = [r for r in reports.REPORTS if r.group == grp]
+    if S.get("bc_rep") not in [r.id for r in in_grp]:
+        S["bc_rep"] = in_grp[0].id
+    with st.container(border=True):
+        rid = st.radio("Mẫu báo cáo", [r.id for r in in_grp], key="bc_rep",
+                       format_func=lambda i: reports.BY_ID[i].title,
+                       label_visibility="collapsed")
+
+rep = reports.BY_ID[rid]
+with main:
+    # ---- bộ lọc chung + tham số của mẫu
+    f = st.columns([1.3, 2.4, 1.1], vertical_alignment="bottom", gap="small")
+    d = pd.to_datetime(ts_year["NgayLienHe"], errors="coerce")
+    rng = None
+    if rep.group == reports.G_TS and rep.id != "ts_sosanh" and d.notna().any():
+        rng = f[0].date_input("Ngày liên hệ", value=(d.min().date(), d.max().date()),
+                              format="DD/MM/YYYY", key="bc_rng")
+    khois = [k for k in KHOI if k in set(ts_year["Khoi"]) | set(nh_year["Khoi"])]
+    sel_khoi = f[1].pills("Khối", khois, selection_mode="multi", key="bc_khoi",
+                          help="Bỏ trống = tất cả khối")
+    params = {}
+    if "ky" in rep.params:
+        params["ky"] = f[2].segmented_control("Kỳ", ["Tháng", "Tuần"], default="Tháng",
+                                              required=True, key="bc_ky")
+    if "top" in rep.params:
+        params["top"] = f[2].number_input("Số trường", 5, 200, 30, 5, key="bc_top")
+    if "ngay" in rep.params:
+        params["ngay"] = f[2].number_input("Quá số ngày", 1, 365, 14, key="bc_ngay")
+
+    ts = ts_year
+    if rng and isinstance(rng, tuple) and len(rng) == 2:
+        ts = ts[(d.dt.date >= rng[0]) & (d.dt.date <= rng[1])]
+    nh = nh_year
+    if sel_khoi:
+        ts, nh = ts[ts["Khoi"].isin(sel_khoi)], nh[nh["Khoi"].isin(sel_khoi)]
+    ctx = reports.Ctx(ts.reset_index(drop=True), nh.reset_index(drop=True), ts_all, nam_hoc,
+                      params)
+
+    # ---- nội dung báo cáo
+    with st.container(border=True):
+        h1, h2 = st.columns([3, 1.2], vertical_alignment="center")
+        h1.markdown(f"#### {rep.title}")
+        h1.caption(rep.desc + (f" · Khối {', '.join(sel_khoi)}" if sel_khoi else ""))
+        try:
+            res = rep.fn(ctx)
+        except Exception as e:  # dữ liệu bất thường: báo lỗi của riêng mẫu này
+            ui.error_state(e, compact=True)
+            st.stop()
+        items = reports.export_items(rep, res)
+        h2.download_button("Tải báo cáo (Excel)", lambda: reports.excel(items, SCHOOL, nam_hoc),
+                           file_name=f"{rep.id}_{nam_hoc}.xlsx", mime=ui.XLSX,
+                           icon=":material/download:", on_click="ignore", width="stretch",
+                           type="primary")
+        if res.kpis:
+            cols = st.columns(len(res.kpis))
+            for col, (label, v) in zip(cols, res.kpis):
+                ui.kpi(col, label, fmt_kpi(label, v))
+        if res.table.empty:
+            ui.empty_state("inbox", "Không có dữ liệu", "Không có học sinh phù hợp với bộ lọc.")
+        else:
+            if res.chart:
+                draw(res.chart)
+            table(res.table)
+        if res.note:
+            st.caption(f":material/info: {res.note}")
+
+
+def _all_reports() -> bytes:
+    items = []
+    for r in reports.REPORTS:
+        if r.id == "nh_danhsach":  # danh sách lớp xuất riêng (nhiều sheet)
+            continue
+        try:
+            items += reports.export_items(r, r.fn(ctx))
+        except Exception:
+            continue
+    return reports.excel(items, SCHOOL, nam_hoc)
+
+
+all_slot.download_button("Tải tất cả báo cáo", _all_reports,
+                         file_name=f"BaoCao_TongHop_{nam_hoc}_{date.today():%Y%m%d}.xlsx",
+                         mime=ui.XLSX, icon=":material/folder_zip:", on_click="ignore",
+                         help="Một file Excel, mỗi báo cáo một sheet (theo bộ lọc hiện tại)")
