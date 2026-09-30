@@ -130,6 +130,9 @@ def import_rows(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
         data.setdefault("NamHoc", nam_hoc)
         rows.append((i, data))
 
+    linked = 0
+    if ld is NHAP_HOC:
+        linked = link_tuyen_sinh(storage, [d for _, d in rows])
     if hasattr(storage, "colmap"):  # đọc cấu trúc cột 1 lần trước khi ghi song song
         storage.colmap(ld.name)
     # Đếm số bản đã có trên list theo dấu hiệu; chỉ bỏ qua đúng số đó (dòng trùng nhau
@@ -173,4 +176,38 @@ def import_rows(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
             if progress:
                 progress(done, total)
     return {"ok": ok, "skipped": skipped, "errors": sorted(errors, key=lambda e: e["Dòng"]),
-            "total": len(rows)}
+            "total": len(rows), "linked": linked}
+
+
+def link_tuyen_sinh(storage: Storage, rows: list[dict]) -> int:
+    """Gán TuyenSinhID cho hồ sơ nhập học chưa có: cùng họ tên và SĐT (hoặc ngày sinh) với
+    một học sinh ở Data tuyển sinh, ưu tiên cùng năm học. Trả về số hồ sơ đã liên kết."""
+    todo = [d for d in rows if _blank(d.get("TuyenSinhID"))]
+    if not todo:
+        return 0
+    index: dict[tuple, list[dict]] = {}
+    for ts in storage.list_items(TUYEN_SINH.name):
+        name = danh_muc.fold(ts.get("HoTenHS"))
+        if not name:
+            continue
+        keys = [("sdt", name, services.normalize_phone(ts.get("SDT")))]
+        if not _blank(ts.get("NgaySinh")):
+            keys.append(("ns", name, str(ts["NgaySinh"])[:10]))
+        for k in keys:
+            if k[2]:
+                index.setdefault(k, []).append(ts)
+    n = 0
+    for d in todo:
+        name = danh_muc.fold(d.get("HoTen"))
+        phones = {services.normalize_phone(d.get(k)) for k in
+                  ("DienThoaiSLL", "DienThoaiBo", "DienThoaiMe", "DienThoaiNGH")} - {""}
+        cands = [ts for p in phones for ts in index.get(("sdt", name, p), [])]
+        if not cands and not _blank(d.get("NgaySinh")):
+            cands = index.get(("ns", name, str(d["NgaySinh"])[:10]), [])
+        if not cands:
+            continue
+        same_year = [ts for ts in cands if ts.get("NamHoc") == d.get("NamHoc")]
+        best = max(same_year or cands, key=lambda ts: str(ts.get("NamHoc") or ""))
+        d["TuyenSinhID"] = str(best["id"])
+        n += 1
+    return n

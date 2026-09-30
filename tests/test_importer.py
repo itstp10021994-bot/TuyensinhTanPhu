@@ -44,3 +44,21 @@ def test_read_frame_nhan_ten_hien_thi(tmp_path):
                   "Cột lạ": [1]}).to_excel(p, index=False)
     df, skipped = importer.read_frame(str(p), TUYEN_SINH)
     assert list(df.columns) == ["HoTenHS", "SDT", "NamHoc"] and skipped == ["Cột lạ"]
+
+
+def test_link_tuyen_sinh(tmp_path):
+    from tuyensinh import importer
+    from tuyensinh.schema import TUYEN_SINH
+    from tuyensinh.storage.local import LocalStorage
+
+    st = LocalStorage(str(tmp_path / "t.db"))
+    a = st.create_item(TUYEN_SINH.name, {"HoTenHS": "Trần Gia Bảo", "SDT": "0903750252",
+                                         "NamHoc": "2025-2026"})
+    b = st.create_item(TUYEN_SINH.name, {"HoTenHS": "Hồ Duy", "NgaySinh": "2013-09-08",
+                                         "NamHoc": "2025-2026"})
+    rows = [{"HoTen": "TRẦN GIA BẢO", "DienThoaiMe": "0903 750 252", "NamHoc": "2026-2027"},
+            {"HoTen": "Hồ Duy", "NgaySinh": "2013-09-08 00:00:00", "NamHoc": "2025-2026"},
+            {"HoTen": "Người Khác", "DienThoaiSLL": "0903750252"}]
+    assert importer.link_tuyen_sinh(st, rows) == 2
+    assert rows[0]["TuyenSinhID"] == str(a["id"]) and rows[1]["TuyenSinhID"] == str(b["id"])
+    assert "TuyenSinhID" not in rows[2]

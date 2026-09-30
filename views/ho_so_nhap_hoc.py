@@ -134,13 +134,18 @@ def render_detail(item_id: str):
                 for who, keys in [("Cha", ["TenCha", "NamSinhCha", "NgheNghiepCha", "CanCuocCha",
                                            "DonViCongTacCha"]),
                                   ("Mẹ", ["TenMe", "NamSinhMe", "NgheNghiepMe", "CanCuocMe",
-                                          "DonViCongTacMe"])]:
+                                          "DonViCongTacMe"]),
+                                  ("Email", ["EmailCha", "EmailMe"]),
+                                  ("Người giám hộ", ["NguoiGiamHo", "NamSinhNGH", "NgheNghiepNGH",
+                                                     "CanCuocNGH", "DienThoaiNGH", "EmailNGH"])]:
                     st.markdown(f"**{who}**")
                     values.update(ui.record_form([F(k) for k in keys], rec, prefix, 3))
             elif g == G_GIAYTO:
                 values.update(ui.record_form(
                     [F(k) for k in ("CanCuoc", "NgayCapCanCuoc", "NoiCapCanCuoc",
-                                    "DienChinhSach", "KhuyetTat", "NoiTruBanTru")], rec, prefix, 3))
+                                    "DienChinhSach", "KhuyetTat", "NoiTruBanTru", "MaBHYT")],
+                    rec, prefix, 3))
+                values.update(ui.record_form([F("HoSoDaNop")], rec, prefix, 1))
                 st.markdown("**Đối tượng**")
                 values.update(ui.record_form([F(k) for k in ("CanNgheo", "DoanVien", "DoiVien")],
                                              rec, prefix, 3))

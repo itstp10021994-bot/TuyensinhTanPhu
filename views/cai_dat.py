@@ -133,7 +133,9 @@ with ui.section("3. Nhập dữ liệu từ Excel",
                 ui.invalidate()
                 bar.progress(1.0, text="Hoàn tất")
                 st.success(f"Đã ghi **{res['ok']}** dòng · bỏ qua **{res['skipped']}** dòng đã có"
-                           f" · lỗi **{len(res['errors'])}**", icon=":material/check_circle:")
+                           f" · lỗi **{len(res['errors'])}**"
+                           + (f" · liên kết **{res['linked']}** hồ sơ với Data tuyển sinh"
+                              if ld is NHAP_HOC else ""), icon=":material/check_circle:")
                 if res["errors"]:
                     err = pd.DataFrame(res["errors"])
                     st.dataframe(err, hide_index=True, width="stretch")

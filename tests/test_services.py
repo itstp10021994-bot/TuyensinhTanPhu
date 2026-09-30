@@ -105,8 +105,9 @@ def test_export_vemis_layout(storage):
 
 def test_every_enrollment_field_is_exported():
     exported = {k for _, _, k in export_vemis.COLUMNS if k}
-    assert exported == set(NHAP_HOC.keys) - {"TuyenSinhID", "NamHoc", "TruongCu",
-                                             "TruongCu_PhuongXa", "TruongCu_Tinh"}
+    from tuyensinh.schema import NHAP_HOC_NGOAI_VEMIS
+
+    assert exported == set(NHAP_HOC.keys) - set(NHAP_HOC_NGOAI_VEMIS)
 
 
 def test_danh_muc_xa_depends_on_tinh():

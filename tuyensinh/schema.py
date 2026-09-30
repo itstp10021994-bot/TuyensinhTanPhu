@@ -59,6 +59,9 @@ PHAN_HE = ("IEP", "ESL")
 KHOI = tuple(str(i) for i in range(1, 13))
 CHE_DO = ("Nội trú", "Bán trú", "Ngoại trú")
 GIOI_TINH = ("Nam", "Nữ")
+# Tình trạng của hồ sơ nhập học (theo list cũ)
+TINH_TRANG_HS = ("Đang nhập hồ sơ", "Đang đóng phí", "Đã đóng phí", "Học tiếp",
+                 "Không học tiếp", "Rút hồ sơ")
 NGUON = ("Ban TS đến trường tư vấn", "Bạn bè - Người thân", "Quảng cáo tự động", "Mạng xã hội",
          "Hotline", "Trực tiếp", "Gần nhà", "Tự tìm hiểu", "PHHS trường giới thiệu",
          "CBNV Trường-IGC", "Giáo viên trường cũ", "Đi trường TS")
@@ -149,6 +152,11 @@ NHAP_HOC = ListDef(
         Field("QuocTich", "Quốc tịch", CHOICE, "@quoc_tich", group=G_CHUNG),
         Field("DanToc", "Dân tộc", CHOICE, "@dan_toc", group=G_CHUNG),
         Field("TonGiao", "Tôn giáo", CHOICE, "@ton_giao", group=G_CHUNG),
+        # Ngoài biểu mẫu VEMIS (không xuất ra file VEMIS)
+        Field("Khoi", "Khối", CHOICE, KHOI, group=G_CHUNG),
+        Field("PhanHe", "Phân hệ", CHOICE, PHAN_HE, free=True, group=G_CHUNG),
+        Field("TinhTrangHS", "Tình trạng hồ sơ", CHOICE, TINH_TRANG_HS, free=True, group=G_CHUNG),
+        Field("LopCu", "Lớp cũ", group=G_CHUNG),
         # Trường cũ: lấy từ Data tuyển sinh (không có trong biểu mẫu VEMIS)
         Field("TruongCu_Tinh", "Trường cũ - Tỉnh/Thành phố", CHOICE, "@tinh", group=G_CHUNG),
         Field("TruongCu_PhuongXa", "Trường cũ - Phường/Xã", CHOICE, "@xa:TruongCu_Tinh",
@@ -182,6 +190,8 @@ NHAP_HOC = ListDef(
         Field("DoiVien", "Đội viên", BOOL, group=G_GIAYTO),
         Field("KhuyetTat", "Khuyết tật", CHOICE, "@khuyet_tat", group=G_GIAYTO),
         Field("NoiTruBanTru", "N.trú, B.trú", CHOICE, "@noi_tru_ban_tru", group=G_GIAYTO),
+        Field("MaBHYT", "Mã số BHYT", group=G_GIAYTO),
+        Field("HoSoDaNop", "Hồ sơ đã nộp", NOTE, group=G_GIAYTO),
         # --- Gia đình
         Field("TenCha", "Tên cha", group=G_GIADINH),
         Field("NgheNghiepCha", "Nghề nghiệp cha", group=G_GIADINH),
@@ -193,14 +203,36 @@ NHAP_HOC = ListDef(
         Field("NamSinhMe", "Năm sinh mẹ", group=G_GIADINH),
         Field("CanCuocMe", "Căn cước mẹ", group=G_GIADINH),
         Field("DonViCongTacMe", "Đơn vị công tác mẹ", group=G_GIADINH),
+        Field("EmailCha", "Email cha", group=G_GIADINH),
+        Field("EmailMe", "Email mẹ", group=G_GIADINH),
+        Field("NguoiGiamHo", "Người giám hộ", group=G_GIADINH),
+        Field("NamSinhNGH", "Năm sinh người giám hộ", group=G_GIADINH),
+        Field("NgheNghiepNGH", "Nghề nghiệp người giám hộ", group=G_GIADINH),
+        Field("CanCuocNGH", "Căn cước người giám hộ", group=G_GIADINH),
+        Field("DienThoaiNGH", "Điện thoại người giám hộ", group=G_GIADINH),
+        Field("EmailNGH", "Email người giám hộ", group=G_GIADINH),
         # --- Liên lạc & khác
         Field("DienThoaiSLL", "Điện thoại SLL", group=G_LIENLAC),
         Field("EmailSLL", "Email SLL", group=G_LIENLAC),
         Field("DienThoaiBo", "Điện thoại bố", group=G_LIENLAC),
         Field("DienThoaiMe", "Điện thoại mẹ", group=G_LIENLAC),
         Field("DienThoaiHS", "Điện thoại HS", group=G_LIENLAC),
+        Field("KhanCap_Ten", "Liên hệ khẩn cấp - Họ tên", group=G_LIENLAC),
+        Field("KhanCap_SDT", "Liên hệ khẩn cấp - SĐT", group=G_LIENLAC),
+        Field("KhanCap_QuanHe", "Liên hệ khẩn cấp - Quan hệ", group=G_LIENLAC),
+        Field("DangKyXe", "Đăng ký xe đưa đón", group=G_LIENLAC),
+        Field("DiemDonTra", "Điểm đón trả", group=G_LIENLAC),
         Field("GhiChu", "Ghi chú", NOTE, group=G_LIENLAC),
     ),
 )
 
 ALL_LISTS = (TUYEN_SINH, NHAP_HOC)
+
+
+# Cột của Data_NhapHoc không có trong biểu mẫu VEMIS (chỉ dùng trong app / SharePoint)
+NHAP_HOC_NGOAI_VEMIS = (
+    "TuyenSinhID", "NamHoc", "TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu", "Khoi", "PhanHe",
+    "TinhTrangHS", "LopCu", "MaBHYT", "HoSoDaNop", "EmailCha", "EmailMe", "NguoiGiamHo",
+    "NamSinhNGH", "NgheNghiepNGH", "CanCuocNGH", "DienThoaiNGH", "EmailNGH", "KhanCap_Ten",
+    "KhanCap_SDT", "KhanCap_QuanHe", "DangKyXe", "DiemDonTra")
+

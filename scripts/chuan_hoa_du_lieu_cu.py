@@ -134,12 +134,7 @@ class Geo:
             if len(cands) != 1:
                 continue
             xa = cands[0]
-            for part in re.split(r",\s*(?![^()]*\))", truoc.replace("''", "'")):
-                m = re.match(r"\s*(.+?)\s*(?:\((.+)\))?\s*$", part)
-                if not m:
-                    continue
-                old_core = strip_prefix(m.group(1))
-                qual = strip_prefix(m.group(2) or "")
+            for old_core, qual in self._parts(truoc.replace("''", "'"), tinh):
                 self.new_from_old[(tinh, old_core)].append((xa, qual))
                 # quận/huyện cũ của xã cũ -> thêm vào phạm vi của quận/huyện đó
                 for prov, dist in self.old_wards.get(old_core, []):
@@ -147,6 +142,37 @@ class Geo:
                         self.wards_of_district[(prov, dist)].add((tinh, xa))
                 n += 1
         print(f"Bảng sáp nhập: {n} xã cũ -> xã mới")
+
+    def _parts(self, truoc: str, tinh: str) -> list[tuple[str, str]]:
+        """ "Phường 5, Phường 14 (Quận 11)" -> [("5", "11"), ("14", "11")].
+
+        Phường/xã không ghi quận/huyện: tên chỉ có ở một quận/huyện của tỉnh thì lấy quận đó;
+        tên trùng ở nhiều quận (vd "Phường 5") thì lấy quận ghi sau nó trong danh sách, hoặc
+        quận chung của cả danh sách."""
+        parts = []
+        for part in re.split(r",\s*(?![^()]*\))", truoc):
+            m = re.match(r"\s*(.+?)\s*(?:\((.+)\))?\s*$", part)
+            if m:
+                parts.append([strip_prefix(m.group(1)), strip_prefix(m.group(2) or ""), ""])
+        for p in parts:
+            if not p[1]:
+                ds = {strip_prefix(d) for pc, d in self.old_wards.get(p[0], [])
+                      if self.old_to_new.get(pc) == tinh}
+                if len(ds) == 1:
+                    p[1] = ds.pop()
+                else:
+                    p[2] = "?"  # trùng tên trong tỉnh
+        nxt = ""
+        for p in reversed(parts):
+            if p[1] and not p[2]:
+                nxt = p[1]
+            elif p[2] and nxt:
+                p[1] = nxt
+        known = {p[1] for p in parts if p[1]}
+        if len(known) == 1:
+            for p in parts:
+                p[1] = p[1] or next(iter(known))
+        return [(c, q) for c, q, _ in parts]
 
     def split_location(self, name: str, region: set, has_location: bool = False):
         """"THCS Hiệp Phước huyện Nhơn Trạch Đồng Nai" -> ("THCS Hiệp Phước", tỉnh, mã tỉnh cũ, huyện).
