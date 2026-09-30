@@ -1,43 +1,20 @@
-"""Nhập dữ liệu từ Excel vào list (chuyển dữ liệu từ Power Apps / file VEMIS).
+"""Nhập dữ liệu từ Excel vào list (có thể làm ngay trong app: trang "Cài đặt & đồng bộ").
 
-    # Data tuyển sinh: file "Export to Excel" từ list (cột "Nam hoc" có sẵn thì giữ nguyên)
-    python scripts/import_excel.py tuyensinh data_tuyen_sinh.xlsx --nam-hoc 2026-2027
+    # File chuẩn hóa / "Export to Excel" từ list (cột Năm học trong file được giữ nguyên)
+    python scripts/import_excel.py tuyensinh Data_TuyenSinh_chuan_hoa.xlsx --nam-hoc 2026-2027 --giu-nguyen
     # Tên cột khác -> khai báo ánh xạ: --map "Họ tên=HoTenHS" --map "Lớp=Khoi"
     # Hồ sơ nhập học từ file mẫu "Danh sách học sinh" (VEMIS, 2 dòng tiêu đề)
-    python scripts/import_excel.py nhaphoc hoc_sinh_toan_truong.xls --vemis --nam-hoc 2026-2027
+    python scripts/import_excel.py nhaphoc hoc_sinh_toan_truong.xlsx --vemis --nam-hoc 2026-2027
 """
 import argparse
 
 import _common  # noqa: F401
-import pandas as pd
 
-from tuyensinh import services
-from tuyensinh.export_vemis import COLUMNS, HEADER_ROW
+from tuyensinh import importer, services
 from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
 from tuyensinh.storage import create_storage
 
 LISTS = {"tuyensinh": TUYEN_SINH, "nhaphoc": NHAP_HOC}
-
-
-def _blank(v) -> bool:
-    try:
-        if pd.isna(v):
-            return True
-    except (TypeError, ValueError):
-        pass
-    return str(v).strip() in ("", "nan", "NaN", "NaT", "None")
-
-
-def read_vemis(path: str) -> pd.DataFrame:
-    raw = pd.read_excel(path, header=None, skiprows=HEADER_ROW + 1, dtype=str)
-    raw = raw.iloc[:, :len(COLUMNS)]
-    raw.columns = [key or "STT" for _, _, key in COLUMNS][:raw.shape[1]]
-    raw = raw.dropna(subset=["HoTen"])
-    for k in ("CanNgheo", "DoanVien", "DoiVien"):
-        raw[k] = raw[k].fillna("").str.strip().str.lower().eq("x")
-    for k in ("NgaySinh", "NgayVaoTruong", "NgayCapCanCuoc"):
-        raw[k] = pd.to_datetime(raw[k], dayfirst=True, errors="coerce").dt.date
-    return raw.drop(columns=["STT"])
 
 
 def main():
@@ -51,52 +28,31 @@ def main():
     ap.add_argument("--sheet", help="tên sheet (mặc định: sheet Data_TuyenSinh/Data_NhapHoc nếu có)")
     ap.add_argument("--giu-nguyen", action="store_true",
                     help="chuyển dữ liệu cũ: ghi cả dòng thiếu trường bắt buộc, không kiểm tra")
+    ap.add_argument("--ghi-trung", action="store_true",
+                    help="không bỏ qua dòng đã có trên list")
     args = ap.parse_args()
     ld = LISTS[args.list]
 
-    if args.vemis:
-        df = read_vemis(args.file)
-    else:
-        if args.file.endswith(".csv"):
-            df = pd.read_csv(args.file, dtype=str)
-        else:
-            sheets = pd.ExcelFile(args.file).sheet_names
-            sheet = args.sheet or (ld.name if ld.name in sheets else sheets[0])
-            df = pd.read_excel(args.file, sheet_name=sheet, dtype=str)
-        # nhận cả tên hiển thị trên SharePoint (file xuất từ list) lẫn nhãn trong app
-        rename = {f.label: f.key for f in ld.fields}
-        rename.update({f.sp_title: f.key for f in ld.fields})
-        rename.update(dict(m.split("=", 1) for m in args.map))
-        df = df.rename(columns=rename)
-    keep = [c for c in df.columns if c in ld.keys or c == "Title"]
-    print(f"Các cột nhận được: {keep}")
-    print(f"Bỏ qua: {[c for c in df.columns if c not in ld.keys and c != 'Title']}")
-    df = df[keep].dropna(how="all")
-
-    storage = create_storage()
-    ok = err = 0
-    for i, row in df.iterrows():
-        data = {k: v for k, v in row.to_dict().items() if not _blank(v)}
-        data.setdefault("NamHoc", args.nam_hoc)
-        try:
-            if args.giu_nguyen and not args.dry_run:
-                clean = services._clean(ld, data)
-                if data.get("Title"):
-                    clean["Title"] = data["Title"]
-                storage.create_item(ld.name, clean)
-            elif args.dry_run:
-                errs = services.validate(ld, data)
-                if errs:
-                    raise ValueError("; ".join(errs))
-            elif ld is TUYEN_SINH:
-                services.save_tuyen_sinh(storage, data)
-            else:
-                services.save_nhap_hoc(storage, data)
-            ok += 1
-        except ValueError as e:
-            err += 1
-            print(f"  Dòng {i + 2}: {e}")
-    print(f"Thành công {ok}, lỗi {err}")
+    df, skipped_cols = importer.read_frame(args.file, ld, args.sheet, args.vemis,
+                                           dict(m.split("=", 1) for m in args.map))
+    print(f"Các cột nhận được: {list(df.columns)}")
+    print(f"Bỏ qua: {skipped_cols}")
+    if args.dry_run:
+        bad = 0
+        for i, row in df.iterrows():
+            data = {k: v for k, v in row.to_dict().items() if not importer._blank(v)}
+            data.setdefault("NamHoc", args.nam_hoc)
+            errs = services.validate(ld, data)
+            if errs:
+                bad += 1
+                print(f"  Dòng {i + 2}: {'; '.join(errs)}")
+        print(f"{len(df)} dòng, {bad} dòng thiếu trường bắt buộc")
+        return
+    res = importer.import_rows(create_storage(), ld, df, args.nam_hoc, keep_all=args.giu_nguyen,
+                               skip_existing=not args.ghi_trung)
+    for e in res["errors"]:
+        print(f"  Dòng {e['Dòng']}: {e['Lỗi']}")
+    print(f"Thành công {res['ok']}, bỏ qua (đã có) {res['skipped']}, lỗi {len(res['errors'])}")
 
 
 if __name__ == "__main__":

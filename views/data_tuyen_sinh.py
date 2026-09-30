@@ -297,7 +297,7 @@ def render_list():
         view = view[view["GiuCho"].replace("", "Chưa giữ chỗ") == giu]
     if q.strip():
         ql = q.strip().lower()
-        phone = services.normalize_phone(q)
+        phone = services.phone_query(q)
         mask = (view["HoTenHS"].str.lower().str.contains(ql, regex=False)
                 | view["TenLienHe"].str.lower().str.contains(ql, regex=False))
         if phone:
@@ -321,7 +321,7 @@ def render_list():
                            GiuCho=ui.tag_col(view["GiuCho"].replace("", "Chưa giữ chỗ")))
         ev = st.dataframe(
             show[["HoTenHS", "Khoi", "Buoc", "SDT", "NgayLienHe", "CheDo", "GiuCho"]],
-            key=f"ts_table_{S.ts_v}", on_select="rerun", selection_mode="single-row",
+            key=ui.table_key(f"ts_table_{S.ts_v}", view["id"]), on_select="rerun", selection_mode="single-row",
             hide_index=True, width="stretch", height=ui.table_height(len(show)),
             column_config={
                 "HoTenHS": st.column_config.TextColumn("Học sinh", width="medium", pinned=True),

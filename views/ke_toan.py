@@ -59,7 +59,7 @@ with tab_xn:
             view = view[view["Khoi"] == khoi]
         if q.strip():
             ql = q.strip().lower()
-            phone = services.normalize_phone(q)
+            phone = services.phone_query(q)
             mask = view["HoTenHS"].str.lower().str.contains(ql, regex=False)
             if phone:
                 mask |= view["SDT"].str.contains(phone, regex=False)
@@ -75,7 +75,7 @@ with tab_xn:
             ev = st.dataframe(
                 show[["HoTenHS", "Khoi", "Buoc", "GiuCho", "SoTienXacNhan"]],
                 hide_index=True, width="stretch", height=ui.table_height(len(show), 480),
-                on_select="rerun", selection_mode="single-row", key=f"kt_table_{S.kt_v}",
+                on_select="rerun", selection_mode="single-row", key=ui.table_key(f"kt_table_{S.kt_v}", view["id"]),
                 column_config={"HoTenHS": st.column_config.TextColumn("Học sinh", width="medium"),
                                "Khoi": st.column_config.TextColumn("Khối", width="small"),
                                "Buoc": ui.status_column(), "GiuCho": ui.giu_cho_column("Tình trạng"),

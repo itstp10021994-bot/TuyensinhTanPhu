@@ -25,6 +25,13 @@ def normalize_phone(v: str | None) -> str:
     return digits
 
 
+def phone_query(q: str) -> str:
+    """Ô tìm kiếm là SĐT (chỉ số, dấu cách, +, -, .) → SĐT chuẩn hóa; ngược lại "".
+    Tránh "Đồng Bộ 772" khớp mọi SĐT có "772"."""
+    q = (q or "").strip()
+    return normalize_phone(q) if q and re.fullmatch(r"[\d\s+().-]+", q) else ""
+
+
 def validate(ld: ListDef, data: dict) -> list[str]:
     errors = []
     for f in ld.fields:
@@ -158,9 +165,9 @@ def _che_do_to_vemis(che_do: str) -> str:
     return che_do if che_do in ("Nội trú", "Bán trú") else ""
 
 
-def sync_nhap_hoc(storage: Storage, ts: dict) -> dict:
-    """Tạo (hoặc bổ sung thông tin còn trống) hồ sơ nhập học từ bản ghi tuyển sinh."""
-    prefill = {
+def nhap_hoc_prefill(ts: dict) -> dict:
+    """Thông tin hồ sơ nhập học lấy sẵn từ bản ghi tuyển sinh."""
+    return {
         "TuyenSinhID": ts["id"],
         "NamHoc": ts.get("NamHoc", ""),
         "LopHoc": ts.get("Khoi", ""),
@@ -178,11 +185,34 @@ def sync_nhap_hoc(storage: Storage, ts: dict) -> dict:
         "TonGiao": "Không",
         "DienChinhSach": "Không",
     }
+
+
+def sync_nhap_hoc(storage: Storage, ts: dict) -> dict:
+    """Tạo (hoặc bổ sung thông tin còn trống) hồ sơ nhập học từ bản ghi tuyển sinh."""
+    prefill = nhap_hoc_prefill(ts)
     cur = nhap_hoc_of(storage, ts["id"])
     if cur is None:
         return storage.create_item(NHAP_HOC.name, _clean(NHAP_HOC, prefill))
     missing = {k: v for k, v in prefill.items() if v and not cur.get(k)}
     return storage.update_item(NHAP_HOC.name, cur["id"], _clean(NHAP_HOC, missing)) if missing else cur
+
+
+def tao_ho_so_hang_loat(storage: Storage, ts_records: list[dict], workers: int = 6,
+                        progress=None) -> int:
+    """Tạo hồ sơ nhập học cho nhiều HS: đọc Data_NhapHoc 1 lần, tạo các hồ sơ còn thiếu song song
+    (mỗi thao tác là 1 lần gọi flow Power Automate — làm tuần tự sẽ rất chậm)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    co_roi = {str(it.get("TuyenSinhID")) for it in storage.list_items(NHAP_HOC.name)}
+    todo = [ts for ts in ts_records if str(ts["id"]) not in co_roi]
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        for _ in pool.map(lambda ts: storage.create_item(
+                NHAP_HOC.name, _clean(NHAP_HOC, nhap_hoc_prefill(ts))), todo):
+            done += 1
+            if progress:
+                progress(done, len(todo))
+    return done
 
 
 def save_nhap_hoc(storage: Storage, data: dict, item_id: str | None = None) -> dict:

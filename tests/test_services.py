@@ -175,3 +175,19 @@ def test_column_map_new_list_uses_internal_names():
     cols = [{"name": f.key, "title": "x" + f.key, "type": "Text"} for f in TUYEN_SINH.fields]
     cm = ColumnMap(TUYEN_SINH.name, cols)
     assert cm.missing == [] and cm.internal["TruongCu_PhuongXa"] == "TruongCu_PhuongXa"
+
+
+def test_tao_ho_so_hang_loat(storage):
+    a = services.save_tuyen_sinh(storage, {**HS, "TrangThai": "Nhập học"})  # đã có hồ sơ
+    b = services.save_tuyen_sinh(storage, {**HS, "HoTenHS": "B"})
+    c = services.save_tuyen_sinh(storage, {**HS, "HoTenHS": "C"})
+    n = services.tao_ho_so_hang_loat(storage, [a, b, c], workers=2)
+    assert n == 2 and len(storage.list_items(NHAP_HOC.name)) == 3
+    assert services.tao_ho_so_hang_loat(storage, [a, b, c]) == 0
+
+
+def test_phone_query():
+    assert services.phone_query("0909 123 456") == "0909123456"
+    assert services.phone_query("+84 909123456") == "0909123456"
+    assert services.phone_query("Đồng Bộ 772") == ""
+    assert services.phone_query("") == ""

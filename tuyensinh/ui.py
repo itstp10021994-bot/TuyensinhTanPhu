@@ -8,6 +8,7 @@ Nguyên tắc:
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import traceback
 from contextlib import contextmanager
@@ -502,3 +503,10 @@ def download_excel(label: str, frames: dict[str, pd.DataFrame] | pd.DataFrame, f
     container.download_button(label, lambda: excel_bytes(frames), file_name=file_name,
                               mime=XLSX, icon=":material/download:", key=key,
                               type="primary" if primary else "secondary", on_click="ignore")
+
+
+def table_key(prefix: str, ids) -> str:
+    """Key cho bảng có chọn dòng: đổi khi tập dòng hiển thị đổi (lọc, tìm kiếm, dữ liệu mới)
+    để lựa chọn cũ — lưu theo vị trí dòng — không trỏ nhầm sang học sinh khác."""
+    h = hashlib.md5(",".join(map(str, ids)).encode()).hexdigest()[:10]
+    return f"{prefix}_{h}"

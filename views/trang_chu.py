@@ -102,7 +102,7 @@ with ui.section():
     ev = st.dataframe(
         recent[["HoTenHS", "Khoi", "Bước", "SDT", "NgayLienHe", "Nguon"]],
         hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-        key="home_recent",
+        key=ui.table_key("home_recent", recent["id"]),
         column_config={"HoTenHS": st.column_config.TextColumn("Học sinh", width="medium"),
                        "Khoi": st.column_config.TextColumn("Khối", width="small"),
                        "Bước": ui.status_column(), "SDT": "SĐT", "Nguon": "Nguồn",

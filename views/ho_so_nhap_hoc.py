@@ -186,10 +186,13 @@ def render_list():
             c1.markdown(f":material/info: **{len(chua_co)} học sinh** đã xác nhận nhập học "
                         "nhưng chưa có hồ sơ.")
             if c2.button("Tạo hồ sơ", icon=":material/sync:", width="stretch"):
-                def _sync_all():
-                    for _, r in chua_co.iterrows():
-                        services.sync_nhap_hoc(storage, r.to_dict())
-                if ui.mutate(_sync_all, success=f"Đã tạo {len(chua_co)} hồ sơ") is not None:
+                bar = st.progress(0.0, text="Đang tạo hồ sơ…")
+                n = ui.mutate(services.tao_ho_so_hang_loat, storage,
+                              [r.to_dict() for _, r in chua_co.iterrows()],
+                              progress=lambda d, t: bar.progress(d / max(t, 1),
+                                                                 text=f"Đã tạo {d}/{t} hồ sơ"),
+                              success=f"Đã tạo {len(chua_co)} hồ sơ")
+                if n is not None:
                     st.rerun()
 
     if nh.empty:
@@ -237,7 +240,7 @@ def render_list():
         ev = st.dataframe(
             show[["HoTen", "LopHoc", "NgaySinh", "GioiTinh", "DienThoaiSLL", "HoanThien",
                   "ConThieu"]],
-            key=f"nh_table_{S.nh_v}", on_select="rerun", selection_mode="single-row",
+            key=ui.table_key(f"nh_table_{S.nh_v}", view["id"]), on_select="rerun", selection_mode="single-row",
             hide_index=True, width="stretch", height=ui.table_height(len(show)),
             column_config={
                 "HoTen": st.column_config.TextColumn("Học sinh", width="medium", pinned=True),

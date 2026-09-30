@@ -1,24 +1,33 @@
-# Kết nối app với SharePoint qua Power Automate (Premium)
+# Đồng bộ app với SharePoint qua Power Automate (Premium)
 
-App không ghi thẳng vào SharePoint mà gửi yêu cầu tới **một flow** có trigger HTTP.
-Flow chuyển yêu cầu tới REST API của site `https://eduttc.sharepoint.com/sites/tuyensinh2`
-bằng tài khoản của người tạo flow, rồi trả kết quả về app. Chỉ cần **1 flow** cho mọi thao tác
-(đọc danh sách, thêm, sửa, xóa) trên cả 2 list *Data tuyển sinh* và *Data_NhapHoc*.
+## Cách hoạt động
+
+Mỗi lần bạn **lưu, chuyển bước, xác nhận giữ chỗ…** trên app, app gửi ngay một yêu cầu tới
+**một flow Power Automate**. Flow ghi vào SharePoint (site `tuyensinh2`) bằng tài khoản của người
+tạo flow, rồi trả kết quả về app. Không có bước "đồng bộ" riêng: **lưu trên app = lưu trên
+SharePoint** (app chỉ báo "Đã lưu" khi SharePoint ghi thành công).
 
 ```
-App Python ──POST {key, method, uri, body}──► Flow (HTTP trigger)
-                                              ├─ Kiểm tra key
-                                              ├─ Send an HTTP request to SharePoint
-                                              └─ Response (trả kết quả cho app)
+Người dùng ─► App (Streamlit) ──POST {key, method, uri, body}──► Flow "TuyenSinh-API"
+                                                                  ├─ Kiểm tra key
+                                                                  ├─ Send an HTTP request to SharePoint
+                                                                  └─ Response ─► App
 ```
 
-## Tạo flow
+- 1 flow dùng cho mọi thao tác (đọc, thêm, sửa, xóa) trên cả **Data_TuyenSinh** và **Data_NhapHoc**.
+- Sửa trực tiếp trên SharePoint thì app thấy sau tối đa 2 phút (hoặc bấm **Làm mới** ở Tổng quan).
+- Mỗi thao tác = 1 lần chạy flow; nhập 1.700 dòng dữ liệu cũ ≈ 1.700 lần chạy (vài phút).
 
-1. <https://make.powerautomate.com> → **Tạo** → **Luồng đám mây tức thời (Instant cloud flow)**
-   → đặt tên `TuyenSinh-API` → chọn trigger **When a HTTP request is received** (Premium) → Tạo.
-2. Trigger **When a HTTP request is received**
-   - *Who can trigger the flow?*: **Anyone** (URL có chữ ký bí mật + key ở bước 3).
-   - *Request Body JSON Schema*:
+---
+
+## Bước 1 — Tạo flow (khoảng 10 phút, làm 1 lần)
+
+1. Vào <https://make.powerautomate.com> → **+ Tạo** → **Luồng đám mây tức thời**
+   (*Instant cloud flow*) → đặt tên `TuyenSinh-API` → chọn trigger
+   **When a HTTP request is received** → **Tạo**.
+2. Bấm vào trigger:
+   - **Who can trigger the flow?** → **Anyone**.
+   - **Request Body JSON Schema** → dán:
      ```json
      {
        "type": "object",
@@ -30,65 +39,74 @@ App Python ──POST {key, method, uri, body}──► Flow (HTTP trigger)
        }
      }
      ```
-3. **Condition** (Điều kiện) — chuyển sang chế độ biểu thức và nhập:
+3. **+ Bước mới** → **Condition** (Điều kiện). Ở ô bên trái chọn **Expression** (biểu thức), dán:
    ```
-   and(equals(triggerBody()?['key'], 'DAT-MAT-KHAU-RIENG-O-DAY'), startsWith(triggerBody()?['uri'], '_api/web/lists'))
+   and(equals(triggerBody()?['key'], 'MAT-KHAU-CUA-BAN'), startsWith(triggerBody()?['uri'], '_api/web/lists'))
    ```
-   so sánh `is equal to` `true`.
-   - Nhánh **False**: thêm **Response**, Status code `403`, Body `Sai key`.
-4. Nhánh **True**: thêm **Send an HTTP request to SharePoint**
-   | Ô | Giá trị |
+   Toán tử **is equal to**, ô bên phải gõ `true`.
+   > Thay `MAT-KHAU-CUA-BAN` bằng một chuỗi bí mật tự đặt (ví dụ 24 ký tự ngẫu nhiên).
+4. Nhánh **If no / False** → thêm **Response**: *Status Code* `403`, *Body* `Sai key`.
+5. Nhánh **If yes / True** → thêm **Send an HTTP request to SharePoint**:
+
+   | Ô | Nhập |
    |---|---|
-   | Site Address | `https://eduttc.sharepoint.com/sites/tuyensinh2` |
-   | Method | *Enter custom value* → biểu thức `triggerBody()?['method']` |
-   | Uri | biểu thức `triggerBody()?['uri']` |
+   | Site Address | chọn `https://eduttc.sharepoint.com/sites/tuyensinh2` |
+   | Method | chọn *Enter custom value* → Expression `triggerBody()?['method']` |
+   | Uri | Expression `triggerBody()?['uri']` |
    | Headers | `Accept` = `application/json;odata=nometadata`<br>`Content-Type` = `application/json;odata=nometadata`<br>`IF-MATCH` = `*` |
-   | Body | biểu thức `triggerBody()?['body']` |
-5. Ngay sau đó (vẫn trong nhánh True) thêm **Response**
-   - Status code: biểu thức `outputs('Send_an_HTTP_request_to_SharePoint')?['statusCode']`
-   - Body: biểu thức `body('Send_an_HTTP_request_to_SharePoint')`
-   - Bấm **…** → **Configure run after** → tích cả **is successful** và **has failed**
-     (để app nhận được thông báo lỗi của SharePoint).
-6. **Lưu**. Mở lại trigger, sao chép **HTTP POST URL**.
+   | Body | Expression `triggerBody()?['body']` |
 
-> Tài khoản tạo flow cần quyền **Chỉnh sửa** trên site tuyensinh2 (để tạo list Data_NhapHoc
-> và thêm cột thì cần quyền **Quản lý / Owner**).
+6. Ngay dưới (vẫn trong nhánh True) thêm **Response**:
+   - *Status Code*: Expression `outputs('Send_an_HTTP_request_to_SharePoint')?['statusCode']`
+   - *Body*: Expression `body('Send_an_HTTP_request_to_SharePoint')`
+   - Bấm **…** của Response → **Configure run after** (Cài đặt chạy sau) → tích cả
+     **is successful** và **has failed** → Done. (Để app nhận được thông báo lỗi của SharePoint.)
+7. **Lưu**. Mở lại trigger → sao chép **HTTP POST URL** (URL dài có `sig=`).
 
-## Khai báo trong app
+> Tài khoản tạo flow cần quyền **Owner** trên site `tuyensinh2` (để app tạo list và cột ở Bước 3).
+> Giữ bí mật URL và key: ai có cả hai đều đọc/ghi được các list của site.
 
-`.streamlit/secrets.toml`:
+## Bước 2 — Khai báo trong app (Streamlit Cloud)
+
+<https://share.streamlit.io> → app → **⋮ → Settings → Secrets** → dán, thay 2 giá trị của bạn → **Save**:
 
 ```toml
 BACKEND = "powerautomate"
-SP_LIST_Data_TuyenSinh = "d0608833-bddf-4d28-a7db-402eb246c017"   # GUID list Data tuyển sinh (từ file .iqy)
+NAM_HOC = "2024-2025,2025-2026,2026-2027,2027-2028"
+NAM_HOC_MAC_DINH = "2026-2027"
+SP_LIST_Data_TuyenSinh = "Data_TuyenSinh"
 SP_LIST_Data_NhapHoc = "Data_NhapHoc"
+ADMIN_PASSWORD = "mat-khau-trang-cai-dat"   # bảo vệ trang Cài đặt & đồng bộ
 
 [powerautomate]
-flow_url = "https://prod-xx.southeastasia.logic.azure.com:443/workflows/.../invoke?api-version=...&sig=..."
-key = "DAT-MAT-KHAU-RIENG-O-DAY"      # giống key trong Condition của flow
+flow_url = "DÁN HTTP POST URL Ở BƯỚC 1.7"
+key = "MAT-KHAU-CUA-BAN"                    # giống key trong Condition ở bước 1.3
 ```
 
-Kiểm tra kết nối và cách app khớp cột:
+App tự khởi động lại. Thanh bên trái phải hiện **Dữ liệu: SharePoint**.
 
-```bash
-python scripts/inspect_sharepoint.py          # in cột của list, cột nào app đã khớp
-python scripts/setup_sharepoint.py --dry-run  # xem cần tạo gì
-python scripts/setup_sharepoint.py            # tạo list Data_NhapHoc + cột còn thiếu
-```
+## Bước 3 — Tạo list và đưa dữ liệu cũ lên (trong app, không cần cài gì)
 
-App tìm cột theo **tên hiển thị** (ví dụ "Họ tên HS", "Nam hoc", "Bước") nên không cần biết tên
-nội bộ. Nếu đổi tên hiển thị cột trên SharePoint, khai báo lại trong `secrets.toml`:
+Mở app → menu **Hệ thống → Cài đặt & đồng bộ**:
 
-```toml
-[field_map.Data_TuyenSinh]
-HoTenHS = "Ten_x0020_HS"    # key trong app = tên nội bộ cột
-```
+1. **Kiểm tra kết nối** → báo "chưa có list" là bình thường ở lần đầu.
+2. **Tạo list / thêm cột** → app tạo `Data_TuyenSinh` và `Data_NhapHoc` với đủ cột, đúng kiểu.
+3. **Kiểm tra kết nối** lại → cả hai list báo *kết nối được, đủ cột*.
+4. **Nhập dữ liệu từ Excel** → chọn file `Data_TuyenSinh_chuan_hoa.xlsx` → **Nhập … dòng**.
+   Bị ngắt giữa chừng thì bấm nhập lại: dòng đã lên SharePoint được bỏ qua, không tạo trùng.
+5. Vào **Hồ sơ nhập học** → bấm **Tạo hồ sơ** để tạo hồ sơ cho các học sinh đã ở bước Nhập học.
 
-## Ghi chú
+Từ đây mọi thao tác trên app được ghi thẳng lên SharePoint.
 
-- Mỗi thao tác của app = 1 lần chạy flow (tính vào hạn mức Power Automate Premium của tài khoản).
-  App lưu tạm dữ liệu 2 phút và chỉ tải lại sau khi có thay đổi.
-- Giữ bí mật **flow_url** và **key**: ai có cả hai đều đọc/ghi được các list của site.
-- Cột kiểu **Người (Person)**, ví dụ nếu "Người nhận hồ sơ" là cột Person, app chỉ đọc tên,
-  không ghi. Muốn app ghi được thì đổi cột đó sang kiểu *Single line of text*.
-- Ngày được ghi lúc 12:00 UTC và đọc theo giờ Việt Nam nên không bị lệch 1 ngày.
+## Xử lý sự cố
+
+| App báo | Nguyên nhân / cách xử lý |
+|---|---|
+| *Không có quyền truy cập SharePoint* (403) | Sai `key` trong Secrets so với Condition của flow, hoặc tài khoản flow thiếu quyền trên site |
+| *Không tìm thấy list* (404) | Chưa tạo list (Bước 3.2) hoặc `SP_LIST_…` trong Secrets khác tên list |
+| *Column '…' does not exist* | List thiếu cột → **Tạo list / thêm cột** |
+| Lỗi 429 / chậm | Power Automate giới hạn tốc độ — app tự thử lại; nhập Excel lớn thì chờ vài phút |
+| Xem chi tiết lỗi | Power Automate → flow `TuyenSinh-API` → **Lịch sử chạy (28 ngày)** |
+
+Dùng máy tính có Python thì các bước ở Bước 3 cũng làm được bằng
+`python scripts/setup_sharepoint.py` và `python scripts/import_excel.py …`.

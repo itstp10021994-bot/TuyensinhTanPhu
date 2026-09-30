@@ -45,9 +45,12 @@ P = {
                   url_path="ke-toan"),
     "bc": st.Page("views/bao_cao.py", title="Báo cáo", icon=":material/monitoring:",
                   url_path="bao-cao"),
+    "cd": st.Page("views/cai_dat.py", title="Cài đặt & đồng bộ", icon=":material/settings:",
+                  url_path="cai-dat"),
 }
 pg = st.navigation({"": [P["home"]], "Tuyển sinh": [P["ts"], P["nh"]],
-                    "Tài chính": [P["kt"]], "Phân tích": [P["bc"]]}, position="sidebar")
+                    "Tài chính": [P["kt"]], "Phân tích": [P["bc"]], "Hệ thống": [P["cd"]]},
+                   position="sidebar")
 
 with st.sidebar:
     years = config.school_years()
