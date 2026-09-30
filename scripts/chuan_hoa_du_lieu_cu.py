@@ -148,45 +148,68 @@ class Geo:
                 n += 1
         print(f"Bảng sáp nhập: {n} xã cũ -> xã mới")
 
-    def split_location(self, name: str, region: set):
+    def split_location(self, name: str, region: set, has_location: bool = False):
         """"THCS Hiệp Phước huyện Nhơn Trạch Đồng Nai" -> ("THCS Hiệp Phước", tỉnh, mã tỉnh cũ, huyện).
 
-        Chỉ tách tỉnh / quận-huyện ở CUỐI tên (giữ tên trường dài nhất); None nếu không có."""
-        sep = {"huyen", "quan", "tp", "tp.", "tinh", "thanh", "pho", "tx", "tx.", "-", "–", "o"}
-        toks = [t for t in re.split(r"[\s,]+", name) if t]
-        found = None
-        for j in range(len(toks) - 1, 0, -1):  # tail ngắn nhất trước
-            head = toks[:j]
-            while head and fold(head[-1]) in sep:
-                head = head[:-1]
-            tail = [t for t in toks[j:] if fold(t) not in sep]
-            if not head or not tail or not school_key(" ".join(head))[0]:
-                continue
+        Chỉ tách tỉnh / quận-huyện ở CUỐI tên. Để không cắt nhầm tên người ("Nguyễn Huệ" ≠ Huế,
+        "Nguyễn Thái Bình" ≠ tỉnh Thái Bình) hay "THCS TT Tân Biên":
+        - có dấu phân cách rõ ("-", ",", "huyện", "tỉnh"...) → tách;
+        - không có: phần địa chỉ >= 2 chữ, phần tên còn lại >= 2 chữ và dòng chưa có địa chỉ;
+        - không bao giờ tách ngay sau "TT / Thị trấn / Xã / Phường"."""
+        words = {"huyen", "quan", "tp", "tp.", "tinh", "thanh", "pho", "tx", "tx.", "o", "thi", "xa"}
+        dash = {"-", "–"}
+        raw_toks = re.split(r"(\s+|,)", name)
+        toks, seps_before = [], []
+        pending = False
+        for t in raw_toks:
+            if t == ",":
+                pending = True
+            elif t.strip():
+                if t in dash:
+                    pending = True
+                    continue
+                toks.append(t)
+                seps_before.append(pending)
+                pending = False
+
+        def core_words(head):
+            return school_key(" ".join(head))[0].split()
+
+        def ok_head(head, strong):
+            cw = core_words(head)
+            if not cw or cw[-1] in ("tt",) or fold(head[-1]) in ("tt", "tran", "xa", "phuong"):
+                return False
+            return strong or len(cw) >= 2
+
+        def try_at(j, toks_, pc=None, tinh=""):
+            head, tail = toks_[:j], toks_[j:]
+            strong = seps_before[j] if toks_ is toks else False
+            while head and fold(head[-1]) in words:  # "... huyện Nhơn Trạch"
+                head, strong = head[:-1], True
+            tail = [t for t in tail if fold(t) not in words]
+            if not head or not tail or not ok_head(head, strong):
+                return None
+            if not strong and (len(tail) < 2 or has_location):
+                return None
             txt = " ".join(tail)
-            tinh, pc = self.tinh(txt)
-            if tinh:
-                found = (head, tinh, pc, None)
-                break
-            dist = self.huyen(txt, None, "", allow_ward=False)
-            if dist and self.old_to_new.get(dist[0]) in region:
-                found = (head, self.old_to_new[dist[0]], dist[0], dist)
-                break
+            if not tinh:
+                t_, pc_ = self.tinh(txt)
+                if t_:
+                    return head, t_, pc_, None
+            d = self.huyen(txt, pc, tinh, allow_ward=False)
+            if d and (tinh or self.old_to_new.get(d[0]) in region):
+                return head, tinh or self.old_to_new[d[0]], d[0], d
+            return None
+
+        found = next((r for j in range(len(toks) - 1, 0, -1) if (r := try_at(j, toks))), None)
         if not found:
             return None
         head, tinh, pc, dist = found
         if not dist:  # còn quận/huyện đứng trước tỉnh? ("... huyện Nhơn Trạch Đồng Nai")
-            toks = head
-            for j in range(len(toks) - 1, 0, -1):
-                h = toks[:j]
-                while h and fold(h[-1]) in sep:
-                    h = h[:-1]
-                tail = [t for t in toks[j:] if fold(t) not in sep]
-                if not h or not tail or not school_key(" ".join(h))[0]:
-                    continue
-                d = self.huyen(" ".join(tail), pc, tinh, allow_ward=False)
-                if d:
-                    head, dist = h, d
-                    break
+            sub = next((r for j in range(len(head) - 1, 0, -1)
+                        if (r := try_at(j, head, pc, tinh)) and r[3]), None)
+            if sub:
+                head, dist = sub[0], sub[3]
         return " ".join(head), tinh, pc, dist
 
     def tinh_from_place(self, core: str, region: set) -> str:
@@ -317,7 +340,8 @@ class Schools:
                 return None
             if lv:  # tên có ghi cấp học: phải khớp cấp
                 cands = [c for c in cands if not c["lv"] or lv & c["lv"]]
-            elif by_khoi and len(cands) > 1:
+            elif by_khoi:  # không ghi cấp: loại trường sai cấp so với khối (vd mầm non cho khối 10)
+                cands = [c for c in cands if not c["lv"] or c["lv"] & by_khoi or len(c["lv"]) > 1]
                 pref = [c for c in cands if c["lv"] & by_khoi]
                 cands = pref or cands
             if wards:  # biết quận/huyện cũ: trường phải nằm trong đó
@@ -513,7 +537,7 @@ def main():
                     dist, huyen_raw = d_p, huyen_raw or d_p[1]
                 ten_raw = ""
         # Địa chỉ viết lẫn trong tên trường: tách ra, dùng khi dòng chưa có vị trí
-        split = geo.split_location(ten_raw, region) if ten_raw else None
+        split = geo.split_location(ten_raw, region, bool(tinh or dist)) if ten_raw else None
         if split:
             ten_raw = split[0]
             if not tinh or tinh == split[1]:
@@ -616,16 +640,18 @@ def main():
 
     # Gộp các cách viết của cùng một trường ("Bamboo", "BamBo", "Bamboo School")
     def squash(name):
-        return re.sub(r"school|\btruong\b|\s", "", fold(name))
+        # chỉ phần tên riêng (bỏ cấp học, "Trường", "School") + cấp học
+        core, lv = school_key(name)
+        return re.sub(r"school|\s", "", core), lv
 
     use = Counter((rec["TruongCu_Tinh"], fold(rec["TruongCu"])) for rec in out)
     groups = defaultdict(list)  # (tỉnh, nhóm) -> [key bo_sung]
     for k in sorted(bo_sung, key=lambda k: -use[k]):
-        tinh_k, sq = k[0], squash(bo_sung[k][2])
-        target = next((g for g in groups if g[0] == tinh_k and (g[1] == sq or (
+        tinh_k, (sq, lv) = k[0], squash(bo_sung[k][2])
+        target = next((g for g in groups if g[0] == tinh_k and g[2] == lv and (g[1] == sq or (
             min(len(sq), len(g[1])) >= 5
             and difflib.SequenceMatcher(None, g[1], sq).ratio() >= 0.9))), None)
-        groups[target or (tinh_k, sq)].append(k)
+        groups[target or (tinh_k, sq, lv)].append(k)
     for keys in groups.values():
         if len(keys) < 2:
             continue
@@ -642,7 +668,10 @@ def main():
             rec["TruongCu"] = bo_sung[k][2]
             if not rec["TruongCu_PhuongXa"] and bo_sung[k][1]:
                 rec["TruongCu_PhuongXa"] = bo_sung[k][1]
-    for row, rec in zip(report, out):
+    for row, rec, L in zip(report, out, loc):
+        if L["ten"] and "bổ sung" in row["Kết quả"] and \
+                fold(rec["TruongCu"]) != fold(full_school_name(L["ten"])):
+            row["Kết quả"] += " · đã gộp cách viết"
         row["Trường cũ (chuẩn)"], row["Phường/Xã mới"] = rec["TruongCu"], rec["TruongCu_PhuongXa"]
     rows_bs = sorted({tuple(v) for v in bo_sung.values()})
     pd.DataFrame(rows_bs, columns=["Tỉnh/Thành phố", "Phường/Xã", "Tên trường", "Cấp học"]).to_csv(

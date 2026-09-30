@@ -144,3 +144,39 @@ def test_danh_muc_bo_sung_duoc_goi_y(tmp_path, monkeypatch):
     assert danh_muc.cap_hoc("Trường Trung học cơ sở Thị trấn Tân Châu", "Tỉnh Tây Ninh") == "THCS"
     danh_muc._truong_index.cache_clear()
     danh_muc._truong_cap.cache_clear()
+
+
+def _mini_geo(c):
+    """Danh mục trước sáp nhập thu nhỏ (mã xã có trong danh mục mới để quy đổi tỉnh)."""
+    old = [
+        {"Code": "79", "FullName": "Thành phố Hồ Chí Minh", "District": [
+            {"FullName": "Quận 1", "Ward": [{"Code": "25747", "FullName": "Phường Bến Nghé"}]},
+            {"FullName": "Quận Tân Bình", "Ward": [{"Code": "25750", "FullName": "Phường 2"}]},
+            {"FullName": "Huyện Củ Chi", "Ward": [{"Code": "25760", "FullName": "Xã Tân Tiến"}]}]},
+        {"Code": "72", "FullName": "Tỉnh Tây Ninh", "District": [
+            {"FullName": "Huyện Tân Biên", "Ward": [{"Code": "25459", "FullName": "Thị trấn Tân Biên"}]}]},
+        {"Code": "75", "FullName": "Tỉnh Đồng Nai", "District": [
+            {"FullName": "Huyện Nhơn Trạch", "Ward": [{"Code": "25195", "FullName": "Xã Phước Thiền"}]}]},
+    ]
+    return c.Geo(old)
+
+
+def test_tach_dia_chi_khong_cat_nham_ten():
+    c = _load_script("chuan_hoa_du_lieu_cu")
+    g = _mini_geo(c)
+    region = {"Thành phố Hồ Chí Minh", "Tỉnh Tây Ninh", "Thành phố Đồng Nai"}
+
+    def split(name, has_location=False):
+        r = g.split_location(c.clean_school(name), region, has_location)
+        return r and (r[0], r[1], r[3] and r[3][1])
+
+    assert split("THCS Tân Tiến - Củ Chi") == ("THCS Tân Tiến", "Thành phố Hồ Chí Minh",
+                                               "Huyện Củ Chi")
+    assert split("Trường thcs hiệp phước huyện Nhơn Trạch đồng Nai") == (
+        "Trường thcs hiệp phước", "Thành phố Đồng Nai", "Huyện Nhơn Trạch")
+    assert split("Tiểu Học Lương Thế Vinh Tân Bình")[2] == "Quận Tân Bình"
+    # không được cắt: tên người trùng địa danh, "Thị trấn ...", số phường
+    for name in ("THCS Nguyễn Huệ", "THCS Khai Nguyên", "THCS TT Tân Biên", "THCS Phường 1",
+                 "THCS Nguyễn Tri Phương Huế", "THCS Nguyễn Trãi"):
+        assert split(name) is None, name
+    assert split("Tiểu Học Lương Thế Vinh Tân Bình", has_location=True) is None
