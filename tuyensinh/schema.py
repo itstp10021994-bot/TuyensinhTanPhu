@@ -66,6 +66,26 @@ NGUON = ("Ban TS đến trường tư vấn", "Bạn bè - Người thân", "Qu�
          "Hotline", "Trực tiếp", "Gần nhà", "Tự tìm hiểu", "PHHS trường giới thiệu",
          "CBNV Trường-IGC", "Giáo viên trường cũ", "Đi trường TS")
 HANH_KIEM = ("Tốt", "Khá", "Đạt", "Chưa đạt")
+HOC_LUC = ("Xuất sắc", "Giỏi", "Khá", "Đạt", "Chưa đạt", "Hoàn thành xuất sắc", "Hoàn thành tốt",
+           "Hoàn thành", "Chưa hoàn thành", "Tốt", "Trung bình")
+# Tổ hợp môn lựa chọn (THPT)
+TO_HOP_MON = ("Lý-Địa-GDKTPL-Tin học", "Lý-Hóa-Địa-Tin học", "Lý-Hóa-GDKTPL-Tin học",
+              "Lý-Hóa-Sinh-Tin học", "Hóa-Địa-GDKTPL-Tin học", "Sinh-Địa-GDKTPL-Tin học",
+              "Lý-Sinh-Địa-Tin học", "Hóa-Sinh-GDKTPL-Tin học", "Hóa-Sinh-Địa-Tin học")
+# Giấy tờ thu khi nhập học (nút "Thu hồ sơ")
+GIAY_TO_NHAP_HOC = (
+    "Phiếu đăng ký nhập học", "Thỏa thuận của Cha mẹ/Người giám hộ học sinh với nhà trường",
+    "Giấy khai sinh", "Học bạ Tiểu học", "Học bạ THCS", "Học bạ THPT",
+    "Hoàn thành chương trình tiểu học", "Đơn xét tuyển 10",
+    "Giấy chứng nhận trúng tuyển vào lớp 10", "Giấy chứng nhận tốt nghiệp THCS tạm thời",
+    "Bằng tốt nghiệp THCS", "Bảng điểm", "Đơn xin chuyển trường",
+    "Giấy giới thiệu chuyển trường của trường nơi chuyển đi",
+    "Giấy giới thiệu chuyển trường của Phòng GD/Sở GD")
+# Môn học ở "Quá trình học tập" (điểm 1, điểm 2 như app cũ)
+MON_HOC = (("Toan", "Toán"), ("Van", "Ngữ văn"), ("TV", "Tiếng Việt"), ("Anh", "Tiếng Anh"),
+           ("GDCD", "GDCD"), ("LSDL", "LS và ĐL"), ("KHTN", "KHTN"), ("Tin", "Tin học"),
+           ("CongNghe", "Công nghệ"), ("Ly", "Vật lý"), ("Hoa", "Hóa học"), ("Sinh", "Sinh học"),
+           ("Su", "Lịch sử"), ("Dia", "Địa lý"), ("GDKTPL", "GDKT&PL"))
 
 # ---------------------------------------------------------------- Data tuyển sinh
 # Khớp với list "Data tuyển sinh" hiện có trên site tuyensinh2 (sp = tên hiển thị cột).
@@ -131,6 +151,20 @@ TUYEN_SINH = ListDef(
 # Trùng với biểu mẫu "Danh sách học sinh" (import VEMIS / CSDL ngành).
 G_CHUNG, G_DIACHI, G_GIAYTO, G_GIADINH, G_LIENLAC = (
     "Thông tin chung", "Địa chỉ", "Giấy tờ & chính sách", "Gia đình", "Liên lạc & khác")
+G_HOCTAP, G_KHANCAP, G_NGANHANG, G_MON, G_HOCPHI = (
+    "Quá trình học tập", "Liên hệ khẩn cấp", "Tài khoản ngân hàng", "Lựa chọn môn",
+    "Hồ sơ & học phí")
+
+
+def _diem_fields() -> tuple:
+    out = []
+    for dot in ("1", "2"):
+        out.append(Field(f"HocLuc{dot}", f"Học lực {dot}", CHOICE, HOC_LUC, free=True,
+                         group=G_HOCTAP))
+        out.append(Field(f"HanhKiem{dot}", f"Hạnh kiểm {dot}", CHOICE, HANH_KIEM, free=True,
+                         group=G_HOCTAP))
+        out += [Field(f"{k}{dot}", f"{ten} {dot}", NUMBER, group=G_HOCTAP) for k, ten in MON_HOC]
+    return tuple(out)
 
 NHAP_HOC = ListDef(
     name="Data_NhapHoc",
@@ -140,7 +174,8 @@ NHAP_HOC = ListDef(
         # --- Thông tin chung
         Field("NamHoc", "Năm học", CHOICE, "@nam_hoc", required=True, sp="Nam hoc",
               group=G_CHUNG),
-        Field("LopHoc", "Lớp học", required=True, group=G_CHUNG),
+        # Không bắt buộc: HS mới nhập học thường "chưa xếp lớp" (vẫn tính vào mức hoàn thiện)
+        Field("LopHoc", "Lớp học", group=G_CHUNG),
         Field("MaHocSinh", "Mã học sinh", group=G_CHUNG),
         Field("MaVEMIS", "Mã VEMIS", group=G_CHUNG),
         Field("MaMOET", "Mã MOET", group=G_CHUNG),
@@ -217,11 +252,29 @@ NHAP_HOC = ListDef(
         Field("DienThoaiBo", "Điện thoại bố", group=G_LIENLAC),
         Field("DienThoaiMe", "Điện thoại mẹ", group=G_LIENLAC),
         Field("DienThoaiHS", "Điện thoại HS", group=G_LIENLAC),
-        Field("KhanCap_Ten", "Liên hệ khẩn cấp - Họ tên", group=G_LIENLAC),
-        Field("KhanCap_SDT", "Liên hệ khẩn cấp - SĐT", group=G_LIENLAC),
-        Field("KhanCap_QuanHe", "Liên hệ khẩn cấp - Quan hệ", group=G_LIENLAC),
-        Field("DangKyXe", "Đăng ký xe đưa đón", group=G_LIENLAC),
-        Field("DiemDonTra", "Điểm đón trả", group=G_LIENLAC),
+        Field("KhanCap_Ten", "Liên hệ khẩn cấp - Họ tên", group=G_KHANCAP),
+        Field("KhanCap_SDT", "Liên hệ khẩn cấp - SĐT", group=G_KHANCAP),
+        Field("KhanCap_QuanHe", "Liên hệ khẩn cấp - Quan hệ", group=G_KHANCAP),
+        Field("DangKyXe", "Đăng ký xe đưa đón", group=G_HOCPHI),
+        Field("DiemDonTra", "Điểm đón trả", group=G_HOCPHI),
+        # --- Quá trình học tập (điểm, học lực, hạnh kiểm ở trường cũ)
+        *_diem_fields(),
+        # --- Tài khoản ngân hàng (nhận hoàn phí)
+        Field("TenChuTaiKhoan", "Tên chủ tài khoản", group=G_NGANHANG),
+        Field("NganHang", "Ngân hàng", group=G_NGANHANG),
+        Field("SoTaiKhoan", "Số tài khoản", group=G_NGANHANG),
+        # --- Lựa chọn môn (tổ hợp môn THPT)
+        Field("LuaChon1", "Lựa chọn 1", CHOICE, TO_HOP_MON, free=True, group=G_MON),
+        Field("LuaChon2", "Lựa chọn 2", CHOICE, TO_HOP_MON, free=True, group=G_MON),
+        Field("LuaChon3", "Lựa chọn 3", CHOICE, TO_HOP_MON, free=True, group=G_MON),
+        # --- Hồ sơ & học phí
+        Field("NgayNhanHoSo", "Ngày nhận hồ sơ", DATE, group=G_HOCPHI),
+        Field("SoTienXacNhan", "Số tiền giữ chỗ", NUMBER, group=G_HOCPHI),
+        Field("SoTienThanhToan", "Số tiền PHHS thanh toán", NUMBER, group=G_HOCPHI),
+        Field("SoTienConLai", "Số tiền còn lại", NUMBER, group=G_HOCPHI),
+        Field("TongDaThu", "Tổng số tiền đã thu", NUMBER, group=G_HOCPHI),
+        Field("NgayDongPhi", "Ngày đóng phí", DATE, group=G_HOCPHI),
+        Field("KeToanXacNhan", "Kế toán xác nhận", group=G_HOCPHI),
         Field("GhiChu", "Ghi chú", NOTE, group=G_LIENLAC),
     ),
 )
@@ -230,9 +283,10 @@ ALL_LISTS = (TUYEN_SINH, NHAP_HOC)
 
 
 # Cột của Data_NhapHoc không có trong biểu mẫu VEMIS (chỉ dùng trong app / SharePoint)
-NHAP_HOC_NGOAI_VEMIS = (
-    "TuyenSinhID", "NamHoc", "TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu", "Khoi", "PhanHe",
-    "TinhTrangHS", "LopCu", "MaBHYT", "HoSoDaNop", "EmailCha", "EmailMe", "NguoiGiamHo",
-    "NamSinhNGH", "NgheNghiepNGH", "CanCuocNGH", "DienThoaiNGH", "EmailNGH", "KhanCap_Ten",
-    "KhanCap_SDT", "KhanCap_QuanHe", "DangKyXe", "DiemDonTra")
-
+NHAP_HOC_NGOAI_VEMIS = tuple(
+    f.key for f in NHAP_HOC.fields
+    if f.key in ("TuyenSinhID", "NamHoc", "TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu",
+                 "Khoi", "PhanHe", "TinhTrangHS", "LopCu", "MaBHYT", "HoSoDaNop", "EmailCha",
+                 "EmailMe", "NguoiGiamHo", "NamSinhNGH", "NgheNghiepNGH", "CanCuocNGH",
+                 "DienThoaiNGH", "EmailNGH")
+    or f.group in (G_HOCTAP, G_KHANCAP, G_NGANHANG, G_MON, G_HOCPHI))

@@ -21,8 +21,8 @@ import pandas as pd
 
 import chuan_hoa_du_lieu_cu as cc
 from tuyensinh import danh_muc, services
-from tuyensinh.schema import (BOOL, DATE, NHAP_HOC, NHAP_HOC_NGOAI_VEMIS, NOTE, NUMBER,
-                              PHAN_HE, TINH_TRANG_HS)
+from tuyensinh.schema import (BOOL, DATE, HANH_KIEM, HOC_LUC, NHAP_HOC, NHAP_HOC_NGOAI_VEMIS,
+                              NOTE, NUMBER, PHAN_HE, TINH_TRANG_HS, TO_HOP_MON)
 
 fold = danh_muc.fold
 
@@ -52,7 +52,26 @@ DIA_CHI = [
 ]
 TRUONG_CU = ("Trường cũ", "Tỉnh_Trường cũ", "Trường cũ_Quận_Huyện", "Trường cũ_Phường")
 XE = (("Đăng ký xe", "Đăng ký xe trong năm"), ("ĐỊa điểm đón trả", "Địa điểm đón 1"))
+# Quá trình học tập: cột file cũ -> key (điểm 1 / điểm 2)
+DIEM = {
+    "Toán 1": "Toan1", "Văn 1": "Van1", "Văn_Tiếng Việt": "TV1", "Anh": "Anh1", "GDCD1": "GDCD1",
+    "LS và ĐL": "LSDL1", "KHTN": "KHTN1", "Tin học 1": "Tin1", "Công nghệ 1": "CongNghe1",
+    "Lý": "Ly1", "Hóa": "Hoa1", "Sinh": "Sinh1", "Sử": "Su1", "Địa": "Dia1",
+    "Toán 2": "Toan2", "Văn 2": "Van2", "TV 2": "TV2", "Anh 2": "Anh2", "GDCD 2": "GDCD2",
+    "LS và ĐL 2": "LSDL2", "KHTN 2": "KHTN2", "Tin 2": "Tin2", "Lý 2": "Ly2", "Hóa 2": "Hoa2",
+    "Sinh 2": "Sinh2", "Sử 2": "Su2", "Địa 2": "Dia2", "GDKTPL 2": "GDKTPL2",
+}
+KHAC = {  # cột file cũ -> key (văn bản)
+    "Tên chủ TK_Nhận": "TenChuTaiKhoan", "Tên ngân hàng_Nhận": "NganHang",
+    "Số tài khoản_nhận": "SoTaiKhoan", "Kế toán xác nhận": "KeToanXacNhan",
+}
+TIEN = {"Số tiền xác nhận": "SoTienXacNhan", "Số tiền PHHS thanh toán": "SoTienThanhToan",
+        "Số tiền còn lại": "SoTienConLai", "Tổng số tiền đã thu": "TongDaThu"}
+NGAY = {"Ngày nhận": "NgayNhanHoSo", "Ngày đóng": "NgayDongPhi"}
+HOC_TAP = ("Học lực", "Học lực 1", "Học lực 2", "Hạnh kiểm", "Hạnh kiểm 2",
+           "Lựa chọn 1", "Lựa chọn 2", "Lựa chọn 3")
 DA_DUNG = set(COLS) | {c for d in DIA_CHI for c in d[1:]} | set(TRUONG_CU) | \
+    set(DIEM) | set(KHAC) | set(TIEN) | set(NGAY) | set(HOC_TAP) | \
     {c for pair in XE for c in pair} | {"Title", "Item Type", "Path"}
 
 TON_GIAO = {"thien chua": "Công giáo", "thien chua giao": "Công giáo", "kito giao": "Công giáo",
@@ -245,6 +264,30 @@ def main():
         rec["KhanCap_QuanHe"] = QUAN_HE.get(fold(qh), cap_dau(qh))
         rec["DangKyXe"] = s(r[XE[0][0]]) or s(r[XE[0][1]])
         rec["DiemDonTra"] = s(r[XE[1][0]]) or s(r[XE[1][1]])
+        # quá trình học tập
+        for c, k in DIEM.items():
+            v = pd.to_numeric(s(r.get(c, "")).replace(",", "."), errors="coerce")
+            rec[k] = float(v) if pd.notna(v) and 0 <= v <= 10 else None
+        hl = {"hoc sinh xuat sac": "Xuất sắc", "hoc sinh gioi": "Giỏi", "hs gioi": "Giỏi"}
+        rec["HocLuc1"] = cc.canon(s(r.get("Học lực 1", "")) or s(r.get("Học lực", "")), HOC_LUC, hl)
+        rec["HocLuc2"] = cc.canon(s(r.get("Học lực 2", "")), HOC_LUC, hl)
+        rec["HanhKiem1"] = cc.canon(s(r.get("Hạnh kiểm", "")), HANH_KIEM, {"tot": "Tốt"})
+        rec["HanhKiem2"] = cc.canon(s(r.get("Hạnh kiểm 2", "")), HANH_KIEM, {"tot": "Tốt", "t": "Tốt"})
+        for i in (1, 2, 3):  # "Lý- Hóa- Địa-Tin học" -> "Lý-Hóa-Địa-Tin học"
+            v = re.sub(r"\s*-\s*", "-", s(r.get(f"Lựa chọn {i}", "")))
+            rec[f"LuaChon{i}"] = cc.canon(v, TO_HOP_MON)
+        # tài khoản ngân hàng, học phí
+        rec["TenChuTaiKhoan"] = cc.person(s(r.get("Tên chủ TK_Nhận", "")))
+        rec["NganHang"] = cc.bank(s(r.get("Tên ngân hàng_Nhận", "")))
+        rec["SoTaiKhoan"] = re.sub(r"\s+", "", s(r.get("Số tài khoản_nhận", "")))
+        rec["KeToanXacNhan"] = cc.person(s(r.get("Kế toán xác nhận", "")))
+        for c, k in TIEN.items():
+            v = pd.to_numeric(s(r.get(c, "")).replace(",", ""), errors="coerce")
+            rec[k] = float(v) if pd.notna(v) else None
+        if not rec["SoTienXacNhan"]:
+            rec["SoTienXacNhan"] = None  # 0 = chưa giữ chỗ
+        for c, k in NGAY.items():
+            rec[k] = ngay(s(r.get(c, "")))
 
         # --- địa chỉ 2 cấp
         rp = {"Dòng": i + 2, "Họ tên": rec["HoTen"], "Năm học": rec["NamHoc"]}
@@ -343,8 +386,8 @@ HUONG_DAN = [
     ("Trường cũ", "Tên chuẩn theo danh mục trường của app (trùng với gợi ý khi nhập)."),
     ("Cột ngoài VEMIS", ", ".join(k for k in NHAP_HOC_NGOAI_VEMIS if k != "TuyenSinhID")
      + " — dùng trong app, không xuất ra file VEMIS."),
-    ("Cot_khac", "Các cột của file cũ không có trong list (điểm, học phí, tài khoản nhận hoàn "
-                 "phí, nơi cấp CCCD cha mẹ…) — giữ để tra cứu."),
+    ("Cot_khac", "Các cột của file cũ không có trong list (ngày cấp / nơi cấp CCCD cha mẹ, "
+                 "nguồn…) — giữ để tra cứu."),
 ]
 
 

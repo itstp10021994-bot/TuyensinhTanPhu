@@ -6,7 +6,7 @@ from datetime import date
 
 import pandas as pd
 
-from .schema import BOOL, DATE, NHAP_HOC, NUMBER, TUYEN_SINH, ListDef
+from .schema import BOOL, DATE, GIAY_TO_NHAP_HOC, NHAP_HOC, NUMBER, TUYEN_SINH, ListDef
 from .storage.base import Storage
 
 
@@ -51,11 +51,7 @@ def validate(ld: ListDef, data: dict) -> list[str]:
 
 def to_df(ld: ListDef, items: list[dict]) -> pd.DataFrame:
     cols = ["id"] + ld.keys + ["Created", "Modified"]
-    df = pd.DataFrame(items)
-    for c in cols:
-        if c not in df.columns:
-            df[c] = None
-    df = df[cols]
+    df = pd.DataFrame(items).reindex(columns=cols).copy()
     for f in ld.fields:
         if f.type == NUMBER:  # để trống = NaN (khác 0)
             df[f.key] = pd.to_numeric(df[f.key], errors="coerce")
@@ -229,6 +225,60 @@ def save_nhap_hoc(storage: Storage, data: dict, item_id: str | None = None) -> d
     if item_id:
         return storage.update_item(NHAP_HOC.name, item_id, clean)
     return storage.create_item(NHAP_HOC.name, clean)
+
+
+def cap_nhat_nhap_hoc(storage: Storage, item_id: str, data: dict) -> dict:
+    """Cập nhật một phần hồ sơ (xếp lớp, thu hồ sơ, học phí, xe…) — không kiểm tra bắt buộc."""
+    return storage.update_item(NHAP_HOC.name, item_id, _clean(NHAP_HOC, data))
+
+
+_GIAY_TO_ALIAS = {"phieu dk nhap hoc": "Phiếu đăng ký nhập học",
+                  "thoa thuan voi nha truong":
+                      "Thỏa thuận của Cha mẹ/Người giám hộ học sinh với nhà trường",
+                  "chung nhan tot nghiep thcs tam thoi": "Giấy chứng nhận tốt nghiệp THCS tạm thời"}
+
+
+def doc_ho_so(text: str) -> tuple[date | None, dict[str, str]]:
+    """ "Ngày đã nộp 23/06/2025\nGiấy khai sinh - Bản sao…" -> (ngày, {giấy tờ: bản gốc/sao})."""
+    from . import danh_muc
+
+    ngay, docs = None, {}
+    known = {danh_muc.fold(g): g for g in GIAY_TO_NHAP_HOC}
+    for line in str(text or "").splitlines():
+        line = line.strip()
+        m = re.match(r"ng[aà]y đã nộp\s+(\d{1,2})/(\d{1,2})/(\d{4})", line, re.I)
+        if m:
+            d, mth, y = map(int, m.groups())
+            try:
+                ngay = date(y, mth, d)
+            except ValueError:
+                pass
+            continue
+        if not line:
+            continue
+        name, _, ban = line.rpartition(" -") if " -" in line else (line, "", "")
+        name = name.strip()
+        key = danh_muc.fold(name)
+        name = known.get(key) or _GIAY_TO_ALIAS.get(key) or name
+        docs[name] = ban.strip() or "Bản gốc"
+    return ngay, docs
+
+
+def ghi_ho_so(ngay: date | None, docs: dict[str, str]) -> str:
+    lines = [f"Ngày đã nộp {ngay:%d/%m/%Y}"] if ngay else []
+    return "\n".join(lines + [f"{g} - {ban}" for g, ban in docs.items()])
+
+
+def rut_ho_so_nhap_hoc(storage: Storage, rec: dict, ly_do: str, nguoi: str = "") -> dict:
+    """Rút hồ sơ sau khi đã nhập học: đánh dấu hồ sơ và chuyển Data tuyển sinh sang Rút hồ sơ."""
+    note = f"{date.today():%d/%m/%Y} rút hồ sơ" + (f" ({nguoi})" if nguoi else "") + \
+        (f": {ly_do}" if ly_do else "")
+    out = cap_nhat_nhap_hoc(storage, rec["id"], {
+        "TinhTrangHS": "Rút hồ sơ", "GhiChu": f"{rec.get('GhiChu') or ''}\n{note}".strip()})
+    if rec.get("TuyenSinhID") and storage.get_item(TUYEN_SINH.name, rec["TuyenSinhID"]):
+        set_trang_thai(storage, rec["TuyenSinhID"], "Rút hồ sơ", ly_do or "rút sau nhập học",
+                       nguoi)
+    return out
 
 
 def nhap_hoc_df(storage: Storage, nam_hoc: str) -> pd.DataFrame:

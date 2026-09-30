@@ -192,3 +192,23 @@ def test_phone_query():
     assert services.phone_query("+84 909123456") == "0909123456"
     assert services.phone_query("Đồng Bộ 772") == ""
     assert services.phone_query("") == ""
+
+
+def test_doc_ghi_ho_so():
+    from datetime import date as _d
+    text = ("Ngày đã nộp 23/06/2025\nPhiếu ĐK nhập học - Bản gốc\nGiấy khai sinh - Bản sao\n"
+            "Học bạ THCS -")
+    ngay, docs = services.doc_ho_so(text)
+    assert ngay == _d(2025, 6, 23)
+    assert docs == {"Phiếu đăng ký nhập học": "Bản gốc", "Giấy khai sinh": "Bản sao",
+                    "Học bạ THCS": "Bản gốc"}
+    assert services.doc_ho_so(services.ghi_ho_so(ngay, docs)) == (ngay, docs)
+
+
+def test_rut_ho_so_nhap_hoc(storage):
+    rec = services.save_tuyen_sinh(storage, dict(HS))
+    services.set_trang_thai(storage, rec["id"], "Nhập học")
+    nh = services.nhap_hoc_of(storage, rec["id"])
+    services.rut_ho_so_nhap_hoc(storage, nh, "chuyển trường", "Cô Lan")
+    assert storage.get_item(NHAP_HOC.name, nh["id"])["TinhTrangHS"] == "Rút hồ sơ"
+    assert storage.get_item(TUYEN_SINH.name, rec["id"])["TrangThai"] == "Rút hồ sơ"
