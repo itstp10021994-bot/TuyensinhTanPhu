@@ -62,3 +62,17 @@ def test_link_tuyen_sinh(tmp_path):
     assert importer.link_tuyen_sinh(st, rows) == 2
     assert rows[0]["TuyenSinhID"] == str(a["id"]) and rows[1]["TuyenSinhID"] == str(b["id"])
     assert "TuyenSinhID" not in rows[2]
+
+
+def test_link_existing(tmp_path):
+    from tuyensinh import importer
+    from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
+    from tuyensinh.storage.local import LocalStorage
+
+    st = LocalStorage(str(tmp_path / "t.db"))
+    ts = st.create_item(TUYEN_SINH.name, {"HoTenHS": "An", "SDT": "0901234567", "NamHoc": "2026-2027"})
+    nh = st.create_item(NHAP_HOC.name, {"HoTen": "An", "DienThoaiSLL": "0901234567",
+                                        "NamHoc": "2026-2027"})
+    res = importer.link_existing(st)
+    assert res == {"total": 1, "chua_lien_ket": 1, "lien_ket": 1}
+    assert str(st.get_item(NHAP_HOC.name, nh["id"])["TuyenSinhID"]) == str(ts["id"])

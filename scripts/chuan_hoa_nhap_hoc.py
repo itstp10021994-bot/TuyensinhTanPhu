@@ -327,7 +327,8 @@ def school_same(a: str, b: str) -> bool:
 
 # ------------------------------------------------------------------ xuất Excel
 def columns():
-    return ["Title"] + [f.key for f in NHAP_HOC.fields if f.key != "TuyenSinhID"]
+    # TuyenSinhID để trống: app điền khi nhập (hoặc nút "Liên kết hồ sơ" sau khi tải tay lên)
+    return ["Title"] + [f.key for f in NHAP_HOC.fields]
 
 
 HUONG_DAN = [
@@ -382,6 +383,12 @@ def write(path, rows, report, extra, stats):
                 ws.column_dimensions[get_column_letter(j)].width = min(max(10, w + 2), 60)
             ws.auto_filter.ref = ws.dimensions
         ws = xw.book["Data_NhapHoc"]
+        from openpyxl.worksheet.table import Table, TableStyleInfo
+
+        ws.auto_filter.ref = None
+        tab = Table(displayName="Data_NhapHoc", ref=f"A1:{get_column_letter(len(cols))}{len(df) + 1}")
+        tab.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
+        ws.add_table(tab)  # "Tạo list từ Excel" của SharePoint cần dữ liệu dạng bảng
         for j, k in enumerate(cols, 1):
             if k in fields and fields[k].type == DATE:
                 for (c,) in ws.iter_rows(min_row=2, min_col=j, max_col=j):

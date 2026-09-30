@@ -142,6 +142,24 @@ with ui.section("3. Nhập dữ liệu từ Excel",
                     ui.download_excel("Tải danh sách lỗi", err, "LoiNhapDuLieu.xlsx", key="dl_err")
                     st.caption("Sửa lỗi rồi bấm nhập lại — các dòng đã ghi sẽ được bỏ qua.")
 
+# ------------------------------------------------------------------ 4. liên kết
+with ui.section("4. Liên kết hồ sơ nhập học với Data tuyển sinh",
+                "Dùng khi đưa Data_NhapHoc lên SharePoint bằng tay (tạo list từ Excel): gán "
+                "TuyenSinhID theo họ tên + SĐT / ngày sinh để nút Tạo hồ sơ không tạo trùng."):
+    if st.button("Liên kết hồ sơ", icon=":material/link:", disabled=backend == "local"):
+        bar = st.progress(0.0, text="Đang đọc dữ liệu…")
+        try:
+            res = importer.link_existing(
+                storage, progress=lambda d, t: bar.progress(d / max(t, 1),
+                                                            text=f"Đã cập nhật {d}/{t} hồ sơ"))
+        except Exception as e:
+            ui.error_state(e, compact=True)
+        else:
+            ui.invalidate()
+            bar.progress(1.0, text="Hoàn tất")
+            st.success(f"{res['total']} hồ sơ · {res['chua_lien_ket']} hồ sơ chưa liên kết · "
+                       f"liên kết được **{res['lien_ket']}**", icon=":material/check_circle:")
+
 # ------------------------------------------------------------------ hướng dẫn
 with st.expander("Hướng dẫn tạo flow Power Automate và khai báo Secrets", icon=":material/help:"):
     st.markdown(open("docs/power_automate.md", encoding="utf-8").read())

@@ -179,6 +179,25 @@ def import_rows(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
             "total": len(rows), "linked": linked}
 
 
+def link_existing(storage: Storage, workers: int = 6,
+                  progress: Callable[[int, int], None] | None = None) -> dict:
+    """Liên kết các hồ sơ nhập học đã có trên list (vd tải tay từ Excel) với Data tuyển sinh."""
+    items = [dict(it) for it in storage.list_items(NHAP_HOC.name)]
+    todo = [it for it in items if _blank(it.get("TuyenSinhID"))]
+    n = link_tuyen_sinh(storage, todo)
+    changed = [it for it in todo if not _blank(it.get("TuyenSinhID"))]
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = [pool.submit(storage.update_item, NHAP_HOC.name, it["id"],
+                               {"TuyenSinhID": it["TuyenSinhID"]}) for it in changed]
+        for fut in as_completed(futures):
+            fut.result()
+            done += 1
+            if progress:
+                progress(done, len(changed))
+    return {"total": len(items), "chua_lien_ket": len(todo), "lien_ket": n}
+
+
 def link_tuyen_sinh(storage: Storage, rows: list[dict]) -> int:
     """Gán TuyenSinhID cho hồ sơ nhập học chưa có: cùng họ tên và SĐT (hoặc ngày sinh) với
     một học sinh ở Data tuyển sinh, ưu tiên cùng năm học. Trả về số hồ sơ đã liên kết."""
