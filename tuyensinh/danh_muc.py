@@ -18,7 +18,16 @@ from .schema import Field
 
 _DIR = Path(__file__).parent / "data"
 _PATH = _DIR / "danh_muc.json"
-TRUONG_CSV = _DIR / "truong_hoc.csv"
+TRUONG_CSV = _DIR / "truong_hoc.csv"  # từ OpenStreetMap (workflow hằng tháng ghi đè)
+# Trường bổ sung từ dữ liệu tuyển sinh (không có trên OpenStreetMap) — không bị ghi đè
+TRUONG_BO_SUNG_CSV = _DIR / "truong_hoc_bo_sung.csv"
+
+
+def _truong_rows():
+    for path in (TRUONG_CSV, TRUONG_BO_SUNG_CSV):
+        if path.exists():
+            with path.open(encoding="utf-8-sig") as fh:
+                yield from csv.DictReader(fh)
 
 
 @lru_cache(maxsize=1)
@@ -46,12 +55,10 @@ def xa_of(tinh: str) -> list[str]:
 def _truong_cap() -> dict:
     """{(fold tỉnh, fold xã, fold tên): cấp học}."""
     out = {}
-    if TRUONG_CSV.exists():
-        with TRUONG_CSV.open(encoding="utf-8-sig") as fh:
-            for row in csv.DictReader(fh):
-                out[(fold(normalize_tinh(row.get("Tỉnh/Thành phố") or "")),
-                     fold(row.get("Phường/Xã") or ""), fold(row.get("Tên trường") or ""))] = \
-                    (row.get("Cấp học") or "").strip()
+    for row in _truong_rows():
+        out[(fold(normalize_tinh(row.get("Tỉnh/Thành phố") or "")),
+             fold(row.get("Phường/Xã") or ""), fold(row.get("Tên trường") or ""))] = \
+            (row.get("Cấp học") or "").strip()
     return out
 
 
@@ -81,19 +88,16 @@ def cap_truoc_khoi(khoi) -> tuple[str, ...]:
 def _truong_index() -> dict:
     """{(fold tỉnh, fold xã): [tên trường]} và {(fold tỉnh, ""): [...]} từ truong_hoc.csv."""
     idx: dict[tuple[str, str], list[str]] = {}
-    if not TRUONG_CSV.exists():
-        return idx
-    with TRUONG_CSV.open(encoding="utf-8-sig") as fh:
-        for row in csv.DictReader(fh):
-            ten = (row.get("Tên trường") or "").strip()
-            if not ten:
-                continue
-            t = fold(normalize_tinh((row.get("Tỉnh/Thành phố") or "").strip()))
-            x = fold(row.get("Phường/Xã") or "")
-            for k in ((t, x), (t, "")):
-                idx.setdefault(k, [])
-                if ten not in idx[k]:
-                    idx[k].append(ten)
+    for row in _truong_rows():
+        ten = (row.get("Tên trường") or "").strip()
+        if not ten:
+            continue
+        t = fold(normalize_tinh((row.get("Tỉnh/Thành phố") or "").strip()))
+        x = fold(row.get("Phường/Xã") or "")
+        for k in ((t, x), (t, "")):
+            idx.setdefault(k, [])
+            if ten not in idx[k]:
+                idx[k].append(ten)
     return idx
 
 

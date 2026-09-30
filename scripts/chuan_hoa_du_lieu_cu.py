@@ -21,9 +21,12 @@ import _common
 import pandas as pd
 
 from tuyensinh import danh_muc, services
-from tuyensinh.schema import (GIU_CHO, NGUON, PHAN_HE, TINH_TRANG, TRANG_THAI, TUYEN_SINH,
+from tuyensinh.schema import (NGUON, PHAN_HE, TINH_TRANG, TRANG_THAI, TUYEN_SINH,
                               DATE, NUMBER)
 
+BANDO_URL = ("https://raw.githubusercontent.com/ThangLeQuoc/vietnamese-provinces-database/master/"
+             "dataset-generation-scripts/bando_co_dvch.sql")
+BO_SUNG = danh_muc.TRUONG_BO_SUNG_CSV
 OLD_UNITS_URL = ("https://raw.githubusercontent.com/ThangLeQuoc/vietnamese-provinces-database/"
                  "v2.4.1/json/simplified_json_generated_data_vn_units.json")
 fold = danh_muc.fold
@@ -61,6 +64,13 @@ SUFFIX_NGUOI = re.compile(r"\s*_\s*TH\s*-\s*THCS\s*-\s*THPT.*$", re.I)
 
 
 # ------------------------------------------------------------------ danh mục cũ / mới
+def load_text(path: str | None, url: str) -> str:
+    if path:
+        return open(path, encoding="utf-8").read()
+    with urllib.request.urlopen(url, timeout=120) as r:
+        return r.read().decode("utf-8")
+
+
 def load_old_units(path: str | None):
     if path:
         return json.load(open(path, encoding="utf-8"))
@@ -98,6 +108,115 @@ class Geo:
                         self.wards_of_district[(p["Code"], d["FullName"])].add(tuple(hit))
         self.old_to_new = {c: v.most_common(1)[0][0] for c, v in prov_new_votes.items()}
         self.new_tinh = {fold(re.sub(r"^(Tỉnh|Thành phố)\s+", "", t)): t for t in new["tinh"]}
+        # (tỉnh mới, tên xã cũ) -> [(xã mới, huyện cũ ghi kèm)]
+        self.new_from_old = defaultdict(list)
+        # (tỉnh mới, tên xã mới không loại) -> xã mới
+        self.new_ward_by_core = defaultdict(list)
+        for t, xas in new["xa_theo_tinh"].items():
+            for x in xas:
+                self.new_ward_by_core[(t, strip_prefix(x))].append(x)
+
+    def load_sapnhap(self, sql: str):
+        """Bảng sáp nhập 2025: phường/xã mới gồm những phường/xã cũ nào (bando_co_dvch.sql)."""
+        rows = re.findall(r"\('(ti\d+|xa\d+)', '((?:[^']|'')*)', (NULL|'ti\d+'), '[^']*', "
+                          r"'((?:[^']|'')*)'\)", sql)
+        prov_of = {}
+        for ma, ten, goc, _ in rows:
+            if ma.startswith("ti"):
+                core = strip_prefix(re.sub(r"^(thu do|thanh pho)\s+", "", fold(ten)))
+                prov_of[ma] = self.new_tinh.get(core, "")
+        n = 0
+        for ma, ten, goc, truoc in rows:
+            if not ma.startswith("xa"):
+                continue
+            tinh = prov_of.get(goc.strip("'"), "")
+            cands = self.new_ward_by_core.get((tinh, strip_prefix(ten.replace("''", "'"))), [])
+            if len(cands) != 1:
+                continue
+            xa = cands[0]
+            for part in re.split(r",\s*(?![^()]*\))", truoc.replace("''", "'")):
+                m = re.match(r"\s*(.+?)\s*(?:\((.+)\))?\s*$", part)
+                if not m:
+                    continue
+                old_core = strip_prefix(m.group(1))
+                qual = strip_prefix(m.group(2) or "")
+                self.new_from_old[(tinh, old_core)].append((xa, qual))
+                # quận/huyện cũ của xã cũ -> thêm vào phạm vi của quận/huyện đó
+                for prov, dist in self.old_wards.get(old_core, []):
+                    if self.old_to_new.get(prov) == tinh and (not qual or qual == strip_prefix(dist)):
+                        self.wards_of_district[(prov, dist)].add((tinh, xa))
+                n += 1
+        print(f"Bảng sáp nhập: {n} xã cũ -> xã mới")
+
+    def split_location(self, name: str, region: set):
+        """"THCS Hiệp Phước huyện Nhơn Trạch Đồng Nai" -> ("THCS Hiệp Phước", tỉnh, mã tỉnh cũ, huyện).
+
+        Chỉ tách tỉnh / quận-huyện ở CUỐI tên (giữ tên trường dài nhất); None nếu không có."""
+        sep = {"huyen", "quan", "tp", "tp.", "tinh", "thanh", "pho", "tx", "tx.", "-", "–", "o"}
+        toks = [t for t in re.split(r"[\s,]+", name) if t]
+        found = None
+        for j in range(len(toks) - 1, 0, -1):  # tail ngắn nhất trước
+            head = toks[:j]
+            while head and fold(head[-1]) in sep:
+                head = head[:-1]
+            tail = [t for t in toks[j:] if fold(t) not in sep]
+            if not head or not tail or not school_key(" ".join(head))[0]:
+                continue
+            txt = " ".join(tail)
+            tinh, pc = self.tinh(txt)
+            if tinh:
+                found = (head, tinh, pc, None)
+                break
+            dist = self.huyen(txt, None, "", allow_ward=False)
+            if dist and self.old_to_new.get(dist[0]) in region:
+                found = (head, self.old_to_new[dist[0]], dist[0], dist)
+                break
+        if not found:
+            return None
+        head, tinh, pc, dist = found
+        if not dist:  # còn quận/huyện đứng trước tỉnh? ("... huyện Nhơn Trạch Đồng Nai")
+            toks = head
+            for j in range(len(toks) - 1, 0, -1):
+                h = toks[:j]
+                while h and fold(h[-1]) in sep:
+                    h = h[:-1]
+                tail = [t for t in toks[j:] if fold(t) not in sep]
+                if not h or not tail or not school_key(" ".join(h))[0]:
+                    continue
+                d = self.huyen(" ".join(tail), pc, tinh, allow_ward=False)
+                if d:
+                    head, dist = h, d
+                    break
+        return " ".join(head), tinh, pc, dist
+
+    def tinh_from_place(self, core: str, region: set) -> str:
+        """Tên riêng của trường trùng địa danh cũ (xã, huyện) chỉ có ở một tỉnh trong vùng."""
+        core = re.sub(r"\s+\d+$", "", re.sub(r"^tt\s+", "", core))
+        if len(core) < 5:
+            return ""
+        found = {self.old_to_new.get(p) for p, _ in self.old_wards.get(core, [])}
+        found |= {self.old_to_new.get(p) for p, _ in self.districts.get(core, [])}
+        found = {t for t in found if t in region}
+        return found.pop() if len(found) == 1 else ""
+
+    def ward_from_name(self, core: str, tinh: str, dist) -> str:
+        """Trường đặt theo tên xã (vd "THCS Phước Thiền") -> Phường/Xã mới chứa xã cũ đó."""
+        if not core or not tinh:
+            return ""
+        core = re.sub(r"^tt\s+", "", core)
+        core = re.sub(r"\s+\d+$", "", core)  # "Tân Phú 2" -> "Tân Phú"
+        cands = set()
+        for xa, qual in self.new_from_old.get((tinh, core), []):
+            if dist and qual and qual != strip_prefix(dist[1]):
+                continue
+            if dist and (tinh, xa) not in self.wards_of_district.get(dist, set()):
+                continue
+            cands.add(xa)
+        if not cands:  # trùng tên phường/xã mới
+            for xa in self.new_ward_by_core.get((tinh, core), []):
+                if not dist or (tinh, xa) in self.wards_of_district.get(dist, set()):
+                    cands.add(xa)
+        return cands.pop() if len(cands) == 1 else ""
 
     def tinh(self, raw: str) -> tuple[str, str | None]:
         """→ (tỉnh mới, mã tỉnh cũ) từ chuỗi tự do."""
@@ -107,7 +226,7 @@ class Geo:
             return "", None
         if s in ("hcm", "tphcm", "tp hcm", "sai gon", "ho chi minh", "hochiminh"):
             s = "ho chi minh"
-        if s in ("vung tau", "ba ria vung tau", "brvt"):
+        if s in ("vung tau", "ba ria vung tau", "brvt", "br-vt", "br vt", "ba ria-vung tau"):
             s = "ba ria - vung tau"
         code = self.old_prov_by_key.get(s) or self.old_prov_by_key.get(s.replace("-", " - "))
         if code:
@@ -116,7 +235,7 @@ class Geo:
             return self.new_tinh[s], None
         return "", None
 
-    def huyen(self, raw: str, prov_code: str | None, new_tinh: str = ""):
+    def huyen(self, raw: str, prov_code: str | None, new_tinh: str = "", allow_ward: bool = True):
         """→ (mã tỉnh cũ, tên quận/huyện cũ) từ chuỗi tự do; None nếu không chắc."""
         s = fold(raw).strip(" .,-")
         if not s:
@@ -135,7 +254,7 @@ class Geo:
             cands = [c for c in cands if self.old_to_new.get(c[0]) == new_tinh]
         if len(cands) == 1:
             return cands[0]
-        if not cands:  # có thể là tên phường/xã cũ (vd "Phú Thọ Hòa")
+        if not cands and allow_ward:  # có thể là tên phường/xã cũ (vd "Phú Thọ Hòa")
             ws = self.old_wards.get(key, [])
             if prov_code:
                 ws = [w for w in ws if w[0] == prov_code]
@@ -167,11 +286,14 @@ def school_key(name: str) -> tuple[str, frozenset]:
 
 class Schools:
     def __init__(self):
-        df = pd.read_csv(danh_muc.TRUONG_CSV, dtype=str).fillna("")
         self.rows = []
-        for r in df.itertuples(index=False):
-            k, lv = school_key(r[2])
-            self.rows.append({"tinh": r[0], "xa": r[1], "ten": r[2], "key": k, "lv": lv})
+        for path in (danh_muc.TRUONG_CSV, BO_SUNG):
+            if not path.exists():
+                continue
+            df = pd.read_csv(path, dtype=str).fillna("")
+            for r in df.itertuples(index=False):
+                k, lv = school_key(r[2])
+                self.rows.append({"tinh": r[0], "xa": r[1], "ten": r[2], "key": k, "lv": lv})
 
     def match(self, raw: str, tinh: str, wards: set | None, khoi: str,
               region: set | None = None):
@@ -201,7 +323,14 @@ class Schools:
             if wards:  # biết quận/huyện cũ: trường phải nằm trong đó
                 cands = [c for c in cands if (c["tinh"], c["xa"]) in wards]
             uniq = {(c["tinh"], c["xa"], c["ten"]) for c in cands}
-            return cands[0] if len(uniq) == 1 else None
+            if len(uniq) == 1:
+                return cands[0]
+            names = {(c["tinh"], c["ten"]) for c in cands}
+            if len(names) == 1:  # cùng tên trường ở nhiều phường/xã: dùng tên, chưa rõ phường
+                return dict(cands[0], xa="", ambiguous=True)
+            if len({c["ten"] for c in cands}) == 1:  # cùng tên ở nhiều tỉnh: dùng tên, chưa rõ tỉnh
+                return dict(cands[0], xa="", tinh=tinh, ambiguous=True)
+            return None
 
         exact = pick([r for r in pool if r["key"] == k])
         if exact or not tinh:
@@ -257,18 +386,35 @@ def full_school_name(v: str) -> str:
         return v
     v = re.sub(r"^Trường\s+", "", v, flags=re.I)
     for pat, full in ABBR:
-        if re.match(pat, v, flags=re.I):
-            v = re.sub(pat, full, v, count=1, flags=re.I)
-            v = re.sub(r"\bTT\b", "Thị trấn", v)
-            return "Trường " + v
+        m = re.match(pat, v, flags=re.I)
+        if m:
+            rest = v[m.end():].strip()
+            if rest and rest == rest.lower():  # "thcs hiệp phước" -> "Hiệp Phước"
+                rest = " ".join(w.capitalize() for w in rest.split())
+            rest = re.sub(r"\bTT\b", "Thị trấn", rest)
+            return f"Trường {full} {rest}".strip()
     return v if re.match(r"^Trường\b", v, re.I) else v
+
+
+def cap_from_name(name: str) -> str:
+    lv = school_key(name)[1]
+    names = {"mn": "Mầm non", "th": "Tiểu học", "thcs": "THCS", "thpt": "THPT"}
+    return "Liên cấp" if len(lv) > 1 else names.get(next(iter(lv), ""), "")
 
 
 def clean_school(v: str) -> str:
     v = re.sub(r"\s+", " ", str(v or "")).strip(" .,-")
-    if fold(v) in ("trong", "khong", "khong co", "chua co", "-", "x", "0"):
+    if re.fullmatch(r"[\d\s.+()-]*", v) or fold(v) in ("test", "demo", "abc", "xxx"):
+        return ""
+    if fold(v) in ("trong", "khong", "khong co", "chua co", "-", "x", "0") or re.search(
+            r"chua co thong tin|khong nho|ko nho|chua biet|khong ro", fold(v)):
         return ""
     v = re.sub(r"^TiH\b", "TH", v)
+    letters = [c for c in v if c.isalpha()]
+    if letters and (all(c.isupper() for c in letters) or all(c.islower() for c in letters)):
+        # "THCS LÊ LỢI" / "thcs phú mỹ" -> "THCS Lê Lợi" / "THCS Phú Mỹ"
+        abbr = {"th", "thcs", "thpt", "tt", "mn", "tih"}
+        v = " ".join(w.upper() if w.lower() in abbr else w.capitalize() for w in v.split())
     return v
 
 
@@ -277,9 +423,11 @@ def main():
     ap.add_argument("file")
     ap.add_argument("-o", "--out", default="Data_TuyenSinh_chuan_hoa.xlsx")
     ap.add_argument("--old-units", help="JSON danh mục hành chính trước sáp nhập (v2.4.1)")
+    ap.add_argument("--bando", help="bando_co_dvch.sql (bảng sáp nhập); bỏ qua để tải")
     args = ap.parse_args()
 
     geo = Geo(load_old_units(args.old_units))
+    geo.load_sapnhap(load_text(args.bando, BANDO_URL))
     schools = Schools()
     raw = pd.read_excel(args.file, dtype=str).fillna("")
     raw = raw.rename(columns={c.strip(): c.strip() for c in raw.columns})
@@ -292,7 +440,7 @@ def main():
     region = {t for t, n in tinh_count.items() if t and n >= 5}
     print("Vùng tuyển sinh:", sorted(region))
 
-    out, report = [], []
+    out, report, loc = [], [], []
     stats = Counter()
     for i, r in raw.iterrows():
         o = {k: str(r[c]).strip() for c, k in OLD_COLS.items()}
@@ -339,7 +487,7 @@ def main():
         rec["NganHang"] = bank(o["NganHang"])
         rec["SoTaiKhoan"] = re.sub(r"\s+", "", o["SoTaiKhoan"])
 
-        # --- trường cũ: tỉnh → quận/huyện cũ → trường → phường/xã mới
+        # --- trường cũ (lượt 1): tỉnh → quận/huyện cũ
         tinh_raw, huyen_raw = o["_TinhCu"], o["_HuyenCu"]
         if " - " in tinh_raw and not huyen_raw:  # "Tây Ninh - Bến Cầu", "Cẩm My - Đồng Nai"
             a, b = [x.strip() for x in tinh_raw.split(" - ", 1)]
@@ -352,36 +500,154 @@ def main():
         if dist and not tinh:  # suy ra tỉnh từ quận/huyện
             prov_code = dist[0]
             tinh = geo.old_to_new.get(prov_code, "")
-        wards = geo.wards_of_district.get(dist) if dist else None
         ten_raw = clean_school(o["TruongCu"])
+        # Chỉ ghi địa danh (vd "Cà Mau", "Ba Tri") -> không phải tên trường, dùng làm địa chỉ
+        if ten_raw and not school_key(ten_raw)[1]:
+            t_p, pc_p = geo.tinh(ten_raw)
+            d_p = None if t_p else geo.huyen(ten_raw, prov_code, tinh, allow_ward=False)
+            if t_p or d_p:
+                if not tinh:
+                    tinh, prov_code = (t_p, pc_p) if t_p else (geo.old_to_new.get(d_p[0], ""), d_p[0])
+                    tinh_raw = tinh_raw or (ten_raw if t_p else "")
+                if d_p and not dist:
+                    dist, huyen_raw = d_p, huyen_raw or d_p[1]
+                ten_raw = ""
+        # Địa chỉ viết lẫn trong tên trường: tách ra, dùng khi dòng chưa có vị trí
+        split = geo.split_location(ten_raw, region) if ten_raw else None
+        if split:
+            ten_raw = split[0]
+            if not tinh or tinh == split[1]:
+                tinh, prov_code = split[1], split[2] or prov_code
+                dist = dist or split[3]
+                if not huyen_raw and split[3]:
+                    huyen_raw = split[3][1]
+        loc.append({"i": i, "o": o, "tinh": tinh, "prov": prov_code, "dist": dist,
+                    "ten": ten_raw, "key": school_key(ten_raw)[0], "tinh_raw": tinh_raw,
+                    "huyen_raw": huyen_raw, "muon": ""})
+        out.append(rec)
+
+    # Lượt 2a: dòng không ghi tỉnh/quận → mượn từ các dòng khác cùng trường
+    # (bỏ phiếu tỉnh trước, đa số >= 60%; rồi quận/huyện trong tỉnh đó)
+    tinh_votes, dist_votes = defaultdict(Counter), defaultdict(Counter)
+    for L in loc:
+        if L["key"] and L["tinh"]:
+            tinh_votes[L["key"]][L["tinh"]] += 1
+            if L["dist"]:
+                dist_votes[(L["key"], L["tinh"])][(L["prov"], L["dist"])] += 1
+    for L in loc:
+        votes = tinh_votes.get(L["key"])
+        if not L["key"] or not votes:
+            continue
+        tinh, n = votes.most_common(1)[0]
+        if n / sum(votes.values()) < 0.6 or (L["tinh"] and L["tinh"] != tinh):
+            continue
+        if not L["tinh"]:
+            L.update(tinh=tinh, muon="tỉnh")
+        dv = dist_votes.get((L["key"], tinh))
+        if not L["dist"] and dv:
+            (prov, dist), m = dv.most_common(1)[0]
+            if m / sum(dv.values()) >= 0.6:
+                L.update(prov=prov, dist=dist, muon=L["muon"] or "quận/huyện")
+    # Tên trường là địa danh (vd "THCS Ninh Gia", "THCS Dương Minh Châu") → tỉnh chứa địa danh đó
+    for L in loc:
+        if L["key"] and not L["tinh"]:
+            t = geo.tinh_from_place(L["key"], region)
+            if t:
+                L.update(tinh=t, muon="tỉnh (theo địa danh trong tên trường)")
+
+    # Lượt 2b: khớp danh mục; không có thì suy phường/xã từ tên và bổ sung danh mục
+    bo_sung = {}
+    for L, rec in zip(loc, out):
+        o, tinh, dist, ten_raw = L["o"], L["tinh"], L["dist"], L["ten"]
+        wards = geo.wards_of_district.get(dist) if dist else None
         hit, how = schools.match(ten_raw, tinh, wards, rec["Khoi"], region) if ten_raw \
             else (None, "")
-        rec["TruongCu"] = hit["ten"] if hit else full_school_name(ten_raw)
-        rec["TruongCu_Tinh"] = hit["tinh"] if hit else tinh
-        rec["TruongCu_PhuongXa"] = hit["xa"] if hit else ""
+        if hit:
+            rec["TruongCu"], rec["TruongCu_Tinh"], rec["TruongCu_PhuongXa"] = \
+                hit["ten"], hit["tinh"], hit["xa"]
+            status = ("khớp danh mục (tên có ở nhiều phường/xã — chưa rõ phường)"
+                      if hit.get("ambiguous") else
+                      "khớp danh mục" if how == "exact" else "khớp gần đúng — nên kiểm tra")
+        elif ten_raw and tinh:
+            ten = full_school_name(ten_raw)
+            xa = geo.ward_from_name(L["key"], tinh, dist)
+            same = [c for c in schools.rows if c["tinh"] == tinh and fold(c["ten"]) == fold(ten)]
+            if same:  # tên đã có trong danh mục (khác quận/huyện ghi trong dữ liệu)
+                ten = same[0]["ten"]
+                xa = xa if any(c["xa"] == xa for c in same) else ""
+                status = "khớp tên danh mục — chưa rõ phường/xã" if not xa else "khớp danh mục"
+            else:
+                k = (tinh, fold(ten))
+                if k not in bo_sung or (xa and not bo_sung[k][1]):
+                    bo_sung[k] = [tinh, xa, ten, cap_from_name(ten)]
+                status = ("bổ sung danh mục — có phường/xã" if xa
+                          else "bổ sung danh mục — chưa rõ phường/xã")
+            rec["TruongCu"], rec["TruongCu_Tinh"], rec["TruongCu_PhuongXa"] = ten, tinh, xa
+        else:
+            rec["TruongCu"] = full_school_name(ten_raw)
+            rec["TruongCu_Tinh"], rec["TruongCu_PhuongXa"] = tinh, ""
+            status = ("không có tên trường" if not ten_raw
+                      else "không xác định được tỉnh — kiểm tra tay")
+        prov_code = L["prov"]
         dia_chi_cu = ", ".join(x for x in [
-            dist[1] if dist else huyen_raw,
-            geo.old_prov.get(prov_code, tinh_raw) if (prov_code or tinh_raw) else ""] if x)
+            dist[1] if dist else L["huyen_raw"],
+            geo.old_prov.get(prov_code, L["tinh_raw"]) if (prov_code or L["tinh_raw"]) else ""]
+            if x)
         rec["TruongCu_DiaChiCu"] = dia_chi_cu
-        status = ("khớp danh mục" if how == "exact" else
-                  "khớp gần đúng — nên kiểm tra" if how == "fuzzy" else
-                  "không có tên trường" if not ten_raw else "chưa khớp — kiểm tra tay")
         stats[status] += 1
         stats["Có Tỉnh/Thành (mới)" if rec["TruongCu_Tinh"] else "Không xác định được tỉnh"] += 1
+        if L["muon"].startswith("tỉnh (theo"):
+            stats["Suy ra tỉnh theo địa danh trong tên trường"] += 1
+        elif L["muon"]:
+            stats[f"Mượn {L['muon']} từ dòng khác cùng trường"] += 1
         if dist:
             stats["Nhận diện được quận/huyện cũ"] += 1
-        elif huyen_raw:
+        elif L["huyen_raw"]:
             stats["Quận/huyện ghi không rõ"] += 1
-        report.append({"Dòng": i + 2, "Họ tên HS": rec["HoTenHS"],
-                       "Trường cũ (gốc)": o["TruongCu"], "Quận huyện (gốc)": huyen_raw,
+        report.append({"Dòng": L["i"] + 2, "Họ tên HS": rec["HoTenHS"],
+                       "Trường cũ (gốc)": o["TruongCu"], "Quận huyện (gốc)": L["huyen_raw"],
                        "Tỉnh (gốc)": o["_TinhCu"], "Trường cũ (chuẩn)": rec["TruongCu"],
                        "Phường/Xã mới": rec["TruongCu_PhuongXa"],
                        "Tỉnh/Thành mới": rec["TruongCu_Tinh"],
-                       "Quận/huyện, tỉnh cũ": dia_chi_cu, "Kết quả": status,
-                       "Khối (gốc)": o["Khoi"], "Khối": rec["Khoi"], "Phân hệ": rec["PhanHe"],
-                       "Ngân hàng (gốc)": o["NganHang"], "Ngân hàng": rec["NganHang"]})
-        out.append(rec)
+                       "Quận/huyện, tỉnh cũ": dia_chi_cu, "Mượn vị trí": L["muon"],
+                       "Kết quả": status, "Khối (gốc)": o["Khoi"], "Khối": rec["Khoi"],
+                       "Phân hệ": rec["PhanHe"], "Ngân hàng (gốc)": o["NganHang"],
+                       "Ngân hàng": rec["NganHang"]})
 
+    # Gộp các cách viết của cùng một trường ("Bamboo", "BamBo", "Bamboo School")
+    def squash(name):
+        return re.sub(r"school|\btruong\b|\s", "", fold(name))
+
+    use = Counter((rec["TruongCu_Tinh"], fold(rec["TruongCu"])) for rec in out)
+    groups = defaultdict(list)  # (tỉnh, nhóm) -> [key bo_sung]
+    for k in sorted(bo_sung, key=lambda k: -use[k]):
+        tinh_k, sq = k[0], squash(bo_sung[k][2])
+        target = next((g for g in groups if g[0] == tinh_k and (g[1] == sq or (
+            min(len(sq), len(g[1])) >= 5
+            and difflib.SequenceMatcher(None, g[1], sq).ratio() >= 0.9))), None)
+        groups[target or (tinh_k, sq)].append(k)
+    for keys in groups.values():
+        if len(keys) < 2:
+            continue
+        # tên chuẩn: cách viết được dùng nhiều nhất, hòa thì tên dài hơn (có "School")
+        best = max(keys, key=lambda k: (use[k], len(bo_sung[k][2])))
+        for k in keys:
+            if k != best:
+                bo_sung[best][1] = bo_sung[best][1] or bo_sung[k][1]
+                bo_sung[k] = bo_sung[best]
+    # Mọi dòng dùng đúng một cách viết như trong danh mục bổ sung ("Ruby school" -> "Ruby School")
+    for rec in out:
+        k = (rec["TruongCu_Tinh"], fold(rec["TruongCu"]))
+        if k in bo_sung:
+            rec["TruongCu"] = bo_sung[k][2]
+            if not rec["TruongCu_PhuongXa"] and bo_sung[k][1]:
+                rec["TruongCu_PhuongXa"] = bo_sung[k][1]
+    for row, rec in zip(report, out):
+        row["Trường cũ (chuẩn)"], row["Phường/Xã mới"] = rec["TruongCu"], rec["TruongCu_PhuongXa"]
+    rows_bs = sorted({tuple(v) for v in bo_sung.values()})
+    pd.DataFrame(rows_bs, columns=["Tỉnh/Thành phố", "Phường/Xã", "Tên trường", "Cấp học"]).to_csv(
+        BO_SUNG, index=False, encoding="utf-8")
+    print(f"Danh mục bổ sung: {len(rows_bs)} trường -> {BO_SUNG}")
     write_workbook(args.out, out, report, stats)
     print(f"Đã ghi {args.out}: {len(out)} dòng")
     print(dict(stats))

@@ -85,7 +85,11 @@ python scripts/setup_sharepoint.py            # tạo list Data_NhapHoc + cột 
      hiển thị, kiểu cột, lựa chọn và cột cũ tương ứng.
    - Tỉnh cũ (63) → tỉnh/thành mới (34); quận/huyện cũ được nhận diện và giữ ở `TruongCu_DiaChiCu`;
      Trường cũ đối chiếu danh mục trường trong đúng tỉnh, quận/huyện cũ → tên chuẩn + Phường/Xã mới.
-     Trường không có trong danh mục được viết đầy đủ ("THCS TT…" → "Trường Trung học cơ sở Thị trấn…").
+     Dòng không ghi tỉnh/quận mượn vị trí từ các dòng khác cùng trường; địa chỉ viết lẫn trong tên
+     ("THCS Tân Tiến - Củ Chi") được tách ra; trường đặt theo tên xã cũ được gán Phường/Xã mới qua
+     bảng sáp nhập. Trường chưa có trên OpenStreetMap được thêm vào
+     `tuyensinh/data/truong_hoc_bo_sung.csv` (gợi ý trong app, không bị workflow hằng tháng ghi đè),
+     nên tên trường trong dữ liệu luôn trùng với tên gợi ý.
    - Khối "10-IEP" → `Khoi`=10 + `PhanHe`=IEP; thêm cột `GiuCho` (tách khỏi Tình trạng tư vấn);
      chuẩn hóa Nguồn, Ngân hàng, SĐT, họ tên.
    - Sheet *Bao_cao_chuan_hoa*: đối chiếu gốc ↔ chuẩn hóa từng dòng, lọc "chưa khớp" để rà tay.

@@ -42,6 +42,7 @@ def _load_script(name):
 def test_import_va_goi_y_truong(tmp_path, monkeypatch):
     csv_path = tmp_path / "truong_hoc.csv"
     monkeypatch.setattr(danh_muc, "TRUONG_CSV", csv_path)
+    monkeypatch.setattr(danh_muc, "TRUONG_BO_SUNG_CSV", tmp_path / "khong_co.csv")
     danh_muc._truong_index.cache_clear()
     src = tmp_path / "ds.xlsx"
     pd.DataFrame({"Tỉnh": ["TP Hồ Chí Minh", "Hồ Chí Minh", "Tỉnh Đồng Nai", "Hồ Chí Minh"],
@@ -117,3 +118,29 @@ def test_chuan_hoa_helpers():
     assert c.full_school_name("Ruby School") == "Ruby School"
     assert c.school_key("THCS TT Tân Châu") == c.school_key("Trường Trung học cơ sở Thị trấn Tân Châu")
     assert c.canon("Bạn Bè - Người Thân", ("Bạn bè - Người thân",)) == "Bạn bè - Người thân"
+
+
+def test_chuan_hoa_ten_viet_thuong_va_ghi_chu():
+    c = _load_script("chuan_hoa_du_lieu_cu")
+    assert c.full_school_name("thcs hiệp phước") == "Trường Trung học cơ sở Hiệp Phước"
+    assert c.clean_school("THCS LÊ LỢI") == "THCS Lê Lợi"
+    assert c.clean_school("Chưa có thông tin") == ""
+    assert c.cap_from_name("Trường Trung học cơ sở - Trung học phổ thông Trí Đức") == "Liên cấp"
+
+
+def test_danh_muc_bo_sung_duoc_goi_y(tmp_path, monkeypatch):
+    main = tmp_path / "truong_hoc.csv"
+    extra = tmp_path / "truong_hoc_bo_sung.csv"
+    main.write_text("Tỉnh/Thành phố,Phường/Xã,Tên trường,Cấp học\n", encoding="utf-8")
+    extra.write_text("Tỉnh/Thành phố,Phường/Xã,Tên trường,Cấp học\n"
+                     "Tỉnh Tây Ninh,Xã Tân Châu,Trường Trung học cơ sở Thị trấn Tân Châu,THCS\n",
+                     encoding="utf-8")
+    monkeypatch.setattr(danh_muc, "TRUONG_CSV", main)
+    monkeypatch.setattr(danh_muc, "TRUONG_BO_SUNG_CSV", extra)
+    danh_muc._truong_index.cache_clear()
+    danh_muc._truong_cap.cache_clear()
+    assert danh_muc.truong_hoc("Tỉnh Tây Ninh", "Xã Tân Châu") == [
+        "Trường Trung học cơ sở Thị trấn Tân Châu"]
+    assert danh_muc.cap_hoc("Trường Trung học cơ sở Thị trấn Tân Châu", "Tỉnh Tây Ninh") == "THCS"
+    danh_muc._truong_index.cache_clear()
+    danh_muc._truong_cap.cache_clear()
