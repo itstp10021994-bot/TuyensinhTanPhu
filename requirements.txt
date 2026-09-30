@@ -1,0 +1,7 @@
+streamlit>=1.46
+pandas>=2.0
+openpyxl>=3.1
+altair>=5
+msal>=1.28
+requests>=2.31
+xlrd>=2.0
