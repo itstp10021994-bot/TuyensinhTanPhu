@@ -66,6 +66,7 @@ def html(rec: dict, da_nhan: dict[str, str], can_bo_sung: list[str], han_bo_sung
     footer = " &nbsp;·&nbsp; ".join(escape(x) for x in (t["dia_chi"], t["dien_thoai"],
                                                        t["website"], t["facebook"]) if x)
     ngay = ngay_nhan or date.today()
+    logo = _logo()  # logo đã có tên trường -> không in lại tên
     return f"""<!doctype html><html lang="vi"><head><meta charset="utf-8">
 <title>Bảng ký nhận hồ sơ - {escape(str(rec.get('HoTen') or ''))}</title>
 <style>
@@ -80,7 +81,7 @@ body {{ font-family: "Times New Roman", Times, serif; color: #111; margin: 0; ba
         padding: 14mm 16mm; display: flex; flex-direction: column; box-shadow: 0 1px 4px #0002; }}
 .head {{ display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #1D4ED8;
         padding-bottom: 8px; }}
-.logo {{ height: 54px; }}
+.logo {{ height: 62px; }}
 .truong {{ font-family: Arial, sans-serif; color: #1D4ED8; font-weight: 700; font-size: 15px;
           text-transform: uppercase; }}
 h1 {{ text-align: center; font-size: 20px; margin: 22px 0 2px; letter-spacing: .3px; }}
@@ -103,7 +104,7 @@ ul {{ margin: 4px 0 0 0; padding-left: 22px; font-size: 15px; }} li {{ margin: 2
 </style></head><body>
 <div class="bar"><button onclick="window.print()">🖨 In bảng ký nhận</button></div>
 <div class="page">
- <div class="head">{_logo()}<div class="truong">{escape(t['ten'])}</div></div>
+ <div class="head">{logo or f'<div class="truong">{escape(t["ten"])}</div>'}</div>
  <h1>BẢNG KÝ NHẬN HỒ SƠ HỌC SINH</h1>
  <div class="nam">Năm học {escape(nam_hoc)}</div>
  <h2>Thông tin học sinh</h2>

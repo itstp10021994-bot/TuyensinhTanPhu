@@ -47,6 +47,9 @@ CSS = """
 /* ---- khung trang ---- */
 /* chừa chỗ cho thanh header của Streamlit (cao hơn khi chạy trên Streamlit Cloud) */
 .block-container {padding-top: 4.25rem; padding-bottom: 3rem; max-width: 1480px;}
+/* logo trường (nền trắng để rõ cả khi giao diện tối) */
+[data-testid="stHeaderLogo"], [data-testid="stSidebarLogo"] {background: #fff; border-radius: 6px;
+  padding: 2px 6px; height: 2.4rem !important; max-width: 11rem;}
 /* thanh công cụ (năm học, người thao tác) nằm trên thanh menu ngang */
 .st-key-tp_toolbar {position: fixed; top: .55rem; right: 4.5rem; z-index: 999991;
   width: auto !important; background: transparent;}

@@ -12,7 +12,9 @@ ROOT = Path(__file__).parent
 st.set_page_config(page_title="Tuyển sinh · Tân Phú", page_icon=str(ROOT / "static/icon.svg"),
                    layout="wide", initial_sidebar_state="collapsed")
 ui.inject_css()
-st.logo(str(ROOT / "static/logo.svg"), icon_image=str(ROOT / "static/icon.svg"), size="large")
+_logo = ROOT / "static/logo_truong.png"
+_logo = str(_logo if _logo.exists() else ROOT / "static/logo.svg")
+st.logo(_logo, icon_image=_logo, size="large")  # menu ngang hiện icon_image
 
 
 def _has_auth() -> bool:
