@@ -70,6 +70,8 @@ class ColumnMap:
         fmap = config.field_map(list_name)
         by_title = {_norm(c["title"]): c for c in columns or []}
         by_name = {c["name"]: c for c in columns or []}
+        by_name.update({c["internal"]: c for c in columns or [] if c.get("internal")
+                        and c["internal"] not in by_name})
         for f in (self.ld.fields if self.ld else ()):
             col = None
             if f.key in fmap:

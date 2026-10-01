@@ -181,7 +181,8 @@ class PowerAutomateStorage(Storage):
     # ------------------------------------------------------------------ cấu trúc list
     def columns(self, list_name) -> list[dict]:
         data = self.call("GET", f"{list_path(list_name)}/fields?$filter=Hidden eq false"
-                                "&$select=InternalName,Title,TypeAsString,ReadOnlyField")
+                                "&$select=InternalName,EntityPropertyName,Title,TypeAsString,"
+                                "ReadOnlyField")
         rows = data.get("value")
         if rows is None and isinstance(data.get("d"), dict):  # odata=verbose
             rows = data["d"].get("results")
@@ -191,7 +192,10 @@ class PowerAutomateStorage(Storage):
                 "Response trong nhánh True: Body = body('Send_an_HTTP_request_to_SharePoint') và "
                 "header Accept = application/json;odata=nometadata. Phản hồi nhận được: "
                 f"{str(data)[:300]}")
-        return [{"name": c["InternalName"], "title": c["Title"], "type": c["TypeAsString"]}
+        # Đọc/ghi item phải dùng EntityPropertyName: tên nội bộ bắt đầu bằng "_" (vd cột "Van1"
+        # của list tạo từ Excel có tên nội bộ "_x0056_an1") thành "OData__x0056_an1" trong REST
+        return [{"name": c.get("EntityPropertyName") or c["InternalName"],
+                 "internal": c["InternalName"], "title": c["Title"], "type": c["TypeAsString"]}
                 for c in rows if not c.get("ReadOnlyField")]
 
     def list_exists(self, list_name) -> bool:
@@ -221,8 +225,9 @@ class PowerAutomateStorage(Storage):
         """Thêm các cột vào dạng xem mặc định của list (list tạo từ Excel chỉ hiện Tiêu đề)."""
         base = f"{list_path(list_name)}/DefaultView/ViewFields"
         have = set(self.call("GET", base).get("Items") or [])
+        to_internal = {c["name"]: c.get("internal", c["name"]) for c in self.columns(list_name)}
         n = 0
-        for name in names:
+        for name in (to_internal.get(x, x) for x in names):  # dạng xem dùng tên nội bộ
             if name not in have:
                 self.call("POST", f"{base}/AddViewField('{name}')")
                 n += 1

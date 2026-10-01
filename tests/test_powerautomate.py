@@ -222,3 +222,15 @@ def test_list_items_doc_song_song_theo_khoang_id(pa, monkeypatch):
     st.delete_item(TUYEN_SINH.name, "4")  # ID bị hở
     got = st.list_items(TUYEN_SINH.name)
     assert sorted(int(x["id"]) for x in got) == [1, 2, 3, 5, 6, 7, 8]
+
+
+def test_ten_cot_bat_dau_bang_gach_duoi_dung_entity_name():
+    """List tạo từ Excel: cột Van1 có tên nội bộ _x0056_an1, REST dùng OData__x0056_an1."""
+    from tuyensinh.storage.convert import ColumnMap
+    cols = [{"name": "OData__x0056_an1", "internal": "_x0056_an1", "title": "Van1",
+             "type": "Number"},
+            {"name": "HoTenHS", "internal": "HoTenHS", "title": "HoTenHS", "type": "Text"}]
+    cm = ColumnMap(TUYEN_SINH.name, cols)
+    assert cm.internal["Van1"] == "OData__x0056_an1"
+    assert cm.to_sp({"Van1": 8})["OData__x0056_an1"] == 8.0
+    assert cm.from_sp({"OData__x0056_an1": 7.5}, 1)["Van1"] == 7.5
