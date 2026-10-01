@@ -98,6 +98,16 @@ with khung.container(key="zl_dau", horizontal=True, vertical_alignment="center",
         for k in ("tl_truoc", "tl_truoc_goc"):
             S.pop(k, None)
         st.rerun()
+if not co_ai:
+    with khung.expander(":material/info: Công tắc AI đang tắt vì chưa tìm thấy GEMINI_API_KEY",
+                        expanded=False):
+        st.markdown(
+            "1. Streamlit Cloud → app → **⋮ → Settings → Secrets**.\n"
+            "2. Dán dòng sau lên **đầu** ô Secrets (trước mọi dòng có dạng `[tên_mục]`):\n"
+            "   ```toml\n   GEMINI_API_KEY = \"AIza...\"\n   ```\n"
+            "3. Bấm **Save**, chờ app khởi động lại (khoảng 1 phút), rồi tải lại trang (F5).\n\n"
+            "Lưu ý: key phải nằm trong dấu ngoặc kép, không có khoảng trắng thừa; tên viết đúng "
+            "`GEMINI_API_KEY`.")
 tin = khung.container(key="zl_tin", height=560, autoscroll=True)
 
 

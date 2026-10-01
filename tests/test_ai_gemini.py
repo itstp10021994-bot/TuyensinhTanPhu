@@ -75,3 +75,16 @@ def test_doc_phan_hoi_gemini(monkeypatch):
     assert "hết lượt" in ai_gemini.viet_lai("x").loi
     monkeypatch.delenv("GEMINI_API_KEY")
     assert ai_gemini.viet_lai("x").loi == "Chưa có GEMINI_API_KEY"
+
+
+def test_tim_khoa_moi_vi_tri(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    for secrets, vi_tri in (({"GEMINI_API_KEY": "a1"}, "GEMINI_API_KEY"),
+                            ({"powerautomate": {"url": "x", "GEMINI_API_KEY": "a1"}},
+                             "[powerautomate] GEMINI_API_KEY"),
+                            ({"gemini": {"api_key": "a1"}}, "[gemini] api_key"),
+                            ({"gemini_api_key": "a1"}, "gemini_api_key")):
+        monkeypatch.setattr(ai_gemini.config, "_secrets", lambda s=secrets: s)
+        assert ai_gemini.tim_khoa() == ("a1", vi_tri)
+    monkeypatch.setattr(ai_gemini.config, "_secrets", lambda: {"auth": {"x": "y"}})
+    assert ai_gemini.tim_khoa() == ("", "") and not ai_gemini.co_khoa()

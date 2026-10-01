@@ -75,14 +75,35 @@ class KetQua:
     loi: str = ""
 
 
+def tim_khoa() -> tuple[str, str]:
+    """(API key, vị trí tìm thấy). Chấp nhận key ở cấp ngoài cùng của Secrets, nằm lẫn trong
+    một mục [..] bất kỳ (lỗi hay gặp khi dán xuống cuối file), hoặc mục [gemini] api_key."""
+    v = str(config.get("GEMINI_API_KEY") or "").strip().strip('"')
+    if v:
+        return v, "GEMINI_API_KEY"
+    s = config._secrets()
+    for k, val in s.items():  # khác chữ hoa/thường
+        if str(k).strip().lower() == "gemini_api_key" and str(val).strip():
+            return str(val).strip(), str(k)
+    for muc, bang in s.items():
+        if not hasattr(bang, "items"):
+            continue
+        for k, val in bang.items():
+            ten = str(k).strip().lower()
+            if (ten == "gemini_api_key" or (str(muc).lower() == "gemini" and ten in ("api_key", "key"))) \
+                    and str(val).strip():
+                return str(val).strip(), f"[{muc}] {k}"
+    return "", ""
+
+
 def co_khoa() -> bool:
-    return bool(str(config.get("GEMINI_API_KEY") or "").strip())
+    return bool(tim_khoa()[0])
 
 
 def viet_lai(cau_hoi: str, truoc: str | None = None, nam_hoc: str = "",
              hom_nay: str = "", timeout: float = 12) -> KetQua:
     """Gửi câu hỏi (không kèm dữ liệu) cho Gemini để viết lại thành câu hỏi chuẩn."""
-    key = str(config.get("GEMINI_API_KEY") or "").strip()
+    key = tim_khoa()[0]
     if not key:
         return KetQua(loi="Chưa có GEMINI_API_KEY")
     model = str(config.get("GEMINI_MODEL") or MODEL).strip()
