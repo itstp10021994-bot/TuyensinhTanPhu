@@ -45,6 +45,7 @@ def test_phan_quyen_va_ghi_nho(tmp_path):
     ma = tai_khoan.tao_ma_ghi_nho(t, "bi-mat")
     assert tai_khoan.tu_ma_ghi_nho(items, ma, "bi-mat")["HoTen"] == "Kế toán A"
     assert tai_khoan.tu_ma_ghi_nho(items, ma, "khac") is None
-    assert tai_khoan.tu_ma_ghi_nho(items, ma[:-1] + "0", "bi-mat") is None
+    sai = ma[:-1] + ("1" if ma[-1] == "0" else "0")  # đổi chắc chắn 1 ký tự chữ ký
+    assert tai_khoan.tu_ma_ghi_nho(items, sai, "bi-mat") is None
     tai_khoan.doi_mat_khau(st, t["id"], "abc123", "moi4567", items)  # đổi mật khẩu -> mã hết hiệu lực
     assert tai_khoan.tu_ma_ghi_nho(st.list_items(TAI_KHOAN.name), ma, "bi-mat") is None

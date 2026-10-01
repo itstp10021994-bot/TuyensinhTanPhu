@@ -6,21 +6,47 @@ import streamlit as st
 from tuyensinh import tro_ly, ui
 from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
 
+CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
+
 S = st.session_state
 nam_hoc = ui.nam_hoc()
 tk = S.get("tk")
 ctx = tro_ly.Ctx(ui.df(TUYEN_SINH, nam_hoc), ui.df(NHAP_HOC, nam_hoc), nam_hoc,
-                 quyen=set(tk["Quyen"]) if tk else None)
+                 quyen=set(tk["Quyen"]) if tk else None,
+                 ts_all=ui.df(TUYEN_SINH), nh_all=ui.df(NHAP_HOC))
 
 actions = ui.page_header("Trợ lý dữ liệu", f"Hỏi đáp nhanh về dữ liệu năm học {nam_hoc} — "
                          "xử lý ngay trong app, không gửi dữ liệu ra ngoài")
 msgs = S.setdefault("tl_msgs", [])
 if msgs and actions.button("Cuộc trò chuyện mới", icon=":material/add_comment:"):
     msgs.clear()
+    S.pop("tl_truoc", None)
     st.rerun()
 
 
+def _bieu_do_nhom(df):
+    x, nhom, y = df.columns[:3]
+    doms = list(dict.fromkeys(df[nhom]))
+    n = df[x].nunique()
+    ngang = n > 8 or df[x].astype(str).str.len().max() > 10
+    cat = alt.Y(f"{x}:N", title=None, sort=list(dict.fromkeys(df[x])),
+                axis=alt.Axis(labelLimit=260, labelOverlap=False)) if ngang else \
+        alt.X(f"{x}:N", title=None, sort=list(dict.fromkeys(df[x])), axis=alt.Axis(labelAngle=0))
+    val = alt.X(f"{y}:Q", title=None, axis=alt.Axis(format="d")) if ngang else \
+        alt.Y(f"{y}:Q", title=None, axis=alt.Axis(format="d"))
+    off = alt.YOffset(f"{nhom}:N") if ngang else alt.XOffset(f"{nhom}:N")
+    c = alt.Chart(df.astype({x: str})).mark_bar(cornerRadiusEnd=3).encode(
+        **({"x": val, "y": cat, "yOffset": off} if ngang else {"x": cat, "y": val, "xOffset": off}),
+        color=alt.Color(f"{nhom}:N", scale=alt.Scale(domain=doms, range=CAT[:len(doms)]),
+                        legend=alt.Legend(orient="top", title=None)),
+        tooltip=[alt.Tooltip(f"{x}:N"), alt.Tooltip(f"{nhom}:N"), alt.Tooltip(f"{y}:Q", format="d")])
+    st.altair_chart(c.properties(height=max(200, 22 * n * len(doms)) if ngang else 260)
+                    .configure_view(stroke=None), width="stretch")
+
+
 def _bieu_do(df):
+    if df.shape[1] >= 3:
+        return _bieu_do_nhom(df)
     x, y = df.columns[:2]
     n = len(df)
     if n == 0 or n > 25:
@@ -43,8 +69,10 @@ def _bieu_do(df):
 def _hien(m, i):
     with st.chat_message(m["role"], avatar=":material/person:" if m["role"] == "user"
                          else ":material/smart_toy:"):
-        st.markdown(m["text"])
         r = m.get("tl")
+        if r is not None and r.da_ghep:
+            st.caption(f":material/link: Hiểu theo ngữ cảnh câu trước: *{r.hieu_la}*")
+        st.markdown(m["text"])
         if r is None:
             return
         if r.chart is not None and len(r.chart) > 1:
@@ -71,9 +99,10 @@ hoi = st.chat_input("Hỏi về dữ liệu tuyển sinh, ví dụ: bao nhiêu H
 if hoi:
     msgs.append({"role": "user", "text": hoi})
     try:
-        tl = tro_ly.tra_loi(hoi, ctx)
+        tl = tro_ly.tra_loi(hoi, ctx, S.get("tl_truoc"))
     except Exception as e:  # không để lỗi một câu hỏi làm hỏng trang
         tl = tro_ly.TraLoi(f"Xin lỗi, mình gặp lỗi khi trả lời câu này ({e}).")
+    S["tl_truoc"] = tl.hieu_la or None
     msgs.append({"role": "assistant", "text": tl.text, "tl": tl})
     del msgs[:-40]  # giữ 20 lượt gần nhất
     st.rerun()

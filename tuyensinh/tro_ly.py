@@ -19,15 +19,15 @@ from .schema import CHE_DO, NGUON, TRANG_THAI
 VI_DU = (
     "Tổng quan năm học này",
     "Có bao nhiêu học sinh nhập học khối 10?",
-    "Liên hệ mới trong tuần này",
-    "Thống kê theo nguồn",
+    "Nhập học qua các năm",
+    "Liên hệ tháng 4 so với năm trước",
+    "Nguồn nào hiệu quả nhất?",
     "Trường cũ nào có nhiều học sinh nhập học nhất?",
+    "So sánh khối 6 và khối 10",
     "Học sinh nào còn thiếu giấy tờ khối 6?",
     "Danh sách nộp hồ sơ nhưng chưa giữ chỗ",
     "Tìm Nguyễn Văn An",
-    "Tra cứu 0909123456",
     "Tư vấn quá 14 ngày chưa chuyển bước",
-    "Tổng tiền giữ chỗ đã thu",
 )
 
 
@@ -35,8 +35,11 @@ VI_DU = (
 class TraLoi:
     text: str
     table: pd.DataFrame | None = None
-    chart: pd.DataFrame | None = None  # 2 cột: nhãn, số lượng
+    # 2 cột (nhãn, số lượng) -> cột/thanh; 3 cột (nhãn, nhóm, số lượng) -> cột nhóm
+    chart: pd.DataFrame | None = None
     goi_y: list[str] = field(default_factory=list)
+    hieu_la: str = ""      # câu hỏi đã chuẩn hóa (dùng làm ngữ cảnh cho câu sau)
+    da_ghep: bool = False  # câu hỏi được ghép với ngữ cảnh câu trước
 
 
 @dataclass
@@ -46,10 +49,24 @@ class Ctx:
     nam_hoc: str
     quyen: set[str] | None = None  # None = không giới hạn
     hom_nay: date = field(default_factory=date.today)
+    ts_all: pd.DataFrame | None = None  # mọi năm học (so sánh các năm)
+    nh_all: pd.DataFrame | None = None
 
     def duoc(self, *trang: str) -> bool:
         return self.quyen is None or "Cài đặt & đồng bộ" in self.quyen or \
             any(t in self.quyen for t in trang)
+
+    def cac_nam(self) -> list[str]:
+        ds = set(_col(self.ts_all, "NamHoc")) if self.ts_all is not None else set()
+        return sorted({y for y in ds if re.fullmatch(r"\d{4}-\d{4}", y)} | {self.nam_hoc})
+
+    def nam(self, nam_hoc: str) -> "Ctx":
+        if nam_hoc == self.nam_hoc or self.ts_all is None:
+            return self
+        nh_all = self.nh_all if self.nh_all is not None else self.nh.iloc[0:0]
+        return Ctx(self.ts_all[_col(self.ts_all, "NamHoc") == nam_hoc],
+                   nh_all[_col(nh_all, "NamHoc") == nam_hoc], nam_hoc, self.quyen,
+                   self.hom_nay, self.ts_all, self.nh_all)
 
 
 # ------------------------------------------------------------------ xử lý chữ
@@ -90,6 +107,8 @@ def _col(df: pd.DataFrame, c: str) -> pd.Series:
 @dataclass
 class Loc:
     khoi: str | None = None
+    khoi_ds: list[str] = field(default_factory=list)  # "khối 10 và khối 11" -> so sánh
+    gioi_tinh: str | None = None
     phan_he: str | None = None
     che_do: str | None = None
     nguon: str | None = None
@@ -105,6 +124,8 @@ class Loc:
             p.append(f"hệ {self.phan_he}")
         if self.che_do:
             p.append(self.che_do.lower())
+        if self.gioi_tinh:
+            p.append(f"học sinh {self.gioi_tinh.lower()}")
         if self.nguon:
             p.append(f"nguồn {self.nguon}")
         if self.mo_ta_tg:
@@ -112,11 +133,29 @@ class Loc:
         return ", ".join(p)
 
 
-def doc_loc(q: str, hom_nay: date) -> Loc:
+_GIOI_KD = (r"(?:hoc sinh|be|em|cac em|tre|ban|gioi tinh|phai) (?:nam|nu)\b"
+            r"(?! (?:truoc|nay|hoc|ngoai|\d))|nam sinh|nu sinh|con trai|con gai")
+
+def doc_loc(q: str, hom_nay: date, goc: str = "") -> Loc:
     loc = Loc()
-    m = re.search(r"(?:khoi|lop|k)\s*(\d{1,2})(?!\d)", q)
-    if m and 1 <= int(m.group(1)) <= 12:
-        loc.khoi = str(int(m.group(1)))
+    ds = [str(int(x)) for x in re.findall(r"(?:khoi|lop|k)\s*(\d{1,2})(?!\d)", q)
+          if 1 <= int(x) <= 12]
+    ds += [str(int(x)) for x in re.findall(r"(?:khoi|lop)\s*\d{1,2}\s*(?:,|va|voi|-)\s*(\d{1,2})(?!\d)", q)
+           if 1 <= int(x) <= 12]
+    ds = list(dict.fromkeys(ds))
+    if len(ds) >= 2:
+        loc.khoi_ds = ds
+    elif ds:
+        loc.khoi = ds[0]
+    g = unicodedata.normalize("NFC", goc.lower())
+    # "nam/nữ" chỉ là giới tính khi đi sau "học sinh / hs / bé / em / giới tính" (tránh tên "Nam")
+    truoc = r"(?:học sinh|hs|học viên|bé|em|các em|trẻ|bạn|giới tính|phái)\s+"
+    gk = re.search(_GIOI_KD, q)  # câu đã chuẩn hóa (vd câu ghép ngữ cảnh)
+    if re.search(rf"{truoc}nữ(?!\w)|(?<!\w)(?:con gái|bé gái|nữ sinh)(?!\w)", g) or \
+            (gk and re.search(r"nu|gai", gk.group(0))):
+        loc.gioi_tinh = "Nữ"
+    elif re.search(rf"{truoc}nam(?!\w)|(?<!\w)(?:con trai|bé trai|nam sinh)(?!\w)", g) or gk:
+        loc.gioi_tinh = "Nam"
     if _co(q, "iep"):
         loc.phan_he = "IEP"
     elif _co(q, "esl"):
@@ -169,6 +208,8 @@ def loc_ts(ts: pd.DataFrame, loc: Loc, cot_ngay: str = "NgayLienHe") -> pd.DataF
         df = df[_col(df, cot).map(kd).str.contains(kd(loc.che_do), regex=False)]
     if loc.nguon and "Nguon" in df:
         df = df[_col(df, "Nguon") == loc.nguon]
+    if loc.gioi_tinh:
+        df = df[_col(df, "GioiTinh").map(kd) == kd(loc.gioi_tinh)]
     if (loc.tu or loc.den) and cot_ngay in df:
         n = _ngay(df[cot_ngay])
         df = df[(n >= loc.tu) & (n <= loc.den)]
@@ -421,9 +462,16 @@ def _tim(ts: pd.DataFrame, nh: pd.DataFrame, q_goc: str) -> tuple[pd.DataFrame, 
     ten = re.sub(r"^(?:hoc sinh|hs|em|ten|be)\s+", "", ten).strip(" ?.")
     if len(ten) < 2:
         return ts.iloc[0:0], nh.iloc[0:0], ten
-    a = ts[_col(ts, "HoTenHS").map(kd).str.contains(ten, regex=False)] if len(ts) else ts
-    b = nh[_col(nh, "HoTen").map(kd).str.contains(ten, regex=False)] if len(nh) else nh
-    return a, b, ten
+    def khop(df, cot):
+        if not len(df):
+            return df
+        ho_ten = _col(df, cot).map(kd)
+        m = df[ho_ten.str.contains(ten, regex=False)]
+        if m.empty:  # gõ không đúng thứ tự: "long tran" -> mọi chữ đều có trong họ tên
+            tu = ten.split()
+            m = df[ho_ten.map(lambda h: all(t in h.split() for t in tu))]
+        return m
+    return khop(ts, "HoTenHS"), khop(nh, "HoTen"), ten
 
 
 def tra_cuu(c: Ctx, q_goc: str, bat_buoc: bool = True) -> TraLoi | None:
@@ -432,8 +480,19 @@ def tra_cuu(c: Ctx, q_goc: str, bat_buoc: bool = True) -> TraLoi | None:
             if bat_buoc else None
     a, b, khoa = _tim(c.ts if c.duoc("Data tuyển sinh") else c.ts.iloc[0:0],
                       c.nh if c.duoc("Hồ sơ nhập học") else c.nh.iloc[0:0], q_goc)
+    if a.empty and b.empty and c.ts_all is not None:  # thử các năm học khác
+        for y in reversed(c.cac_nam()):
+            if y != c.nam_hoc:
+                cy = c.nam(y)
+                a2, b2, _ = _tim(cy.ts if c.duoc("Data tuyển sinh") else cy.ts.iloc[0:0],
+                                 cy.nh if c.duoc("Hồ sơ nhập học") else cy.nh.iloc[0:0], q_goc)
+                if len(a2) or len(b2):
+                    r = tra_cuu(cy, q_goc, bat_buoc)
+                    if r:
+                        r.text = f"*(Tìm thấy ở năm học {y})*\n\n" + r.text
+                    return r
     if a.empty and b.empty:
-        return TraLoi(f"Không tìm thấy học sinh nào khớp **{khoa}** trong năm học {c.nam_hoc}.") \
+        return TraLoi(f"Không tìm thấy học sinh nào khớp **{khoa}** trong các năm học.") \
             if bat_buoc else None
     if len(a) + len(b) > 1 and not (len(a) == 1 and len(b) <= 1):
         bang = _bang_ts(a) if len(a) else pd.DataFrame({
@@ -478,39 +537,344 @@ def tra_cuu(c: Ctx, q_goc: str, bat_buoc: bool = True) -> TraLoi | None:
 def huong_dan() -> TraLoi:
     return TraLoi(
         "Mình là trợ lý dữ liệu tuyển sinh, trả lời trực tiếp từ dữ liệu của app "
-        "(không gửi ra ngoài). Bạn có thể hỏi:\n"
+        "(không gửi ra ngoài). Hỏi tự nhiên, có dấu hay không dấu, viết tắt (*bn, hs, ds*) đều "
+        "được. Mình có thể:\n"
         "- **Đếm / liệt kê**: liên hệ, tư vấn, nộp hồ sơ, nhập học, rút hồ sơ — kèm *khối 10*, "
-        "*IEP/ESL*, *nội trú*, *nguồn mạng xã hội*, *hôm nay / tuần này / tháng 7 / 30 ngày qua*\n"
-        "- **Thống kê theo** khối, nguồn, tháng, tuần, bước, chế độ, giữ chỗ, trường cũ, "
-        "tỉnh, phường/xã, người nhận hồ sơ\n"
-        "- **Xếp hạng**: *trường cũ nào nhiều học sinh nhất*, *tỉnh nào nhiều HS nhập học nhất*, "
-        "*nguồn nào ít nhất*\n"
-        "- **Tra cứu học sinh** theo tên hoặc số điện thoại\n"
-        "- **Giấy tờ còn thiếu**, **tư vấn quá hạn**\n"
+        "*IEP/ESL*, *nội trú*, *học sinh nữ*, *nguồn mạng xã hội*, *hôm nay / tuần này / tháng 7 / "
+        "30 ngày qua*\n"
+        "- **Thống kê, xếp hạng**: *theo khối / nguồn / tháng / trường cũ / tỉnh*, "
+        "*trường cũ nào nhiều HS nhất*, *nguồn nào hiệu quả nhất* (tỷ lệ nhập học)\n"
+        "- **So sánh**: *so với năm trước*, *qua các năm*, *3 năm gần đây*, *năm học 2024-2025*, "
+        "*so sánh khối 6 và khối 10*, cùng kỳ (*tháng 4 so với năm trước*)\n"
+        "- **Hỏi tiếp theo ngữ cảnh**: *còn khối 11 thì sao?*, *năm trước?*, *thế còn nam?*\n"
+        "- **Tra cứu học sinh** theo tên hoặc số điện thoại; **giấy tờ còn thiếu**; "
+        "**tư vấn quá hạn**\n"
         "- **Tài chính**: giữ chỗ, chờ hoàn phí, học phí còn nợ (tài khoản có quyền Kế toán)",
         goi_y=list(VI_DU[:6]))
 
 
 TAP = (  # (từ khóa, trạng thái hoặc None = tất cả liên hệ, tên)
-    (("rut ho so", "rut hs", "rut"), "Rút hồ sơ", "học sinh rút hồ sơ"),
+    (("rut ho so",), "Rút hồ sơ", "học sinh rút hồ sơ"),
     (("nhap hoc",), "Nhập học", "học sinh nhập học"),
-    (("nop ho so", "da nop", "nop hs"), "Nộp hồ sơ", "học sinh nộp hồ sơ"),
-    (("tu van", "dang tu van"), "Tư vấn", "liên hệ đang tư vấn"),
-    (("lien he", "hoc sinh", "hs", "phu huynh", "data"), None, "liên hệ"),
+    (("nop ho so",), "Nộp hồ sơ", "học sinh nộp hồ sơ"),
+    (("tu van",), "Tư vấn", "liên hệ đang tư vấn"),
+    (("lien he", "hoc sinh", "phu huynh", "data"), None, "liên hệ"),
 )
 
+# ------------------------------------------------------------------ hiểu câu hỏi
+# Từ đồng nghĩa / viết tắt -> cụm chuẩn (áp dụng trên chuỗi không dấu)
+DONG_NGHIA = (
+    (r"\b(?:bn|bao nhiu|bao nhieu)\b", "bao nhieu"),
+    (r"\bds\b", "danh sach"), (r"\bhs\b", "hoc sinh"), (r"\b(?:ph|phhs)\b", "phu huynh"),
+    (r"\bsdt\b", "so dien thoai"), (r"\bti le\b", "ty le"), (r"\bnam ngoai\b", "nam truoc"),
+    (r"\b(?:trung tuyen|da vao hoc|vao hoc|nhap truong|chinh thuc|da nhap hoc)\b", "nhap hoc"),
+    (r"\b(?:dang ky hoc|dang ky nhap hoc|nop don|nop hs|da nop ho so|da nop)\b", "nop ho so"),
+    (r"\b(?:bo hoc|nghi hoc|huy ho so|rut lui|khong hoc nua|rut hs|rut)\b(?! ho so)", "rut ho so"),
+    (r"\b(?:tiem nang|dang quan tam|chua chot|dang tu van)\b", "tu van"),
+    (r"\b(?:dong nhat|nhieu hs nhat|nhieu hoc sinh nhat)\b", "nhieu nhat"),
+    (r"\bkhoi lop\b", "khoi"), (r"\blop (\d{1,2})\b", r"khoi \1"),
+    (r"\b(?:so voi cung ky|cung ky nam truoc)\b", "so voi nam truoc"),
+)
+# Từ vựng để sửa lỗi gõ (chỉ dùng cho nhận dạng ý định, không đổi tên học sinh)
+_TU_VUNG = set("""bao nhieu danh sach hoc sinh lien he nhap hoc nop ho so rut tu van thong ke theo
+khoi nguon thang tuan ngay nam truoc nay qua cac tung truong cu tinh thanh pho phuong xa
+nguoi nhan gioi thieu giay to thieu han chua chuyen buoc tien phi giu cho hoan dong tong quan
+tinh hinh nhieu nhat it ty le chuyen doi hieu qua so sanh voi noi tru ban tru ngoai che do
+tim tra cuu thong tin cua trang thai gioi tinh phan he top xep hang moi
+trung tuyen vao chinh thuc dang ky don nghi huy lui khong tiem nang quan tam chot cung gan
+nhat lien tiep hien sinh trai gai""".split())
 
-def tra_loi(cau_hoi: str, c: Ctx) -> TraLoi:
-    q = kd(cau_hoi)
-    if not q or _co(q, "giup", "huong dan", "lam duoc gi", "hoi gi", "help", "xin chao", "chao"):
+
+def _sua_loi_go(goc: str) -> str:
+    """Bỏ dấu từng từ; sửa từ gõ sai gần giống từ khóa (bỏ qua từ viết hoa: tên riêng)."""
+    from difflib import get_close_matches
+    out = []
+    for tu in unicodedata.normalize("NFC", str(goc or "")).split():
+        w = kd(tu)
+        if len(w) >= 4 and w.isalpha() and w not in _TU_VUNG and not tu[:1].isupper():
+            m = get_close_matches(w, _TU_VUNG, n=1, cutoff=0.8)
+            w = m[0] if m else w
+        out.append(w)
+    return " ".join(out)
+
+
+def chuan_hoa(q: str) -> str:
+    q = kd(_sua_loi_go(q))
+    for a, b in DONG_NGHIA:
+        q = re.sub(a, b, q)
+    return re.sub(r"\s+", " ", q).strip()
+
+
+_NAM_RE = r"(20\d{2})\s*[-/]\s*(20\d{2})"
+_NHIEU_NAM = ("cac nam", "qua cac nam", "tung nam", "moi nam", "nhieu nam", "cac nam hoc",
+              "nhung nam", "hang nam")
+
+
+def doc_nam(q: str, c: Ctx) -> tuple[list[str], bool, str]:
+    """(các năm học được hỏi, có so sánh nhiều năm không, câu hỏi đã bỏ phần năm học)."""
+    ds = c.cac_nam()
+    i = ds.index(c.nam_hoc) if c.nam_hoc in ds else len(ds) - 1
+    nams = [f"{a}-{b}" for a, b in re.findall(_NAM_RE, q)]
+    q2 = re.sub(_NAM_RE, " ", q)
+    for y in re.findall(r"nam(?: hoc)? (20\d{2})\b", q2):
+        nams += [n for n in ds if n.startswith(y)][:1]
+    q2 = re.sub(r"nam(?: hoc)? 20\d{2}\b", " ", q2)
+    so_sanh = len(nams) >= 2 or _co(q2, "so voi nam truoc", "so sanh nam truoc", *_NHIEU_NAM)
+    if m := re.search(r"(?<!khoi )(?<!lop )\b(\d) nam (?:gan (?:day|nhat)|qua|lien tiep|vua qua)", q2):
+        nams, so_sanh = ds[max(0, i - int(m.group(1)) + 1):i + 1], True
+    elif _co(q2, *_NHIEU_NAM) and len(nams) < 2:
+        nams = ds[max(0, i - 2):i + 1]
+    elif _co(q2, "so voi nam truoc", "so sanh nam truoc", "so sanh voi nam truoc"):
+        nams = ds[max(0, i - 1):i + 1]
+    elif m := re.search(r"(?<!khoi )(?<!lop )\b(\d) nam truoc", q2):
+        nams = [ds[max(0, i - int(m.group(1)))]]
+    elif _co(q2, "nam truoc", "nam hoc truoc"):
+        nams = [ds[max(0, i - 1)]]
+    q2 = re.sub(r"\b(?:(?<!khoi )(?<!lop )\d nam (?:gan (?:day|nhat)|qua|lien tiep|vua qua)|"
+                r"so sanh voi nam truoc|so voi nam truoc|so sanh nam truoc|"
+                r"(?<!khoi )(?<!lop )\d nam truoc|nam hoc truoc|nam truoc|"
+                r"nam hoc nay|nam nay|" + "|".join(_NHIEU_NAM) + r")\b", " ", q2)
+    nams = [n for n in dict.fromkeys(nams) if n in ds]
+    return nams, so_sanh and len(nams) >= 2, re.sub(r"\s+", " ", q2).strip()
+
+
+# Ngữ cảnh: "còn khối 11 thì sao?", "năm trước thì sao?", "thế còn nhập học?"
+_TIEP = r"^(?:the con|vay con|con voi|con|vay|the|va)\b|\b(?:thi sao|the nao|thi the nao|nua|nhi)\s*$"
+_LOP_LOC = {
+    "khoi": r"(?:khoi|lop|k)\s*\d{1,2}(?:\s*(?:,|va|voi)\s*\d{1,2})*",
+    "he": r"\b(?:iep|esl)\b",
+    "tg": r"hom nay|hom qua|tuan nay|tuan truoc|thang nay|thang truoc|"
+          r"\d{1,3} ngay (?:qua|gan day|vua qua)|thang \d{1,2}(?:[/ -]\d{4})?",
+    "nam": _NAM_RE + r"|nam(?: hoc)? 20\d{2}|\d nam (?:gan (?:day|nhat)|qua|lien tiep)|"
+           r"so voi nam truoc|nam truoc|nam nay|" + "|".join(_NHIEU_NAM),
+    "che_do": r"noi tru|ban tru|ngoai tru",
+    "gioi": _GIOI_KD,
+    "nguon": "|".join(re.escape(kd(n)) for n in NGUON),
+    "tap": r"rut ho so|nhap hoc|nop ho so|tu van|lien he",
+    "truc": r"theo [a-z/]+(?: [a-z]+)?",
+}
+_Y_DINH = ("bao nhieu", "danh sach", "thong ke", "theo", "nao", "nhat", "ty le", "tim", "tra cuu",
+           "giay to", "tien", "hoc phi", "giu cho", "tong quan", "qua han", "so sanh", "liet ke")
+
+
+_TU_DEM = r"\b(?:cua|o|trong|va|voi|cac|nhung|hoc sinh|em|thi|co|la|nhe|a|so|bao nhieu)\b"
+
+
+def ghep_ngu_canh(q: str, truoc: str | None) -> tuple[str, bool]:
+    """Ghép câu hỏi nối tiếp với câu trước ("còn khối 11 thì sao?", "năm trước?"):
+    thay các bộ lọc mới vào câu trước. Chỉ ghép khi có từ nối hoặc câu chỉ toàn bộ lọc."""
+    if not truoc or len(q.split()) > 8:
+        return q, False
+    tiep = bool(re.search(_TIEP, q))
+    loi = re.sub(_TIEP, " ", q).strip()
+    if tiep and loi in ("nam", "nu"):  # "thế còn nam?" -> học sinh nam
+        q = q.replace(loi, f"hoc sinh {loi}")
+    co_loc = [k for k, r in _LOP_LOC.items() if re.search(rf"(?<!\w)(?:{r})(?!\w)", q)]
+    con_lai = q
+    for k, r in _LOP_LOC.items():
+        if k not in ("tap", "truc"):
+            con_lai = re.sub(rf"(?<!\w)(?:{r})(?!\w)", " ", con_lai)
+    con_lai = re.sub(_TU_DEM, " ", re.sub(_TIEP, " ", con_lai)).strip()
+    if not (tiep or (co_loc and not con_lai)):
+        return q, False
+    cu = truoc
+    for k in co_loc:
+        cu = re.sub(rf"(?<!\w)(?:{_LOP_LOC[k]})(?!\w)", " ", cu)
+    moi = re.sub(_TIEP, " ", q)
+    return re.sub(r"\s+", " ", f"{cu} {moi}").strip(), True
+
+
+# ------------------------------------------------------------------ tỷ lệ chuyển đổi
+def ty_le(c: Ctx, q: str, loc: Loc, ts: pd.DataFrame) -> TraLoi:
+    if _co(q, "rut ho so"):
+        dk, ten = _col(ts, "TrangThai") == "Rút hồ sơ", "rút hồ sơ"
+    elif _co(q, "nop ho so"):
+        dk, ten = _col(ts, "TrangThai").isin(["Nộp hồ sơ", "Nhập học"]), "nộp hồ sơ"
+    else:
+        dk, ten = _col(ts, "TrangThai") == "Nhập học", "nhập học"
+    pv = f" ({loc.mo_ta()})" if loc.mo_ta() else ""
+    tong, so = len(ts), int(dk.sum())
+    text = (f"Tỷ lệ {ten}{pv} năm học {c.nam_hoc}: **{_pt(100 * so / tong)}** "
+            f"({so}/{tong} liên hệ).") if tong else f"Chưa có liên hệ nào{pv}."
+    t, tt = _tim_truc(q)
+    if not t or tt is None or not tong:
+        return TraLoi(text, goi_y=[f"Tỷ lệ {ten} theo khối", f"Tỷ lệ {ten} theo nguồn",
+                                   f"Tỷ lệ {ten} qua các năm"])
+    cot, ten_truc, thu_tu, gop = tt
+    nhom = _col(ts, cot).str.strip()
+    if gop:
+        khoa = nhom.map(kd)
+        nhan = nhom.groupby(khoa).agg(lambda x: x.value_counts().index[0])
+        nhom = khoa.map(nhan)
+    g = pd.DataFrame({ten_truc: nhom.replace("", "(trống)"), "_ok": dk}).groupby(ten_truc)["_ok"]
+    bang = pd.DataFrame({"Liên hệ": g.size(), ten.capitalize(): g.sum().astype(int)})
+    bang["Tỷ lệ (%)"] = (100 * bang.iloc[:, 1] / bang["Liên hệ"]).round(1)
+    bang = bang.reset_index()
+    du = bang[(bang["Liên hệ"] >= 5) & (bang[ten_truc] != "(trống)")]
+    if cot == "Khoi":
+        bang = bang.sort_values(ten_truc, key=lambda s: s.map(_khoi_key))
+    else:
+        bang = bang.sort_values(["Tỷ lệ (%)", "Liên hệ"], ascending=False)
+    if len(du):
+        it = _co(q, "it nhat", "thap nhat", "kem nhat")
+        top = du.sort_values(["Tỷ lệ (%)", "Liên hệ"], ascending=[it, False]).iloc[0]
+        dau = (f"{ten_truc} có tỷ lệ {ten} {'thấp' if it else 'cao'} nhất (từ 5 liên hệ): "
+               f"**{top[ten_truc]}** — {_pt(top['Tỷ lệ (%)'])} ({top.iloc[2]}/{top['Liên hệ']}).")
+        text = f"{dau} Toàn trường: {text[0].lower()}{text[1:]}" if _co(q, "nao", "nhat") \
+            else f"{text} {dau}"
+    return TraLoi(text, table=bang.reset_index(drop=True),
+                  chart=bang[[ten_truc, "Tỷ lệ (%)"]].head(15).rename(
+                      columns={"Tỷ lệ (%)": "Số lượng"}))
+
+
+# ------------------------------------------------------------------ so sánh
+def _pt(v: float) -> str:
+    return f"{v:.1f}%".replace(".", ",")
+
+
+def _tang(a, b) -> str:
+    if not a:
+        return "—"
+    v = 100 * (b - a) / a
+    return f"{v:+.1f}%".replace(".", ",")
+
+
+def _doi_ky(loc: Loc, nam: str, goc: str) -> Loc:
+    """Dời khoảng thời gian sang cùng kỳ của năm học khác."""
+    if not (loc.tu or loc.den):
+        return loc
+    lech = int(nam[:4]) - int(goc[:4])
+
+    def doi(d):
+        try:
+            return d.replace(year=d.year + lech) if d else d
+        except ValueError:  # 29/02
+            return d.replace(year=d.year + lech, day=28)
+    return Loc(**{**loc.__dict__, "tu": doi(loc.tu), "den": doi(loc.den)})
+
+
+def _tap_cua(q: str, loc: Loc):
+    q_tap = q.replace(kd(loc.nguon), " ") if loc.nguon else q
+    return next((t for t in TAP if _co(q_tap, *t[0])), None)
+
+
+def so_sanh_nam(c: Ctx, q: str, loc: Loc, nams: list[str]) -> TraLoi:
+    tap = _tap_cua(q, loc)
+    ten_tap = tap[2] if tap else "liên hệ"
+    pv = f" ({loc.mo_ta()}{', cùng kỳ' if loc.tu else ''})" if loc.mo_ta() else ""
+    cy = {y: c.nam(y) for y in nams}
+    ts_y = {y: loc_ts(cy[y].ts, _doi_ky(loc, y, c.nam_hoc)) for y in nams}
+    if tap and tap[1]:
+        ts_y = {y: d[_col(d, "TrangThai") == tap[1]] for y, d in ts_y.items()}
+    t, tt = _tim_truc(q)
+    if _co(q, "ty le", "hieu qua", "chuyen doi") and not (t and tt):
+        rows = []
+        for y in nams:
+            d = loc_ts(cy[y].ts, _doi_ky(loc, y, c.nam_hoc))
+            n = int((_col(d, "TrangThai") == "Nhập học").sum())
+            rows.append({"Năm học": y, "Liên hệ": len(d), "Nhập học": n,
+                         "Tỷ lệ nhập học (%)": round(100 * n / len(d), 1) if len(d) else 0.0})
+        bang = pd.DataFrame(rows)
+        text = f"Tỷ lệ nhập học{pv}: " + " → ".join(
+            f"{r['Năm học']}: **{_pt(r['Tỷ lệ nhập học (%)'])}**" for r in rows) + "."
+        return TraLoi(text, table=bang, chart=bang[["Năm học", "Tỷ lệ nhập học (%)"]].rename(
+            columns={"Tỷ lệ nhập học (%)": "Số lượng"}))
+    if t and tt:  # theo một trục: bảng trục × năm
+        cot, ten_truc, thu_tu, gop = tt
+        cols = {}
+        for y in nams:
+            b = _dem_gop(_col(ts_y[y], cot), ten_truc) if gop else _dem(_col(ts_y[y], cot), ten_truc)
+            cols[y] = b.set_index(ten_truc)["Số lượng"]
+        bang = pd.DataFrame(cols).fillna(0).astype(int)
+        bang = bang.drop(index=[x for x in ("(trống)",) if x in bang.index])
+        bang["Tổng"] = bang.sum(axis=1)
+        if cot == "Khoi":
+            bang = bang.sort_index(key=lambda s: s.map(_khoi_key))
+        elif thu_tu:
+            bang = bang.reindex([x for x in thu_tu if x in bang.index] +
+                                [x for x in bang.index if x not in thu_tu])
+        else:
+            bang = bang.sort_values("Tổng", ascending=False)
+        if len(nams) >= 2:
+            bang[f"Tăng/giảm {nams[-1]}"] = [_tang(a, b) for a, b in
+                                            zip(bang[nams[-2]], bang[nams[-1]])]
+        bang = bang.rename_axis(ten_truc).reset_index()
+        tien_to = "khối " if cot == "Khoi" else ""
+        dau = [f"{y}: **{tien_to}{bang.sort_values(y, ascending=False).iloc[0][ten_truc]}** "
+               f"({int(bang[y].max())})" for y in nams if len(bang) and bang[y].max() > 0]
+        text = (f"{ten_tap[0].upper() + ten_tap[1:]}{pv} theo {ten_truc.split(' (')[0].lower()} "
+                f"qua {len(nams)} năm học. Nhiều nhất — " + "; ".join(dau) + ".")
+        top = bang.head(10 if gop else 15)
+        chart = top.melt(ten_truc, nams, var_name="Năm học", value_name="Số lượng")
+        return TraLoi(text, table=bang, chart=chart)
+    # đếm theo năm (kèm các bước nếu hỏi tất cả liên hệ)
+    rows = []
+    for y in nams:
+        d = ts_y[y]
+        r = {"Năm học": y, ten_tap[0].upper() + ten_tap[1:]: len(d)}
+        if not (tap and tap[1]):
+            tt_ = _col(d, "TrangThai").value_counts()
+            r.update({b: int(tt_.get(b, 0)) for b in TRANG_THAI})
+        rows.append(r)
+    bang = pd.DataFrame(rows)
+    cot0 = bang.columns[1]
+    bang["Tăng/giảm"] = ["—"] + [_tang(a, b) for a, b in zip(bang[cot0][:-1], bang[cot0][1:])]
+    chuoi = " → ".join(f"{r['Năm học']}: **{r[cot0]}**" + (f" ({r['Tăng/giảm']})"
+                                                         if r["Tăng/giảm"] != "—" else "")
+                       for _, r in bang.iterrows())
+    return TraLoi(f"{cot0}{pv} qua các năm học: {chuoi}.", table=bang,
+                  chart=bang[["Năm học", cot0]].rename(columns={cot0: "Số lượng"}),
+                  goi_y=[f"{cot0} theo khối qua các năm", "Tỷ lệ nhập học qua các năm"])
+
+
+def so_sanh_khoi(c: Ctx, q: str, loc: Loc) -> TraLoi:
+    tap = _tap_cua(q, loc)
+    ten_tap = tap[2] if tap else "liên hệ"
+    rows = []
+    for k in loc.khoi_ds:
+        d = loc_ts(c.ts, Loc(**{**loc.__dict__, "khoi": k, "khoi_ds": []}))
+        tt_ = _col(d, "TrangThai").value_counts()
+        rows.append({"Khối": k, "Liên hệ": len(d), **{b: int(tt_.get(b, 0)) for b in TRANG_THAI},
+                     "Tỷ lệ nhập học (%)": round(100 * tt_.get("Nhập học", 0) / len(d), 1)
+                     if len(d) else 0.0})
+    bang = pd.DataFrame(rows)
+    cot = {None: "Liên hệ"}.get(tap[1] if tap else None, tap[1] if tap else "Liên hệ")
+    text = f"So sánh {ten_tap} năm học {c.nam_hoc}: " + ", ".join(
+        f"khối {r['Khối']}: **{r[cot]}**" for _, r in bang.iterrows()) + "."
+    return TraLoi(text, table=bang, chart=bang[["Khối", cot]].rename(columns={cot: "Số lượng"}))
+
+
+# ------------------------------------------------------------------ điều phối
+def tra_loi(cau_hoi: str, c: Ctx, truoc: str | None = None) -> TraLoi:
+    q0 = chuan_hoa(cau_hoi)
+    if not q0 or _co(q0, "giup", "huong dan", "lam duoc gi", "hoi gi", "help", "xin chao", "chao"):
         return huong_dan()
-    loc = doc_loc(q, c.hom_nay)
-    so = re.sub(r"\D", "", cau_hoi)
+    q, da_ghep = ghep_ngu_canh(q0, truoc)
+    try:
+        r = _tra_loi(cau_hoi, q, c)
+    except Exception as e:  # không để một câu hỏi lạ làm hỏng trợ lý
+        r = TraLoi(f"Xin lỗi, mình chưa trả lời được câu này ({type(e).__name__}). "
+                   "Bạn thử hỏi cách khác nhé.")
+    r.hieu_la, r.da_ghep = q, da_ghep
+    return r
 
-    if len(so) >= 8 and not re.search(r"\d{1,2}/\d{4}", cau_hoi):
-        return tra_cuu(c, cau_hoi)
+
+def _tra_loi(cau_hoi: str, q_day_du: str, c: Ctx) -> TraLoi:
+    nams, nhieu_nam, q = doc_nam(q_day_du, c)
+    goc_khong_nam = re.sub(r"20\d{2}\s*[-/]\s*20\d{2}", " ", cau_hoi)
+    loc = doc_loc(q, c.hom_nay, goc_khong_nam)
+    if nhieu_nam:
+        if _co(q, "tim", "tra cuu", "giay to", "hoc phi", "giu cho", "qua han"):
+            c = c.nam(nams[-1])  # các câu này chỉ trả lời cho một năm
+        else:
+            return so_sanh_nam(c, q, loc, nams)
+    elif nams:
+        c = c.nam(nams[0])
+    so = re.sub(r"\D", "", goc_khong_nam)
+    if len(so) >= 8 and not re.search(r"\d{1,2}/\d{4}", goc_khong_nam):
+        return tra_cuu(c, goc_khong_nam)
     if _co(q, "tim", "tim kiem", "tra cuu", "thong tin cua", "thong tin ve", "ho so cua"):
-        return tra_cuu(c, cau_hoi)
+        return tra_cuu(c, goc_khong_nam)
     if _co(q, "giay to", "thieu ho so", "ho so con thieu", "bo sung", "chua nop du", "nop du",
            "con thieu giay"):
         return giay_to(c, loc)
@@ -520,25 +884,36 @@ def tra_loi(cau_hoi: str, c: Ctx) -> TraLoi:
            "con no", "ke toan", "tai chinh", "chua coc", "dat cho") and \
             not (_tim_truc(q)[0] == "giu cho"):
         return tai_chinh(c, q, loc)
-    if _co(q, "tong quan", "tinh hinh", "bao cao nhanh", "tom tat", "the nao", "ra sao"):
+    if _co(q, "tong quan", "tinh hinh", "bao cao nhanh", "tom tat", "the nao", "ra sao") and \
+            not loc.khoi_ds:
         return tong_quan(c, loc)
+    if loc.khoi_ds:
+        return so_sanh_khoi(c, q, loc)
+    # câu chỉ gồm 2–5 chữ, không có ý định nào: nhiều khả năng là tên học sinh
+    tu = goc_khong_nam.split()
+    if 2 <= len(tu) <= 5 and not _co(q, *_Y_DINH) and not loc.mo_ta() and \
+            all(re.fullmatch(r"[^\W\d_]+", w) for w in tu):
+        viet_hoa = all(w[:1].isupper() for w in tu)  # trông như họ tên
+        if r := tra_cuu(c, goc_khong_nam, bat_buoc=viet_hoa):
+            return r
+    if _co(q, "ty le", "hieu qua", "chuyen doi"):
+        return ty_le(c, q, loc, loc_ts(c.ts, loc))
 
-    q_tap = q.replace(kd(loc.nguon), " ") if loc.nguon else q  # "...trường tư vấn" là tên nguồn
-    tap = next((t for t in TAP if _co(q_tap, *t[0])), None)
+    tap = _tap_cua(q, loc)
     ts = loc_ts(c.ts, loc)
     if tap and tap[1]:
         ts = ts[_col(ts, "TrangThai") == tap[1]]
     ten_tap = tap[2] if tap else "liên hệ"
     if r := thong_ke(c, q, loc, ts, ten_tap):
         return r
-    if tap or loc.mo_ta() or _co(q, "bao nhieu", "so luong", "dem", "danh sach", "liet ke"):
+    if tap or loc.mo_ta() or _co(q, "bao nhieu", "so luong", "dem", "danh sach", "liet ke") or nams:
         pv = f" ({loc.mo_ta()})" if loc.mo_ta() else ""
         text = f"Năm học {c.nam_hoc}: **{len(ts)}** {ten_tap}{pv}."
         if len(ts) and not (tap and tap[1]):
             tt = _col(ts, "TrangThai").value_counts()
             text += " Gồm " + ", ".join(f"{b.lower()} {int(tt.get(b, 0))}" for b in TRANG_THAI) + "."
-        muon_ds = _co(q, "danh sach", "liet ke", "nhung ai", "ai ", "nhung em", "la ai", "gom ai",
-                      "hoc sinh nao", "hs nao", "nhung hs", "nhung hoc sinh") or not _co(
+        muon_ds = _co(q, "danh sach", "liet ke", "nhung ai", "ai", "nhung em", "la ai", "gom ai",
+                      "hoc sinh nao", "nhung hoc sinh") or not _co(
             q, "bao nhieu", "so luong", "dem", "tong so")
         bang = _bang_ts(ts, tien=c.duoc("Kế toán")) if muon_ds and c.duoc("Data tuyển sinh") else None
         chart = None
@@ -546,9 +921,10 @@ def tra_loi(cau_hoi: str, c: Ctx) -> TraLoi:
             chart = _dem(_col(ts, "Khoi"), "Khối").sort_values(
                 "Khối", key=lambda s: s.map(_khoi_key)).reset_index(drop=True)
         return TraLoi(text, table=bang, chart=chart,
-                      goi_y=[f"Thống kê {ten_tap} theo nguồn", f"Thống kê {ten_tap} theo tháng"])
+                      goi_y=[f"Thống kê {ten_tap} theo nguồn", f"{ten_tap[0].upper() + ten_tap[1:]} "
+                             "so với năm trước", "Còn khối 11 thì sao?"])
     # thử coi cả câu là tên học sinh
-    if r := tra_cuu(c, cau_hoi, bat_buoc=False):
+    if r := tra_cuu(c, goc_khong_nam, bat_buoc=False):
         return r
     t = huong_dan()
     t.text = "Mình chưa hiểu câu hỏi này. " + t.text

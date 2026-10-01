@@ -92,3 +92,63 @@ def test_xep_hang():
     assert "(khối 10)" in tro_ly.tra_loi("khối 10 có bao nhiêu liên hệ", ctx()).text
     r = tro_ly.tra_loi("liên hệ nguồn Ban TS đến trường tư vấn", ctx())
     assert r.text.startswith("Năm học 2026-2027: **0** liên hệ (nguồn Ban TS")
+
+
+# ------------------------------------------------------------------ nhiều năm, ngữ cảnh
+TS_ALL = pd.concat([TS.assign(NamHoc="2026-2027"), pd.DataFrame([
+    {"id": "11", "NamHoc": "2025-2026", "HoTenHS": "Võ Thị Hoa", "Khoi": "10", "TrangThai": "Nhập học",
+     "NgayLienHe": "2025-07-03", "Nguon": "Hotline", "GioiTinh": "Nữ"},
+    {"id": "12", "NamHoc": "2025-2026", "HoTenHS": "Đỗ Minh", "Khoi": "6", "TrangThai": "Tư vấn",
+     "NgayLienHe": "2025-04-03", "Nguon": "Hotline", "GioiTinh": "Nam"},
+])], ignore_index=True)
+
+
+def ctx_all():
+    return tro_ly.Ctx(TS, NH, "2026-2027", hom_nay=date(2026, 7, 25), ts_all=TS_ALL,
+                      nh_all=NH.assign(NamHoc="2026-2027"))
+
+
+def test_chuan_hoa_dong_nghia_va_go_sai():
+    assert tro_ly.chuan_hoa("bn hs trúng tuyển lớp 10") == "bao nhieu hoc sinh nhap hoc khoi 10"
+    assert tro_ly.chuan_hoa("thongg kê theo nguonn") == "thong ke theo nguon"
+    assert tro_ly.chuan_hoa("Hoàng") == "hoang"  # tên riêng (viết hoa) không bị sửa
+
+
+def test_so_sanh_nam():
+    c = ctx_all()
+    r = tro_ly.tra_loi("nhập học so với năm trước", c)
+    assert "2025-2026: **1** → 2026-2027: **1** (+0,0%)" in r.text
+    r = tro_ly.tra_loi("năm học 2025-2026 có bao nhiêu liên hệ", c)
+    assert r.text.startswith("Năm học 2025-2026: **2** liên hệ")
+    r = tro_ly.tra_loi("liên hệ theo khối qua các năm", c)
+    assert list(r.table.columns[:3]) == ["Khối", "2025-2026", "2026-2027"]
+    assert r.chart.shape[1] == 3  # biểu đồ nhóm theo năm
+    # cùng kỳ: tháng 7/2026 so với tháng 7/2025
+    r = tro_ly.tra_loi("liên hệ tháng 7 so với năm trước", c)
+    assert "2025-2026: **1** → 2026-2027: **2**" in r.text
+    assert "2025-2026" in tro_ly.tra_loi("Võ Thị Hoa", c).text  # tìm ở năm khác
+
+
+def test_ngu_canh_va_gioi_tinh():
+    c = ctx_all()
+    r1 = tro_ly.tra_loi("bao nhiêu học sinh nhập học khối 10", c)
+    r2 = tro_ly.tra_loi("còn khối 6 thì sao?", c, r1.hieu_la)
+    assert r2.da_ghep and "**0** học sinh nhập học (khối 6)" in r2.text
+    r3 = tro_ly.tra_loi("năm trước?", c, r2.hieu_la)
+    assert r3.text.startswith("Năm học 2025-2026: **0** học sinh nhập học (khối 6)")
+    r4 = tro_ly.tra_loi("học sinh nữ khối 10", c, r3.hieu_la)  # chỉ có bộ lọc -> hỏi tiếp
+    assert r4.da_ghep and "(khối 10, học sinh nữ)" in r4.text and "2025-2026" in r4.text
+    r5 = tro_ly.tra_loi("danh sách tư vấn khối 6", c, r4.hieu_la)
+    assert not r5.da_ghep  # câu hỏi mới có ý định riêng, không ghép
+    c2 = tro_ly.Ctx(TS_ALL[TS_ALL.NamHoc == "2025-2026"], NH.iloc[0:0], "2025-2026",
+                    hom_nay=date(2026, 7, 25), ts_all=TS_ALL)
+    assert "**1** liên hệ (học sinh nữ)" in tro_ly.tra_loi("học sinh nữ", c2).text
+    assert tro_ly.tra_loi("Nguyễn Văn Nam", c).text.startswith("Không tìm thấy")
+
+
+def test_ty_le_va_so_sanh_khoi():
+    c = ctx()
+    r = tro_ly.tra_loi("tỷ lệ nhập học", c)
+    assert "**33,3%** (1/3 liên hệ)" in r.text
+    r = tro_ly.tra_loi("so sánh khối 6 và khối 10", c)
+    assert r.table["Khối"].tolist() == ["6", "10"] and r.table["Liên hệ"].tolist() == [1, 2]
