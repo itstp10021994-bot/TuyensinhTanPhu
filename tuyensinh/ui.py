@@ -153,28 +153,52 @@ def _fresh(e: dict, version: int) -> bool:
     return e.get("version") == version and time.monotonic() - e.get("at", -1e9) < TTL
 
 
-def _fetch(st_obj: Storage, name: str, version: int) -> dict:
+def _fetch(st_obj: Storage, name: str, version: int, optional: bool = False) -> dict:
     e = _entry(name)
     with e["lock"]:  # nhiều người mở cùng lúc: chỉ tải 1 lần
         if not _fresh(e, version):
-            items = st_obj.list_items(name)
-            e.update(version=version, at=time.monotonic(), items=items, frames={}, memo={})
+            err = ""
+            try:
+                items = st_obj.list_items(name)
+            except Exception as ex:  # list tùy chọn (vd danh mục) chưa có: không chặn app
+                if not optional:
+                    raise
+                items, err = [], str(ex)
+            e.update(version=version, at=time.monotonic(), items=items, frames={}, memo={},
+                     error=err)
     return e
 
 
-def preload(*lds: ListDef):
-    """Tải các list trang cần — song song — vào bộ nhớ đệm (nếu chưa có / đã cũ)."""
+def preload(*lds: ListDef, optional: tuple = ()):
+    """Tải các list trang cần — song song — vào bộ nhớ đệm (nếu chưa có / đã cũ).
+
+    `optional`: list không bắt buộc (lỗi -> coi như rỗng, ghi lại lỗi để trang Cài đặt báo)."""
     v = data_version()
+    opt = {ld.name for ld in optional}
     need = [ld.name for ld in lds if not _fresh(_entry(ld.name), v)]
     if not need:
         return
     s = storage()
     with st.spinner("Đang tải dữ liệu từ SharePoint…"):
         if len(need) == 1:
-            _fetch(s, need[0], v)
+            _fetch(s, need[0], v, need[0] in opt)
         else:
             with ThreadPoolExecutor(max_workers=len(need)) as pool:
-                list(pool.map(lambda n: _fetch(s, n, v), need))
+                list(pool.map(lambda n: _fetch(s, n, v, n in opt), need))
+
+
+def list_error(ld: ListDef) -> str:
+    """Lỗi lần tải gần nhất của list tùy chọn ("" nếu tải được)."""
+    return _entry(ld.name).get("error", "")
+
+
+def apply_giay_to():
+    """Danh mục giấy tờ theo khối: lấy từ list DanhMuc_GiayTo, chưa có thì dùng mặc định."""
+    from .schema import GIAY_TO
+
+    preload(GIAY_TO, optional=(GIAY_TO,))
+    services.dat_giay_to(memo(GIAY_TO, "bang", lambda: services.giay_to_tu_list(
+        _entry(GIAY_TO.name)["items"])))
 
 
 @st.cache_resource
@@ -205,9 +229,9 @@ def loaded_at() -> datetime:
     return _shared_state()["loaded_at"]
 
 
-def records(ld: ListDef) -> list[dict]:
+def records(ld: ListDef, optional: bool = False) -> list[dict]:
     """Bản ghi của list (dùng chung bộ nhớ đệm với df())."""
-    preload(ld)
+    preload(ld, optional=(ld,) if optional else ())
     return _entry(ld.name)["items"]
 
 
@@ -227,7 +251,8 @@ def df(ld: ListDef, nam_hoc: str | None = None) -> pd.DataFrame:
 
 def memo(ld: ListDef, key, fn):
     """Lưu đệm kết quả tính toán nặng trên dữ liệu của list (tự xóa khi dữ liệu đổi)."""
-    preload(ld)
+    if not _fresh(_entry(ld.name), data_version()):
+        preload(ld)
     e = _entry(ld.name)
     key = (key, data_version())
     if key not in e["memo"]:

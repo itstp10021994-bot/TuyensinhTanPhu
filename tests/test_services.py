@@ -223,3 +223,22 @@ def test_giay_to_can_nop_theo_khoi():
     can, da, thieu = services.tien_do_giay_to(
         {"Khoi": "6", "PhanHe": "IEP", "HoSoDaNop": "Ngày đã nộp 01/07/2026\nGiấy khai sinh - Bản sao"})
     assert da == {"Giấy khai sinh": "Bản sao"} and len(thieu) == 4
+
+
+def test_danh_muc_giay_to_luu_va_doc(storage):
+    from tuyensinh.schema import GIAY_TO
+    services.luu_giay_to_khoi(storage, "6", ["Giấy khai sinh", "Học bạ Tiểu học"], [])
+    services.luu_giay_to_khoi(storage, "7", ["Phiếu đăng ký nhập học"], [])
+    items = storage.list_items(GIAY_TO.name)
+    bang = services.giay_to_tu_list(items)
+    assert bang == {"6": ["Giấy khai sinh", "Học bạ Tiểu học"], "7": ["Phiếu đăng ký nhập học"]}
+    # sửa: đổi thứ tự + bớt 1 giấy tờ
+    services.luu_giay_to_khoi(storage, "6", ["Học bạ Tiểu học"], items)
+    bang = services.giay_to_tu_list(storage.list_items(GIAY_TO.name))
+    assert bang["6"] == ["Học bạ Tiểu học"]
+    services.dat_giay_to(bang)
+    try:
+        assert services.giay_to_can_nop("6", "IEP") == ["Học bạ Tiểu học"]
+    finally:
+        services.dat_giay_to(None)
+    assert len(services.giay_to_can_nop("6", "IEP")) == 5  # mặc định Book1

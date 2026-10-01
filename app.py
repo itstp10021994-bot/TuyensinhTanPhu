@@ -76,9 +76,10 @@ with st.container(horizontal=True, horizontal_alignment="right", vertical_alignm
 
 try:
     if pg.url_path != "cai-dat":  # tải song song 2 list cho mọi trang (trang Cài đặt tự tải)
-        from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
+        from tuyensinh.schema import GIAY_TO, NHAP_HOC, TUYEN_SINH
 
-        ui.preload(TUYEN_SINH, NHAP_HOC)
+        ui.preload(TUYEN_SINH, NHAP_HOC, GIAY_TO, optional=(GIAY_TO,))
+    ui.apply_giay_to()
     pg.run()
 except Exception as e:  # lỗi kết nối SharePoint, cấu hình...
     if type(e).__name__ in ("StopException", "RerunException", "RerunData"):

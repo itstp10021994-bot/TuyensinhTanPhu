@@ -244,12 +244,69 @@ _GIAY_TO_ALIAS = {"phieu dk nhap hoc": "Phiếu đăng ký nhập học",
 
 
 @lru_cache(maxsize=1)
-def _giay_to_theo_khoi() -> dict[str, list[str]]:
+def giay_to_mac_dinh() -> dict[str, list[str]]:
+    """Danh mục mặc định (Book1.xlsx) — dùng khi list DanhMuc_GiayTo chưa có dữ liệu."""
     import json
     from pathlib import Path
 
     path = Path(__file__).parent / "data" / "giay_to_theo_khoi.json"
     return json.loads(path.read_text(encoding="utf-8"))["theo_khoi"]
+
+
+_GIAY_TO_HIEN_TAI: dict[str, list[str]] | None = None
+
+
+def dat_giay_to(bang: dict[str, list[str]] | None):
+    """App đặt danh mục đang dùng (đọc từ SharePoint); None = dùng mặc định."""
+    global _GIAY_TO_HIEN_TAI
+    _GIAY_TO_HIEN_TAI = bang or None
+
+
+def _giay_to_theo_khoi() -> dict[str, list[str]]:
+    return _GIAY_TO_HIEN_TAI or giay_to_mac_dinh()
+
+
+def giay_to_tu_list(items: list[dict]) -> dict[str, list[str]]:
+    """Bản ghi list DanhMuc_GiayTo -> {khối: [giấy tờ theo thứ tự]}."""
+    rows = []
+    for it in items:
+        khoi, ten = str(it.get("Khoi") or "").strip(), str(it.get("TenGiayTo") or "").strip()
+        if khoi and ten:
+            try:
+                tt = float(it.get("ThuTu"))
+            except (TypeError, ValueError):
+                tt = 999.0
+            rows.append((khoi, tt, int(it.get("id") or 0), ten))
+    out: dict[str, list[str]] = {}
+    for khoi, _, _, ten in sorted(rows):
+        if ten not in out.setdefault(khoi, []):
+            out[khoi].append(ten)
+    return out
+
+
+def luu_giay_to_khoi(storage: Storage, khoi: str, ds: list[str], items: list[dict]) -> int:
+    """Ghi danh sách giấy tờ của 1 khối lên list: sửa/thêm/xóa cho khớp `ds`."""
+    from .schema import GIAY_TO
+
+    khoi = khoi.strip()
+    cu = sorted([it for it in items if str(it.get("Khoi") or "").strip() == khoi],
+                key=lambda it: int(it.get("id") or 0))
+    n = 0
+    for i, ten in enumerate(ds):
+        data = {"Khoi": khoi, "TenGiayTo": ten, "ThuTu": i + 1}
+        if i < len(cu):
+            it = cu[i]
+            if (str(it.get("TenGiayTo")) != ten or str(it.get("ThuTu")).split(".")[0]
+                    != str(i + 1)):
+                storage.update_item(GIAY_TO.name, it["id"], data)
+                n += 1
+        else:
+            storage.create_item(GIAY_TO.name, data)
+            n += 1
+    for it in cu[len(ds):]:
+        storage.delete_item(GIAY_TO.name, it["id"])
+        n += 1
+    return n
 
 
 def giay_to_can_nop(khoi: str | None, phan_he: str | None = None) -> list[str]:
@@ -262,7 +319,8 @@ def giay_to_can_nop(khoi: str | None, phan_he: str | None = None) -> list[str]:
     for key in (f"{khoi}-{ph}" if ph else None, khoi):
         if key and key in bang:
             return list(bang[key])
-    cung_khoi = [k for k in bang if k.split("-")[0] == khoi]
+    cung_khoi = sorted([k for k in bang if k.split("-")[0] == khoi],
+                       key=lambda k: (not k.endswith("-IEP"), k))  # ưu tiên IEP
     return list(bang[cung_khoi[0]]) if cung_khoi else []
 
 

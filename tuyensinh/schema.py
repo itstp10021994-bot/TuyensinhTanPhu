@@ -279,7 +279,18 @@ NHAP_HOC = ListDef(
     ),
 )
 
-ALL_LISTS = (TUYEN_SINH, NHAP_HOC)
+# Danh mục giấy tờ cần nộp theo khối (chỉnh ở trang Cài đặt). Mỗi dòng = 1 giấy tờ của 1 khối.
+GIAY_TO = ListDef(
+    name="DanhMuc_GiayTo",
+    title="Danh mục giấy tờ cần nộp theo khối",
+    fields=(
+        Field("Khoi", "Khối (vd 10-IEP, 7)", required=True),
+        Field("TenGiayTo", "Tên giấy tờ", required=True),
+        Field("ThuTu", "Thứ tự", NUMBER),
+    ),
+)
+
+ALL_LISTS = (TUYEN_SINH, NHAP_HOC, GIAY_TO)
 
 
 # Cột của Data_NhapHoc không có trong biểu mẫu VEMIS (chỉ dùng trong app / SharePoint)
