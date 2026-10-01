@@ -169,3 +169,30 @@ tạo secret mới ở bước 1.5 và cập nhật `client_secret`.
 Tên tài khoản được ghi vào hồ sơ: *Người cập nhật*, *Người nhận hồ sơ* (bảng ký nhận).
 Nên thêm vào Secrets một khóa riêng để ký mã ghi nhớ đăng nhập (lưu trong bộ nhớ trình duyệt):
 `COOKIE_SECRET = "chuỗi-ngẫu-nhiên-dài"` (nếu không có, app dùng `ADMIN_PASSWORD`).
+
+## Trợ lý dữ liệu: bật AI hiểu câu hỏi (Google Gemini, miễn phí)
+
+Trợ lý luôn chạy được mà không cần AI. Khi bật Gemini, trợ lý hiểu câu hỏi tự do tốt hơn
+(vd "mấy đứa lớp mười vô học rồi vậy?"). **Chỉ câu hỏi được gửi cho Google**. Số liệu vẫn tính
+trong app. Câu có họ tên hoặc số điện thoại, và câu tra cứu học sinh, được xử lý trong app,
+không gửi đi.
+
+1. Mở https://aistudio.google.com và đăng nhập bằng tài khoản Google (nên dùng tài khoản của trường).
+2. Bấm **Get API key**, rồi **Create API key**. Chọn hoặc tạo một project, sau đó sao chép key
+   (chuỗi bắt đầu bằng `AIza…`).
+3. Vào Streamlit Cloud, chọn app, rồi **Settings → Secrets**, thêm dòng:
+
+   ```toml
+   GEMINI_API_KEY = "AIza..."
+   # tùy chọn: đổi mô hình khi Google ra bản mới
+   # GEMINI_MODEL = "gemini-2.5-flash"
+   ```
+4. Bấm **Save**. App tự khởi động lại. Ở trang **Trợ lý**, công tắc **AI hiểu câu hỏi** sẽ bật.
+
+Lưu ý:
+- Gói miễn phí giới hạn số lượt mỗi phút và mỗi ngày. Khi hết lượt, trợ lý tự quay về cách hiểu
+  theo từ khóa và hiện dòng thông báo nhỏ.
+- Ở gói miễn phí, Google có thể dùng nội dung gửi lên (ở đây chỉ là câu hỏi) để cải thiện sản phẩm.
+- Báo lỗi "Không có mô hình…" nghĩa là Google đã đổi tên mô hình. Đặt `GEMINI_MODEL` theo tên
+  mới trong AI Studio.
+- Không chia sẻ API key. Nếu lộ key, xóa key cũ trong AI Studio và tạo key mới.

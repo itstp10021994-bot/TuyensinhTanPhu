@@ -40,6 +40,9 @@ class TraLoi:
     goi_y: list[str] = field(default_factory=list)
     hieu_la: str = ""      # câu hỏi đã chuẩn hóa (dùng làm ngữ cảnh cho câu sau)
     da_ghep: bool = False  # câu hỏi được ghép với ngữ cảnh câu trước
+    khong_hieu: bool = False  # không nhận ra câu hỏi (đang trả về hướng dẫn)
+    ai_hieu: str = ""      # câu hỏi chuẩn do Gemini viết lại (nếu có dùng)
+    ai_loi: str = ""       # lý do không dùng được Gemini (hết lượt, sai key...)
 
 
 @dataclass
@@ -474,6 +477,18 @@ def _tim(ts: pd.DataFrame, nh: pd.DataFrame, q_goc: str) -> tuple[pd.DataFrame, 
     return khop(ts, "HoTenHS"), khop(nh, "HoTen"), ten
 
 
+def _cum_ten(goc: str) -> str:
+    """Cụm >= 2 chữ viết hoa liên tiếp dài nhất (họ tên) trong câu."""
+    cum, tot = [], []
+    for w in re.findall(r"[^\W\d_]+", goc):
+        if w[:1].isupper() and w.upper() not in ("IEP", "ESL", "HS", "PHHS"):
+            cum.append(w)
+        else:
+            tot, cum = max(tot, cum, key=len), []
+    tot = max(tot, cum, key=len)
+    return " ".join(tot) if len(tot) >= 2 else ""
+
+
 def tra_cuu(c: Ctx, q_goc: str, bat_buoc: bool = True) -> TraLoi | None:
     if not c.duoc("Data tuyển sinh", "Hồ sơ nhập học"):
         return TraLoi("Tài khoản của bạn không được xem thông tin từng học sinh.") \
@@ -845,10 +860,46 @@ def so_sanh_khoi(c: Ctx, q: str, loc: Loc) -> TraLoi:
 
 
 # ------------------------------------------------------------------ điều phối
-def tra_loi(cau_hoi: str, c: Ctx, truoc: str | None = None) -> TraLoi:
+def co_thong_tin_rieng(cau_hoi: str) -> bool:
+    """Câu hỏi có số điện thoại / họ tên (>= 2 chữ viết hoa) / tra cứu -> không gửi ra ngoài."""
+    goc = re.sub(r"20\d{2}\s*[-/]\s*20\d{2}", " ", cau_hoi)
+    if len(re.sub(r"\D", "", goc)) >= 8:
+        return True
+    hoa = [w for w in re.findall(r"[^\W\d_]+", goc)
+           if w[:1].isupper() and w.upper() not in ("IEP", "ESL", "HS", "PHHS", "THCS", "THPT")]
+    return len(hoa) >= 2 or _co(kd(cau_hoi), "tim", "tra cuu", "thong tin cua", "ho so cua")
+
+
+def tra_loi(cau_hoi: str, c: Ctx, truoc: str | None = None, ai=None) -> TraLoi:
+    """ai: hàm (câu hỏi, câu trước) -> ai_gemini.KetQua để hiểu câu hỏi tự do (tùy chọn)."""
     q0 = chuan_hoa(cau_hoi)
     if not q0 or _co(q0, "giup", "huong dan", "lam duoc gi", "hoi gi", "help", "xin chao", "chao"):
         return huong_dan()
+    ai_loi = ""
+    if ai is not None and not co_thong_tin_rieng(cau_hoi):
+        try:
+            kq = ai(cau_hoi, truoc)
+        except Exception as e:  # noqa: BLE001 — AI lỗi thì dùng cách hiểu thường
+            kq = None
+            ai_loi = f"Gemini lỗi ({type(e).__name__})"
+        if kq is not None and kq.ngoai_pham_vi:
+            t = huong_dan()
+            t.text = ("Câu hỏi này có vẻ nằm ngoài dữ liệu tuyển sinh của app. " + t.text)
+            t.ai_hieu = "(ngoài phạm vi)"
+            return t
+        if kq is not None and kq.cau_hoi:
+            r = tra_loi(kq.cau_hoi, c)
+            if not r.khong_hieu:
+                r.ai_hieu = kq.cau_hoi
+                return r
+        elif kq is not None:
+            ai_loi = kq.loi
+    r = _tra_loi_thuong(cau_hoi, q0, c, truoc)
+    r.ai_loi = ai_loi
+    return r
+
+
+def _tra_loi_thuong(cau_hoi: str, q0: str, c: Ctx, truoc: str | None) -> TraLoi:
     q, da_ghep = ghep_ngu_canh(q0, truoc)
     try:
         r = _tra_loi(cau_hoi, q, c)
@@ -923,9 +974,13 @@ def _tra_loi(cau_hoi: str, q_day_du: str, c: Ctx) -> TraLoi:
         return TraLoi(text, table=bang, chart=chart,
                       goi_y=[f"Thống kê {ten_tap} theo nguồn", f"{ten_tap[0].upper() + ten_tap[1:]} "
                              "so với năm trước", "Còn khối 11 thì sao?"])
-    # thử coi cả câu là tên học sinh
+    # thử coi cả câu là tên học sinh, rồi cụm chữ viết hoa trong câu ("Trần Huy Long học lớp nào")
     if r := tra_cuu(c, goc_khong_nam, bat_buoc=False):
         return r
+    if ten := _cum_ten(goc_khong_nam):
+        if r := tra_cuu(c, ten, bat_buoc=True):
+            return r
     t = huong_dan()
     t.text = "Mình chưa hiểu câu hỏi này. " + t.text
+    t.khong_hieu = True
     return t

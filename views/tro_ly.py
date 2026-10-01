@@ -1,9 +1,10 @@
-"""Trợ lý dữ liệu dạng hộp chat: hỏi bằng tiếng Việt, trả lời từ dữ liệu của app (miễn phí,
-không gửi dữ liệu ra ngoài). Bộ máy trả lời: tuyensinh/tro_ly.py."""
+"""Trợ lý dữ liệu dạng hộp chat: hỏi bằng tiếng Việt, trả lời từ dữ liệu của app.
+Bộ máy trả lời: tuyensinh/tro_ly.py; tùy chọn Gemini (tuyensinh/ai_gemini.py) chỉ để hiểu câu
+hỏi — số liệu luôn tính trong app, dữ liệu học sinh không gửi ra ngoài."""
 import altair as alt
 import streamlit as st
 
-from tuyensinh import tro_ly, ui
+from tuyensinh import ai_gemini, tro_ly, ui
 from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
 
 CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
@@ -18,10 +19,32 @@ ctx = tro_ly.Ctx(ui.df(TUYEN_SINH, nam_hoc), ui.df(NHAP_HOC, nam_hoc), nam_hoc,
 actions = ui.page_header("Trợ lý dữ liệu", f"Hỏi đáp nhanh về dữ liệu năm học {nam_hoc} — "
                          "xử lý ngay trong app, không gửi dữ liệu ra ngoài")
 msgs = S.setdefault("tl_msgs", [])
-if msgs and actions.button("Cuộc trò chuyện mới", icon=":material/add_comment:"):
-    msgs.clear()
-    S.pop("tl_truoc", None)
-    st.rerun()
+co_ai = ai_gemini.co_khoa()
+with actions.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center"):
+    dung_ai = st.toggle("AI hiểu câu hỏi", value=co_ai, disabled=not co_ai, key="tl_dung_ai",
+                        help="Dùng Google Gemini (miễn phí) để hiểu câu hỏi tự do. Chỉ gửi câu "
+                             "hỏi, không gửi dữ liệu học sinh; câu có tên / số điện thoại xử lý "
+                             "trong app." if co_ai else
+                        "Chưa bật: thêm GEMINI_API_KEY vào Secrets của app (xem Cài đặt → "
+                        "Hướng dẫn).")
+    if msgs and st.button("Cuộc trò chuyện mới", icon=":material/add_comment:"):
+        msgs.clear()
+        S.pop("tl_truoc", None)
+        S.pop("tl_truoc_goc", None)
+        st.rerun()
+
+
+def _ai(cau_hoi, truoc):
+    """Gọi Gemini có lưu đệm trong phiên (cùng câu hỏi + ngữ cảnh không tốn thêm lượt)."""
+    cache = S.setdefault("tl_ai_cache", {})
+    k = (cau_hoi.strip().lower(), S.get("tl_truoc_goc"))
+    if k not in cache:
+        kq = ai_gemini.viet_lai(cau_hoi, S.get("tl_truoc_goc"), nam_hoc,
+                                f"{ctx.hom_nay:%d/%m/%Y}")
+        if kq.loi:  # lỗi (hết lượt...) thì không lưu đệm để lần sau thử lại
+            return kq
+        cache[k] = kq
+    return cache[k]
 
 
 def _bieu_do_nhom(df):
@@ -70,8 +93,12 @@ def _hien(m, i):
     with st.chat_message(m["role"], avatar=":material/person:" if m["role"] == "user"
                          else ":material/smart_toy:"):
         r = m.get("tl")
-        if r is not None and r.da_ghep:
+        if r is not None and r.ai_hieu:
+            st.caption(f":material/auto_awesome: AI hiểu là: *{r.ai_hieu}*")
+        elif r is not None and r.da_ghep:
             st.caption(f":material/link: Hiểu theo ngữ cảnh câu trước: *{r.hieu_la}*")
+        if r is not None and r.ai_loi:
+            st.caption(f":material/info: {r.ai_loi} — đang dùng cách hiểu thường.")
         st.markdown(m["text"])
         if r is None:
             return
@@ -99,10 +126,11 @@ hoi = st.chat_input("Hỏi về dữ liệu tuyển sinh, ví dụ: bao nhiêu H
 if hoi:
     msgs.append({"role": "user", "text": hoi})
     try:
-        tl = tro_ly.tra_loi(hoi, ctx, S.get("tl_truoc"))
+        tl = tro_ly.tra_loi(hoi, ctx, S.get("tl_truoc"), ai=_ai if dung_ai else None)
     except Exception as e:  # không để lỗi một câu hỏi làm hỏng trang
         tl = tro_ly.TraLoi(f"Xin lỗi, mình gặp lỗi khi trả lời câu này ({e}).")
     S["tl_truoc"] = tl.hieu_la or None
+    S["tl_truoc_goc"] = tl.ai_hieu if tl.ai_hieu and not tl.ai_hieu.startswith("(") else hoi
     msgs.append({"role": "assistant", "text": tl.text, "tl": tl})
     del msgs[:-40]  # giữ 20 lượt gần nhất
     st.rerun()
