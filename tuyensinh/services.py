@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from datetime import date
 
 import pandas as pd
@@ -235,7 +236,34 @@ def cap_nhat_nhap_hoc(storage: Storage, item_id: str, data: dict) -> dict:
 _GIAY_TO_ALIAS = {"phieu dk nhap hoc": "Phiếu đăng ký nhập học",
                   "thoa thuan voi nha truong":
                       "Thỏa thuận của Cha mẹ/Người giám hộ học sinh với nhà trường",
-                  "chung nhan tot nghiep thcs tam thoi": "Giấy chứng nhận tốt nghiệp THCS tạm thời"}
+                  "chung nhan tot nghiep thcs tam thoi": "Giấy chứng nhận tốt nghiệp THCS tạm thời",
+                  "giay gioi thieu chuyen truong cua phong gd/so gd":
+                      "Giấy giới thiệu chuyển trường của UBND/Sở GD&ĐT",
+                  "giay gioi thieu chuyen truong cua ubnd/so":
+                      "Giấy giới thiệu chuyển trường của UBND/Sở GD&ĐT"}
+
+
+@lru_cache(maxsize=1)
+def _giay_to_theo_khoi() -> dict[str, list[str]]:
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).parent / "data" / "giay_to_theo_khoi.json"
+    return json.loads(path.read_text(encoding="utf-8"))["theo_khoi"]
+
+
+def giay_to_can_nop(khoi: str | None, phan_he: str | None = None) -> list[str]:
+    """Giấy tờ cần nộp khi nhập học theo khối (và phân hệ IEP/ESL).
+
+    Không có đúng "khối-phân hệ" thì lấy "khối", rồi danh sách đầu tiên của khối đó."""
+    bang = _giay_to_theo_khoi()
+    khoi = str(khoi or "").strip()
+    ph = str(phan_he or "").strip().upper()
+    for key in (f"{khoi}-{ph}" if ph else None, khoi):
+        if key and key in bang:
+            return list(bang[key])
+    cung_khoi = [k for k in bang if k.split("-")[0] == khoi]
+    return list(bang[cung_khoi[0]]) if cung_khoi else []
 
 
 def doc_ho_so(text: str) -> tuple[date | None, dict[str, str]]:
@@ -262,6 +290,13 @@ def doc_ho_so(text: str) -> tuple[date | None, dict[str, str]]:
         name = known.get(key) or _GIAY_TO_ALIAS.get(key) or name
         docs[name] = ban.strip() or "Bản gốc"
     return ngay, docs
+
+
+def tien_do_giay_to(rec: dict) -> tuple[list[str], dict[str, str], list[str]]:
+    """(giấy tờ cần nộp theo khối, giấy tờ đã nộp {tên: bản}, giấy tờ còn thiếu)."""
+    can = giay_to_can_nop(rec.get("Khoi"), rec.get("PhanHe"))
+    da = doc_ho_so(rec.get("HoSoDaNop"))[1]
+    return can, da, [g for g in can if g not in da]
 
 
 def ghi_ho_so(ngay: date | None, docs: dict[str, str]) -> str:

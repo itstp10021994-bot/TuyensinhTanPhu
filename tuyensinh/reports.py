@@ -400,30 +400,44 @@ def nh_hoanthien(c: Ctx) -> Result:
 
 
 def nh_giayto(c: Ctx) -> Result:
+    """Giấy tờ theo danh sách cần nộp của từng khối (giay_to_theo_khoi.json)."""
     df = _nh_dang_hoc(c)
-    parsed = df["HoSoDaNop"].map(lambda v: services.doc_ho_so(v)[1])
+    tien_do = [services.tien_do_giay_to(r) for r in df.to_dict("records")]
     rows = []
     for g in GIAY_TO_NHAP_HOC:
-        goc = sum(1 for d in parsed if d.get(g) == "Bản gốc")
-        sao = sum(1 for d in parsed if d.get(g) == "Bản sao")
-        rows.append({"Giấy tờ": g, "Bản gốc": goc, "Bản sao": sao, "Đã nộp": goc + sao,
-                     "Chưa nộp": len(df) - goc - sao,
-                     "Tỷ lệ đã nộp (%)": _pct(goc + sao, len(df))})
-    t = pd.DataFrame(rows)
-    can = ["Phiếu đăng ký nhập học", "Thỏa thuận của Cha mẹ/Người giám hộ học sinh với nhà "
-           "trường", "Giấy khai sinh"]
-    thieu = df[parsed.map(lambda d: any(g not in d for g in can)).astype(bool)]
-    ds = thieu.assign(Thieu=[", ".join(g for g in can if g not in d)
-                             for d in parsed[thieu.index]])[
-        ["HoTen", "Khoi", "LopHoc", "DienThoaiSLL", "Thieu"]].rename(columns={
-            "HoTen": "Học sinh", "Khoi": "Khối", "LopHoc": "Lớp", "DienThoaiSLL": "SĐT",
-            "Thieu": "Còn thiếu"})
-    return Result(t, [("Chưa nộp hồ sơ nào", int((parsed.map(len) == 0).sum())),
-                      ("Thiếu giấy tờ bắt buộc", len(ds))],
+        can = sum(1 for cn, _, _ in tien_do if g in cn)
+        goc = sum(1 for cn, d, _ in tien_do if g in cn and d.get(g) == "Bản gốc")
+        sao = sum(1 for cn, d, _ in tien_do if g in cn and d.get(g) == "Bản sao")
+        if can:
+            rows.append({"Giấy tờ": g, "HS cần nộp": can, "Bản gốc": goc, "Bản sao": sao,
+                         "Đã nộp": goc + sao, "Chưa nộp": can - goc - sao,
+                         "Tỷ lệ đã nộp (%)": _pct(goc + sao, can)})
+    t = pd.DataFrame(rows, columns=["Giấy tờ", "HS cần nộp", "Bản gốc", "Bản sao", "Đã nộp",
+                                    "Chưa nộp", "Tỷ lệ đã nộp (%)"])
+    khoi = df.assign(KhoiPH=[f"{k}-{p}" if k and p else k or p or "Chưa rõ"
+                             for k, p in zip(df["Khoi"], df["PhanHe"])],
+                     Can=[len(x[0]) for x in tien_do], Thieu=[len(x[2]) for x in tien_do])
+    theo_khoi = khoi.groupby("KhoiPH").agg(**{
+        "Số HS": ("id", "count"), "Số giấy tờ cần nộp": ("Can", "max"),
+        "HS nộp đủ": ("Thieu", lambda s: int((s == 0).sum())),
+        "HS còn thiếu": ("Thieu", lambda s: int((s > 0).sum()))})
+    theo_khoi = theo_khoi.reindex(_khoi_order(theo_khoi.index)).rename_axis("Khối").reset_index()
+    ds = khoi[khoi["Thieu"] > 0].assign(
+        DaNop=[f"{len(cn) - len(th)}/{len(cn)}" for cn, _, th in tien_do if th],
+        ConThieu=["; ".join(th) for _, _, th in tien_do if th])
+    ds = ds.sort_values(["KhoiPH", "LopHoc", "HoTen"])[
+        ["HoTen", "KhoiPH", "LopHoc", "DienThoaiSLL", "DaNop", "ConThieu"]].rename(columns={
+            "HoTen": "Học sinh", "KhoiPH": "Khối", "LopHoc": "Lớp", "DienThoaiSLL": "SĐT",
+            "DaNop": "Đã nộp", "ConThieu": "Còn thiếu"})
+    du = int((khoi["Thieu"] == 0).sum()) if len(khoi) else 0
+    return Result(t, [("Nộp đủ giấy tờ", du), ("Còn thiếu", len(ds)),
+                      ("Chưa nộp giấy tờ nào",
+                       sum(1 for _, d, _ in tien_do if not d))],
                   {"kind": "hbar", "data": t, "x": "Giấy tờ", "y": "Đã nộp"},
-                  note="Giấy tờ bắt buộc: Phiếu đăng ký nhập học, Thỏa thuận với nhà trường, "
-                       "Giấy khai sinh. Danh sách HS thiếu nằm ở sheet riêng khi xuất Excel.",
-                  sheets={"Thong_ke_giay_to": t, "HS_thieu_giay_to": ds})
+                  note="Theo danh sách giấy tờ cần nộp của từng khối. Xuất Excel có thêm sheet "
+                       "tiến độ theo khối và danh sách học sinh còn thiếu.",
+                  sheets={"Thong_ke_giay_to": t, "Theo_khoi": theo_khoi,
+                          "HS_thieu_giay_to": ds})
 
 
 def nh_xe(c: Ctx) -> Result:
@@ -547,7 +561,8 @@ REPORTS = [
     Report("nh_hoanthien", G_NH, "Mức hoàn thiện hồ sơ (VEMIS)",
            "Số hồ sơ đủ thông tin tối thiểu theo lớp và các thông tin hay thiếu.", nh_hoanthien),
     Report("nh_giayto", G_NH, "Giấy tờ đã thu",
-           "Số học sinh đã nộp từng loại giấy tờ (bản gốc / bản sao), danh sách còn thiếu.",
+           "Giấy tờ cần nộp theo từng khối: đã nộp (bản gốc / bản sao), còn thiếu, danh sách "
+           "học sinh chưa nộp đủ.",
            nh_giayto),
     Report("nh_xe", G_NH, "Đăng ký xe đưa đón",
            "Số học sinh nội trú theo tuyến xe và danh sách đón trả từng tuyến.", nh_xe),

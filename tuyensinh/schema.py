@@ -80,7 +80,7 @@ GIAY_TO_NHAP_HOC = (
     "Giấy chứng nhận trúng tuyển vào lớp 10", "Giấy chứng nhận tốt nghiệp THCS tạm thời",
     "Bằng tốt nghiệp THCS", "Bảng điểm", "Đơn xin chuyển trường",
     "Giấy giới thiệu chuyển trường của trường nơi chuyển đi",
-    "Giấy giới thiệu chuyển trường của Phòng GD/Sở GD")
+    "Giấy giới thiệu chuyển trường của UBND/Sở GD&ĐT")
 # Môn học ở "Quá trình học tập" (điểm 1, điểm 2 như app cũ)
 MON_HOC = (("Toan", "Toán"), ("Van", "Ngữ văn"), ("TV", "Tiếng Việt"), ("Anh", "Tiếng Anh"),
            ("GDCD", "GDCD"), ("LSDL", "LS và ĐL"), ("KHTN", "KHTN"), ("Tin", "Tin học"),

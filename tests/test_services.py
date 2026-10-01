@@ -212,3 +212,14 @@ def test_rut_ho_so_nhap_hoc(storage):
     services.rut_ho_so_nhap_hoc(storage, nh, "chuyển trường", "Cô Lan")
     assert storage.get_item(NHAP_HOC.name, nh["id"])["TinhTrangHS"] == "Rút hồ sơ"
     assert storage.get_item(TUYEN_SINH.name, rec["id"])["TrangThai"] == "Rút hồ sơ"
+
+
+def test_giay_to_can_nop_theo_khoi():
+    can6 = services.giay_to_can_nop("6", "")
+    assert "Hoàn thành chương trình tiểu học" in can6 and len(can6) == 5
+    can10 = services.giay_to_can_nop("10", "ESL")
+    assert "Đơn xét tuyển 10" in can10 and "Phiếu đăng ký nhập học" in can10
+    assert services.giay_to_can_nop("12", "") == services.giay_to_can_nop("12", "ESL")
+    can, da, thieu = services.tien_do_giay_to(
+        {"Khoi": "6", "PhanHe": "IEP", "HoSoDaNop": "Ngày đã nộp 01/07/2026\nGiấy khai sinh - Bản sao"})
+    assert da == {"Giấy khai sinh": "Bản sao"} and len(thieu) == 4

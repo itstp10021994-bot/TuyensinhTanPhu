@@ -88,13 +88,26 @@ def xep_lop_dialog(rec: dict):
 @st.dialog("Thu hồ sơ", width="large")
 def thu_ho_so_dialog(rec: dict):
     ngay, docs = services.doc_ho_so(rec.get("HoSoDaNop"))
-    st.markdown(f"**{rec.get('HoTen')}** — tích các giấy tờ đã nhận.")
-    rows = [{"Giấy tờ": g, "Đã nộp": g in docs, "Bản": docs.get(g, "Bản gốc")}
-            for g in [*GIAY_TO_NHAP_HOC, *[d for d in docs if d not in GIAY_TO_NHAP_HOC]]]
+    can = services.giay_to_can_nop(rec.get("Khoi"), rec.get("PhanHe"))
+    khoi = rec.get("KhoiPH") or rec.get("Khoi") or "—"
+    if can:
+        st.markdown(f"**{rec.get('HoTen')}** · khối **{khoi}** cần nộp **{len(can)}** giấy tờ "
+                    "— tích các giấy tờ đã nhận.")
+    else:
+        st.warning(f"Chưa có danh sách giấy tờ cho khối {khoi} — hiện tất cả giấy tờ.",
+                   icon=":material/info:")
+    tat_ca = st.toggle("Hiện thêm giấy tờ ngoài danh sách của khối", value=not can,
+                       key=f"hs_all_{rec['id']}")
+    ds = can + [g for g in docs if g not in can]  # giấy tờ đã nộp ngoài danh sách vẫn giữ
+    if tat_ca:
+        ds += [g for g in GIAY_TO_NHAP_HOC if g not in ds]
+    rows = [{"Giấy tờ": g, "Cần nộp": "✔" if g in can else "", "Đã nộp": g in docs,
+             "Bản": docs.get(g, "Bản gốc")} for g in ds]
     ed = st.data_editor(
         pd.DataFrame(rows), hide_index=True, width="stretch", key=f"hs_{rec['id']}",
-        disabled=["Giấy tờ"], height=ui.table_height(len(rows), 600),
+        disabled=["Giấy tờ", "Cần nộp"], height=ui.table_height(len(rows), 600),
         column_config={"Giấy tờ": st.column_config.TextColumn(width="large"),
+                       "Cần nộp": st.column_config.TextColumn(width="small"),
                        "Đã nộp": st.column_config.CheckboxColumn(width="small"),
                        "Bản": st.column_config.SelectboxColumn(
                            options=["Bản gốc", "Bản sao"], width="small", required=True)})
@@ -102,6 +115,7 @@ def thu_ho_so_dialog(rec: dict):
                          format="DD/MM/YYYY")
     if st.button("Lưu hồ sơ đã nộp", type="primary", icon=":material/check:", width="stretch"):
         chon = {r["Giấy tờ"]: r["Bản"] for _, r in ed.iterrows() if r["Đã nộp"]}
+        chon.update({g: b for g, b in docs.items() if g not in set(ed["Giấy tờ"])})
         upd = {"HoSoDaNop": services.ghi_ho_so(ngay, chon) if chon else "",
                "NgayNhanHoSo": ngay}
         if not rec.get("TinhTrangHS"):
@@ -263,13 +277,23 @@ def render_tab(name: str, groups: tuple, rec: dict, prefix: str) -> dict:
         v.update(form([f for f in NHAP_HOC.fields if f.group == name], rec, prefix, 3))
     else:  # Hồ sơ & học phí
         ngay, docs = services.doc_ho_so(rec.get("HoSoDaNop"))
+        can, _, thieu = services.tien_do_giay_to(rec)
         c1, c2 = st.columns([2, 1])
         with c1:
-            st.markdown("**Hồ sơ đã nộp**")
-            if docs:
-                st.markdown("\n".join(f"- {g} — *{b}*" for g, b in docs.items()))
-            else:
-                st.caption("Chưa ghi nhận giấy tờ nào — bấm **Thu hồ sơ** ở trên.")
+            khoi = rec.get("KhoiPH") or rec.get("Khoi") or "—"
+            st.markdown(f"**Giấy tờ cần nộp — khối {khoi}**" + (
+                f" · đã nộp {len(can) - len(thieu)}/{len(can)}" if can else ""))
+            if can:
+                st.progress((len(can) - len(thieu)) / len(can))
+                st.markdown("  \n".join(
+                    f":green[:material/check_circle:] {g} — *{docs[g]}*" if g in docs
+                    else f":red[:material/radio_button_unchecked:] {g} — :red[chưa nộp]"
+                    for g in can))
+            khac = [g for g in docs if g not in can]
+            if khac:
+                st.caption("Nộp thêm: " + "; ".join(f"{g} ({docs[g]})" for g in khac))
+            if not can and not docs:
+                st.caption("Chưa ghi nhận giấy tờ nào — bấm **Thu hồ sơ** bên dưới.")
         c2.markdown("**Ngày nộp**")
         c2.markdown(ui.fmt_date(ngay or rec.get("NgayNhanHoSo")))
         st.divider()
@@ -304,12 +328,17 @@ def card(r: dict, selected: bool):
                   args=(rid,))
         lop = r["LopHoc"] or '<span class="red">Chưa xếp lớp</span>'
         tt = r["TinhTrangHS"]
+        can, _, thieu = services.tien_do_giay_to(r)
+        gt = (f' &nbsp;·&nbsp; <span class="k">Giấy tờ:</span> '
+              f'<b class="{"red" if thieu else ""}">{len(can) - len(thieu)}/{len(can)}</b>'
+              if can else "")
         st.html(
             f'<p class="tp-card"><span class="k">Khối:</span> <b>{r["KhoiPH"] or "—"}</b>'
             f' &nbsp;·&nbsp; <span class="k">Chế độ:</span> <b>{r["NoiTruBanTru"] or "—"}</b>'
             f' &nbsp;·&nbsp; <span class="k">Lớp:</span> <b>{lop}</b><br>'
             f'<span class="k">SĐT:</span> <b>{r["DienThoaiSLL"] or "—"}</b>'
-            + (f' &nbsp;·&nbsp; <span class="k">Trạng thái:</span> {tt}' if tt else "") + "</p>")
+            + (f' &nbsp;·&nbsp; <span class="k">Trạng thái:</span> {tt}' if tt else "") + gt
+            + "</p>")
         act = st.container(horizontal=True, gap="small", vertical_alignment="center")
         if tt != "Rút hồ sơ" and act.button("Rút HS", key=f"rut_{rid}"):
             rut_dialog(r)
