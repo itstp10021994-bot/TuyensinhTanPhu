@@ -40,9 +40,10 @@ def check_lists(storage: Storage) -> list[dict]:
     return out
 
 
-def setup_lists(storage: Storage, log: Callable[[str], None] = print) -> None:
+def setup_lists(storage: Storage, log: Callable[[str], None] = print,
+                lists=None) -> None:
     """Tạo list chưa có và thêm các cột còn thiếu (không xóa / đổi cột có sẵn)."""
-    for ld in ALL_LISTS:
+    for ld in lists or ALL_LISTS:
         name = config.list_name(ld.name)
         if not storage.list_exists(ld.name):
             log(f"Tạo list {name}")

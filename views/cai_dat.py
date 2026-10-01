@@ -40,10 +40,32 @@ def render_giay_to():
     bang_sp = services.giay_to_tu_list(items)
     bang = bang_sp or services.giay_to_mac_dinh()
     ten_list = config.list_name(GIAY_TO.name)
-    if err:
-        st.warning(f"Chưa đọc được list **{ten_list}** trên SharePoint — app đang dùng danh mục "
-                   "mặc định (Book1). Vào tab **Kết nối & đồng bộ** → **Tạo list / thêm cột** để "
-                   "tạo list, sau đó chỉnh sửa tại đây.", icon=":material/info:")
+    if err and "does not exist" not in err and "404" not in err:
+        st.error(f"Không đọc được list **{ten_list}** (lỗi kết nối, không phải do chưa có list) — "
+                 "app tạm dùng danh mục mặc định. Bấm ⟳ trên thanh menu để thử lại.",
+                 icon=":material/cloud_off:")
+        with st.expander("Chi tiết lỗi"):
+            st.code(err[:1500], language=None)
+    elif err:
+        c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
+        c1.warning(f"Chưa có list **{ten_list}** trên SharePoint — app đang dùng danh mục mặc "
+                   "định (Book1). Bấm nút bên cạnh để tạo list và chép danh mục mặc định lên, "
+                   "sau đó chỉnh sửa tại đây.", icon=":material/info:")
+        if c2.button("Tạo list giấy tờ", type="primary", icon=":material/playlist_add:",
+                     width="stretch", disabled=backend == "local"):
+            with st.status("Đang tạo list…", expanded=True) as stt:
+                try:
+                    importer.setup_lists(storage, log=stt.write, lists=[GIAY_TO])
+                    stt.write("Chép danh mục mặc định (Book1)…")
+                    for k, v in services.giay_to_mac_dinh().items():
+                        services.luu_giay_to_khoi(storage, k, v, [])
+                    stt.update(label="Đã tạo list và chép danh mục", state="complete")
+                except Exception as e:
+                    stt.update(label="Không tạo được list", state="error")
+                    ui.error_state(e, compact=True)
+                    return
+            ui.refresh()
+            st.rerun()
     elif not bang_sp:
         c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
         c1.info(f"List **{ten_list}** đang trống — app dùng danh mục mặc định (Book1). Lần lưu "
