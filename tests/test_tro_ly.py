@@ -152,3 +152,26 @@ def test_ty_le_va_so_sanh_khoi():
     assert "**33,3%** (1/3 liên hệ)" in r.text
     r = tro_ly.tra_loi("so sánh khối 6 và khối 10", c)
     assert r.table["Khối"].tolist() == ["6", "10"] and r.table["Liên hệ"].tolist() == [1, 2]
+
+
+def test_hieu_them_cach_hoi():
+    c = ctx_all()
+    assert "**1** học sinh nhập học" in tro_ly.tra_loi("năm nay tuyển được bao nhiêu học sinh", c).text
+    assert "**2** học sinh đã nộp hồ sơ (gồm nhập học)" in \
+        tro_ly.tra_loi("có bao nhiêu hồ sơ", c).text
+    assert "**2** liên hệ chưa nhập học" in tro_ly.tra_loi("liên hệ chưa nhập học", c).text
+    # "liên hệ mới" không bị hiểu thành thống kê theo "hệ"
+    assert "chia theo" not in tro_ly.tra_loi("tuần này có bao nhiêu liên hệ mới", c).text
+    # câu hỏi đầy đủ không bị ghép với câu trước
+    r1 = tro_ly.tra_loi("khối nào nhiều học sinh nhất", c)
+    assert not tro_ly.tra_loi("học sinh nội trú bao nhiêu", c, r1.hieu_la).da_ghep
+    # lọc theo nơi (tỉnh / trường cũ) và giới tính viết thường
+    assert "(Tỉnh Đồng Nai)" in tro_ly.tra_loi("học sinh từ Đồng Nai", c).text
+    assert "(trường cũ THCS Phước Thái)" in tro_ly.tra_loi("hs đến từ trường Phước Thái", c).text
+    c2 = tro_ly.Ctx(TS_ALL[TS_ALL.NamHoc == "2025-2026"], NH.iloc[0:0], "2025-2026",
+                    hom_nay=date(2026, 7, 25), ts_all=TS_ALL)
+    assert "**1** liên hệ (khối 6, học sinh nam)" in tro_ly.tra_loi("khối 6 nam bao nhiêu", c2).text
+    assert "tong quan" in tro_ly.tra_loi("cho tôi xem báo cáo tổng", c).hieu_la
+    r1 = tro_ly.tra_loi("học sinh từ trường Phước Thái", c)
+    r2 = tro_ly.tra_loi("còn trường Lê Lợi thì sao?", c, r1.hieu_la)
+    assert r2.da_ghep and "Lê Lợi" in r2.text and "Phước Thái" not in r2.text

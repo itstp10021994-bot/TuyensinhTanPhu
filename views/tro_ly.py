@@ -11,13 +11,12 @@ import streamlit as st
 from tuyensinh import ai_gemini, tro_ly, ui
 from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
 
-# Ảnh đại diện robot (SVG nhúng dạng ảnh: st.html không cho thẻ <svg> trực tiếp)
+# Ảnh đại diện AI (ngôi sao lấp lánh) — SVG nhúng dạng ảnh: st.html không cho thẻ <svg>
 _SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FFFFFF">'
-        '<path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2'
-        'c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3'
-        's-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5'
-        'zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15'
-        ' 13z"/></svg>')
+        '<path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5'
+        'L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75'
+        ' 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg>')
+TEN_AI = "Conan Ro"
 BOT_SVG = ('<img alt="" src="data:image/svg+xml;base64,'
            + base64.b64encode(_SVG.encode()).decode() + '">')
 CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
@@ -44,7 +43,8 @@ st.html(f"""<style>
 .st-key-zl_dau .zl-ten {{font-weight:700; font-size:1.02rem; line-height:1.2;}}
 .st-key-zl_dau .zl-tt {{font-size:.78rem; color:{M['phu']};}}
 .st-key-zl_dau .zl-tt b {{color:#16A34A; font-weight:600;}}
-.zl-av {{width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,#0068FF,#3B9BFF);
+.zl-av {{width:40px; height:40px; border-radius:50%;
+  background:linear-gradient(135deg,#6D28D9 0%,#2563EB 55%,#06B6D4 100%);
   display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; flex:none;}}
 .zl-av.nho {{width:30px; height:30px; font-size:15px; margin-top:2px;}}
 .zl-av img {{width:22px; height:22px;}} .zl-av.nho img {{width:17px; height:17px;}}
@@ -85,7 +85,7 @@ div:has(> [class*="st-key-zl_b_"]) {{flex:0 1 auto !important; max-width:calc(10
 khung = st.container(key="zl_khung")
 with khung.container(key="zl_dau", horizontal=True, vertical_alignment="center", gap="small"):
     st.html(f'<div class="zl-av">{BOT_SVG}</div>', width="content")
-    st.html(f'<div class="zl-ten">Trợ lý tuyển sinh</div><div class="zl-tt"><b>●</b> Đang hoạt động'
+    st.html(f'<div class="zl-ten">{TEN_AI}</div><div class="zl-tt"><b>●</b> Trợ lý AI tuyển sinh'
             f' · năm học {nam_hoc}</div>', width="stretch")
     dung_ai = st.toggle("AI", value=co_ai, disabled=not co_ai, key="tl_dung_ai",
                         help="Dùng Google Gemini (miễn phí) để hiểu câu hỏi tự do. Chỉ gửi câu "
@@ -198,7 +198,7 @@ def _hien(m, i):
 tin.html(f'<div class="zl-ngay"><span>Hôm nay</span></div>')
 if not msgs:
     with _bot("zl_b_chao"):
-        st.markdown("Xin chào 👋 " + tro_ly.huong_dan().text)
+        st.markdown(f"Xin chào 👋 Mình là **{TEN_AI}**. " + tro_ly.huong_dan().text)
 for i, m in enumerate(msgs):
     _hien(m, i)
 
@@ -206,7 +206,7 @@ goi_y = ((msgs[-1]["tl"].goi_y if msgs and msgs[-1].get("tl") else []) or list(t
 with khung.container(key="zl_goiy"):
     chon = st.pills("Gợi ý", goi_y, key=f"tl_goi_y_{len(msgs)}", label_visibility="collapsed")
 with khung.container(key="zl_nhap"):
-    hoi = st.chat_input("Nhập câu hỏi cho Trợ lý tuyển sinh…") or chon
+    hoi = st.chat_input(f"Nhắn cho {TEN_AI}…") or chon
 
 if hoi:
     gio = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%H:%M")

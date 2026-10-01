@@ -131,15 +131,15 @@ h1, h2, h3 {letter-spacing: -0.01em;}
   [data-testid="stMetric"] {padding: .6rem .75rem;}
   [data-testid="stMetricValue"] {font-size: 1.3rem;}
 }
-/* nút chat nổi kiểu Zalo */
-.st-key-zl_noi {position: fixed; right: 22px; bottom: 22px; z-index: 999990; width: auto !important;}
-.st-key-zl_noi a {width: 56px; height: 56px; border-radius: 50%; background: #0068FF !important;
-  display: flex; align-items: center; justify-content: center; padding: 0;
-  box-shadow: 0 6px 18px rgba(0,104,255,.45); transition: transform .15s;}
-.st-key-zl_noi a:hover {transform: scale(1.07);}
-.st-key-zl_noi a span, .st-key-zl_noi a [data-testid="stIconMaterial"] {color: #fff !important;
-  font-size: 28px !important;}
-.st-key-zl_noi a p {display: none;}
+/* Trợ lý AI Conan Ro: nút trên thanh đầu trang; ẩn mục trùng trên menu ngang */
+.st-key-tp_ai a {background: linear-gradient(135deg, #6D28D9 0%, #2563EB 55%, #06B6D4 100%);
+  border-radius: 999px; padding: 4px 14px 4px 10px; box-shadow: 0 2px 10px rgba(79,70,229,.35);}
+.st-key-tp_ai a p, .st-key-tp_ai a span {color: #fff !important; font-weight: 600;}
+.st-key-tp_ai a:hover {filter: brightness(1.08);}
+header [data-testid="stTopNavLink"][href*="tro-ly"], header a[href$="/tro-ly"],
+[data-testid="stTopNavLinkContainer"]:has(a[href$="/tro-ly"]) {display: none !important;}
+@media (max-width: 1500px) { .st-key-tp_ai a p {display: none;}
+  .st-key-tp_ai a {padding: 6px 8px;} }
 @media (prefers-reduced-motion: reduce) { * {transition: none !important; animation: none !important;} }
 </style>
 """
