@@ -1,12 +1,25 @@
 """Trợ lý dữ liệu dạng hộp chat: hỏi bằng tiếng Việt, trả lời từ dữ liệu của app.
 Bộ máy trả lời: tuyensinh/tro_ly.py; tùy chọn Gemini (tuyensinh/ai_gemini.py) chỉ để hiểu câu
 hỏi — số liệu luôn tính trong app, dữ liệu học sinh không gửi ra ngoài."""
+import base64
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import altair as alt
 import streamlit as st
 
 from tuyensinh import ai_gemini, tro_ly, ui
 from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
 
+# Ảnh đại diện robot (SVG nhúng dạng ảnh: st.html không cho thẻ <svg> trực tiếp)
+_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FFFFFF">'
+        '<path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2'
+        'c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3'
+        's-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5'
+        'zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15'
+        ' 13z"/></svg>')
+BOT_SVG = ('<img alt="" src="data:image/svg+xml;base64,'
+           + base64.b64encode(_SVG.encode()).decode() + '">')
 CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
 
 S = st.session_state
@@ -16,22 +29,76 @@ ctx = tro_ly.Ctx(ui.df(TUYEN_SINH, nam_hoc), ui.df(NHAP_HOC, nam_hoc), nam_hoc,
                  quyen=set(tk["Quyen"]) if tk else None,
                  ts_all=ui.df(TUYEN_SINH), nh_all=ui.df(NHAP_HOC))
 
-actions = ui.page_header("Trợ lý dữ liệu", f"Hỏi đáp nhanh về dữ liệu năm học {nam_hoc} — "
-                         "xử lý ngay trong app, không gửi dữ liệu ra ngoài")
 msgs = S.setdefault("tl_msgs", [])
 co_ai = ai_gemini.co_khoa()
-with actions.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center"):
-    dung_ai = st.toggle("AI hiểu câu hỏi", value=co_ai, disabled=not co_ai, key="tl_dung_ai",
+TOI = st.context.theme.type == "dark"
+# Bảng màu kiểu Zalo (sáng / tối)
+M = dict(nen="#0F141B" if TOI else "#E9EEF5", khung="#161C24" if TOI else "#FFFFFF",
+         vien="#2A3340" if TOI else "#DCE3EC", ban="#0068FF", ban_chu="#FFFFFF",
+         bot="#1F2733" if TOI else "#FFFFFF", bot_chu="#E6EAF0" if TOI else "#111827",
+         phu="#8B95A5", chip="#1A212B" if TOI else "#FFFFFF")
+st.html(f"""<style>
+.st-key-zl_khung {{background:{M['khung']}; border:1px solid {M['vien']}; border-radius:16px;
+  overflow:hidden; gap:0 !important; box-shadow:0 4px 18px rgba(15,23,42,.08);}}
+.st-key-zl_dau {{padding:10px 16px; border-bottom:1px solid {M['vien']}; background:{M['khung']};}}
+.st-key-zl_dau .zl-ten {{font-weight:700; font-size:1.02rem; line-height:1.2;}}
+.st-key-zl_dau .zl-tt {{font-size:.78rem; color:{M['phu']};}}
+.st-key-zl_dau .zl-tt b {{color:#16A34A; font-weight:600;}}
+.zl-av {{width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,#0068FF,#3B9BFF);
+  display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; flex:none;}}
+.zl-av.nho {{width:30px; height:30px; font-size:15px; margin-top:2px;}}
+.zl-av img {{width:22px; height:22px;}} .zl-av.nho img {{width:17px; height:17px;}}
+/* bong bóng co theo nội dung, tối đa 78% (người hỏi) / phần còn lại sau ảnh đại diện (trợ lý) */
+div:has(> [class*="st-key-zl_u_"]) {{flex:0 1 auto !important; max-width:78%; width:auto !important;}}
+div:has(> [class*="st-key-zl_b_"]) {{flex:0 1 auto !important; max-width:calc(100% - 40px);
+  width:auto !important; min-width:0;}}
+[class*="st-key-zl_u_"], [class*="st-key-zl_b_"] {{width:max-content !important;
+  max-width:100% !important; min-width:0;}}
+.st-key-zl_tin {{background:{M['nen']}; padding:12px 14px 4px;}}
+.st-key-zl_tin > div {{gap:.35rem;}}
+.zl-ngay {{text-align:center; margin:4px 0 8px;}}
+.zl-ngay span {{background:rgba(100,116,139,.18); color:{M['phu']}; font-size:.72rem;
+  padding:2px 10px; border-radius:10px;}}
+[class*="st-key-zl_u_"] {{background:{M['ban']}; color:{M['ban_chu']}; border-radius:16px 16px 4px 16px;
+  padding:8px 12px 4px; box-shadow:0 1px 2px rgba(0,0,0,.08);}}
+[class*="st-key-zl_u_"] p {{color:{M['ban_chu']}; margin:0;}}
+[class*="st-key-zl_u_"] .zl-gio {{color:rgba(255,255,255,.75); text-align:right;}}
+[class*="st-key-zl_b_"] {{background:{M['bot']}; color:{M['bot_chu']}; border-radius:16px 16px 16px 4px;
+  padding:8px 12px 4px; border:1px solid {M['vien']};
+  box-shadow:0 1px 2px rgba(0,0,0,.05);}}
+[class*="st-key-zl_b_"] [data-testid="stCaptionContainer"] p {{font-size:.76rem;}}
+.zl-gio {{font-size:.68rem; color:{M['phu']}; margin-top:2px;}}
+.zl-go span {{display:inline-block; width:7px; height:7px; margin:0 2px; border-radius:50%;
+  background:{M['phu']}; animation:zlgo 1.2s infinite ease-in-out;}}
+.zl-go span:nth-child(2) {{animation-delay:.2s;}} .zl-go span:nth-child(3) {{animation-delay:.4s;}}
+@keyframes zlgo {{0%,80%,100% {{opacity:.25; transform:translateY(0)}} 40% {{opacity:1; transform:translateY(-3px)}}}}
+.st-key-zl_goiy {{padding:8px 12px 0; background:{M['khung']}; border-top:1px solid {M['vien']};}}
+.st-key-zl_goiy [data-testid="stPills"] button {{background:{M['chip']}; color:#0068FF;
+  border:1px solid #BFD7FF; border-radius:16px; font-size:.8rem;}}
+.st-key-zl_nhap {{padding:6px 12px 12px; background:{M['khung']};}}
+.st-key-zl_nhap [data-testid="stChatInput"] > div {{border-radius:22px;}}
+.st-key-zl_tin {{height:calc(100vh - 330px) !important; min-height:340px;}}
+@media (max-width: 640px) {{ .st-key-zl_tin {{height:calc(100vh - 300px) !important;}}
+  div:has(> [class*="st-key-zl_u_"]) {{max-width:88%;}} }}
+</style>""")
+
+khung = st.container(key="zl_khung")
+with khung.container(key="zl_dau", horizontal=True, vertical_alignment="center", gap="small"):
+    st.html(f'<div class="zl-av">{BOT_SVG}</div>', width="content")
+    st.html(f'<div class="zl-ten">Trợ lý tuyển sinh</div><div class="zl-tt"><b>●</b> Đang hoạt động'
+            f' · năm học {nam_hoc}</div>', width="stretch")
+    dung_ai = st.toggle("AI", value=co_ai, disabled=not co_ai, key="tl_dung_ai",
                         help="Dùng Google Gemini (miễn phí) để hiểu câu hỏi tự do. Chỉ gửi câu "
                              "hỏi, không gửi dữ liệu học sinh; câu có tên / số điện thoại xử lý "
                              "trong app." if co_ai else
-                        "Chưa bật: thêm GEMINI_API_KEY vào Secrets của app (xem Cài đặt → "
-                        "Hướng dẫn).")
-    if msgs and st.button("Cuộc trò chuyện mới", icon=":material/add_comment:"):
+                        "Chưa bật: thêm GEMINI_API_KEY vào Secrets của app.")
+    if st.button("", icon=":material/edit_square:", key="tl_moi", type="tertiary",
+                 help="Cuộc trò chuyện mới"):
         msgs.clear()
-        S.pop("tl_truoc", None)
-        S.pop("tl_truoc_goc", None)
+        for k in ("tl_truoc", "tl_truoc_goc"):
+            S.pop(k, None)
         st.rerun()
+tin = khung.container(key="zl_tin", height=560, autoscroll=True)
 
 
 def _ai(cau_hoi, truoc):
@@ -89,10 +156,26 @@ def _bieu_do(df):
                     .configure_view(stroke=None), width="stretch")
 
 
+def _gio(m) -> str:
+    return f'<div class="zl-gio">{m.get("gio", "")}</div>'
+
+
+def _bot(key: str):
+    """Một dòng tin của trợ lý: ảnh đại diện + bong bóng; trả về bong bóng để ghi nội dung."""
+    hang = tin.container(horizontal=True, vertical_alignment="top", gap="small", wrap=False)
+    hang.html(f'<div class="zl-av nho">{BOT_SVG}</div>', width="content")
+    return hang.container(key=key, width="content")
+
+
 def _hien(m, i):
-    with st.chat_message(m["role"], avatar=":material/person:" if m["role"] == "user"
-                         else ":material/smart_toy:"):
-        r = m.get("tl")
+    if m["role"] == "user":
+        hang = tin.container(horizontal=True, horizontal_alignment="right", wrap=False)
+        with hang.container(key=f"zl_u_{i}", width="content"):
+            st.markdown(m["text"])
+            st.html(_gio(m))
+        return
+    r = m.get("tl")
+    with _bot(f"zl_b_{i}"):
         if r is not None and r.ai_hieu:
             st.caption(f":material/auto_awesome: AI hiểu là: *{r.ai_hieu}*")
         elif r is not None and r.da_ghep:
@@ -100,37 +183,44 @@ def _hien(m, i):
         if r is not None and r.ai_loi:
             st.caption(f":material/info: {r.ai_loi} — đang dùng cách hiểu thường.")
         st.markdown(m["text"])
-        if r is None:
-            return
-        if r.chart is not None and len(r.chart) > 1:
-            _bieu_do(r.chart)
-        if r.table is not None and len(r.table):
-            st.dataframe(r.table, hide_index=True, width="stretch",
-                         height=min(420, 38 + 35 * len(r.table)), key=f"tl_tbl_{i}")
-            st.download_button("Tải CSV", r.table.to_csv(index=False).encode("utf-8-sig"),
-                               file_name="tro_ly.csv", mime="text/csv", key=f"tl_csv_{i}",
-                               icon=":material/download:", type="tertiary")
+        if r is not None:
+            if r.chart is not None and len(r.chart) > 1:
+                _bieu_do(r.chart)
+            if r.table is not None and len(r.table):
+                st.dataframe(r.table, hide_index=True, width="stretch",
+                             height=min(360, 38 + 35 * len(r.table)), key=f"tl_tbl_{i}")
+                st.download_button("Tải CSV", r.table.to_csv(index=False).encode("utf-8-sig"),
+                                   file_name="tro_ly.csv", mime="text/csv", key=f"tl_csv_{i}",
+                                   icon=":material/download:", type="tertiary")
+        st.html(_gio(m))
 
 
-hoi = None
+tin.html(f'<div class="zl-ngay"><span>Hôm nay</span></div>')
 if not msgs:
-    with st.chat_message("assistant", avatar=":material/smart_toy:"):
-        st.markdown(tro_ly.huong_dan().text)
+    with _bot("zl_b_chao"):
+        st.markdown("Xin chào 👋 " + tro_ly.huong_dan().text)
 for i, m in enumerate(msgs):
     _hien(m, i)
 
-goi_y = (msgs[-1]["tl"].goi_y if msgs and msgs[-1].get("tl") else []) or list(tro_ly.VI_DU)
-chon = st.pills("Gợi ý", goi_y, key=f"tl_goi_y_{len(msgs)}", label_visibility="collapsed")
-hoi = st.chat_input("Hỏi về dữ liệu tuyển sinh, ví dụ: bao nhiêu HS nhập học khối 10?") or chon
+goi_y = ((msgs[-1]["tl"].goi_y if msgs and msgs[-1].get("tl") else []) or list(tro_ly.VI_DU))[:6]
+with khung.container(key="zl_goiy"):
+    chon = st.pills("Gợi ý", goi_y, key=f"tl_goi_y_{len(msgs)}", label_visibility="collapsed")
+with khung.container(key="zl_nhap"):
+    hoi = st.chat_input("Nhập câu hỏi cho Trợ lý tuyển sinh…") or chon
 
 if hoi:
-    msgs.append({"role": "user", "text": hoi})
+    gio = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%H:%M")
+    msgs.append({"role": "user", "text": hoi, "gio": gio})
+    _hien(msgs[-1], len(msgs) - 1)
+    with _bot("zl_b_go"):  # "đang soạn tin…" trong lúc tính
+        st.html('<div class="zl-go"><span></span><span></span><span></span></div>')
     try:
         tl = tro_ly.tra_loi(hoi, ctx, S.get("tl_truoc"), ai=_ai if dung_ai else None)
     except Exception as e:  # không để lỗi một câu hỏi làm hỏng trang
         tl = tro_ly.TraLoi(f"Xin lỗi, mình gặp lỗi khi trả lời câu này ({e}).")
     S["tl_truoc"] = tl.hieu_la or None
     S["tl_truoc_goc"] = tl.ai_hieu if tl.ai_hieu and not tl.ai_hieu.startswith("(") else hoi
-    msgs.append({"role": "assistant", "text": tl.text, "tl": tl})
+    msgs.append({"role": "assistant", "text": tl.text, "tl": tl,
+                 "gio": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%H:%M")})
     del msgs[:-40]  # giữ 20 lượt gần nhất
     st.rerun()

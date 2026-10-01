@@ -207,6 +207,11 @@ try:
 
         ui.preload(TUYEN_SINH, NHAP_HOC, GIAY_TO, optional=(GIAY_TO,))
     ui.apply_giay_to()
+    # Nút chat nổi góc phải dưới (kiểu Zalo) -> mở Trợ lý; ẩn trên chính trang Trợ lý
+    if pg.url_path != "tro-ly" and P["tl"] in _pages:
+        with st.container(key="zl_noi"):
+            st.page_link(P["tl"], label="Trợ lý", icon=":material/chat:",
+                         help="Hỏi Trợ lý tuyển sinh")
     pg.run()
 except Exception as e:  # lỗi kết nối SharePoint, cấu hình...
     if type(e).__name__ in ("StopException", "RerunException", "RerunData"):

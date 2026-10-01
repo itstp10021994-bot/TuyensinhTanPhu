@@ -131,6 +131,15 @@ h1, h2, h3 {letter-spacing: -0.01em;}
   [data-testid="stMetric"] {padding: .6rem .75rem;}
   [data-testid="stMetricValue"] {font-size: 1.3rem;}
 }
+/* nút chat nổi kiểu Zalo */
+.st-key-zl_noi {position: fixed; right: 22px; bottom: 22px; z-index: 999990; width: auto !important;}
+.st-key-zl_noi a {width: 56px; height: 56px; border-radius: 50%; background: #0068FF !important;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+  box-shadow: 0 6px 18px rgba(0,104,255,.45); transition: transform .15s;}
+.st-key-zl_noi a:hover {transform: scale(1.07);}
+.st-key-zl_noi a span, .st-key-zl_noi a [data-testid="stIconMaterial"] {color: #fff !important;
+  font-size: 28px !important;}
+.st-key-zl_noi a p {display: none;}
 @media (prefers-reduced-motion: reduce) { * {transition: none !important; animation: none !important;} }
 </style>
 """
