@@ -47,15 +47,24 @@ st.html(f"""<style>
 .st-key-zl_tin {{height: 100% !important; max-height: none !important; background: {M['nen']};
   padding: 14px 18px 6px; border: 0 !important; border-radius: 0 !important;}}
 .st-key-zl_tin > div {{gap: .3rem;}}
-/* thanh tiêu đề kiểu macOS: 3 nút đỏ-vàng-xanh, tên ở giữa */
-.st-key-zl_dau {{padding: 8px 14px; background: {M['thanh']};
-  border-bottom: 1px solid {M['vien']}; min-height: 52px;}}
-.zl-den {{display: flex; gap: 8px; align-items: center; padding-right: 6px;}}
-.zl-den i {{width: 12px; height: 12px; border-radius: 50%; display: block;
-  box-shadow: inset 0 0 0 .5px rgba(0,0,0,.18);}}
-.zl-den i:nth-child(1) {{background: #FF5F57;}} .zl-den i:nth-child(2) {{background: #FEBC2E;}}
-.zl-den i:nth-child(3) {{background: #28C840;}}
-.zl-giua {{display: flex; align-items: center; justify-content: center; gap: 10px;}}
+/* thanh tiêu đề kiểu Windows 11: tên bên trái, nút thu nhỏ / phóng to / đóng bên phải */
+.st-key-zl_dau {{padding: 0 0 0 14px; background: {M['thanh']};
+  border-bottom: 1px solid {M['vien']}; min-height: 52px; align-items: stretch !important;}}
+.st-key-zl_dau > div {{align-self: center;}}
+.st-key-zl_dau > div:has(.zl-win) {{align-self: stretch;}}
+.zl-win {{display: flex; height: 100%; margin-left: 6px;}}
+.zl-win span {{width: 46px; height: 100%; min-height: 52px; display: flex; align-items: center;
+  justify-content: center; position: relative; cursor: default; transition: background .1s;}}
+.zl-win span:hover {{background: {'rgba(255,255,255,.08)' if TOI else 'rgba(0,0,0,.06)'};}}
+.zl-win span.x:hover {{background: #C42B1C;}}
+.zl-win span::before, .zl-win span::after {{content: ""; position: absolute;
+  border-color: {M['bot_chu']};}}
+.zl-win .min::before {{width: 10px; border-top: 1px solid;}}
+.zl-win .max::before {{width: 9px; height: 9px; border: 1px solid; border-radius: 1.5px;}}
+.zl-win .x::before, .zl-win .x::after {{width: 13px; border-top: 1px solid;}}
+.zl-win .x::before {{transform: rotate(45deg);}} .zl-win .x::after {{transform: rotate(-45deg);}}
+.zl-win .x:hover::before, .zl-win .x:hover::after {{border-color: #fff;}}
+.zl-giua {{display: flex; align-items: center; justify-content: flex-start; gap: 10px;}}
 .zl-ten {{font-weight: 600; font-size: .95rem; line-height: 1.15;}}
 .zl-tt {{font-size: .74rem; color: {M['phu']};}} .zl-tt b {{color: #28C840;}}
 .zl-av {{width: 34px; height: 34px; border-radius: 50%; flex: none; display: flex;
@@ -104,14 +113,13 @@ div:has(> [class*="st-key-zl_b_"]) {{flex: 0 1 auto !important; max-width: calc(
   .st-key-zl_khung {{width: 100% !important; height: calc(100dvh - 9.4rem) !important;
     border-radius: 10px;}}
   .st-key-zl_dau {{flex-wrap: nowrap !important; padding: 6px 10px;}}
-  .zl-den, .zl-tt {{display: none;}} .zl-giua {{justify-content: flex-start;}}
+  .zl-win, .zl-tt {{display: none;}}
   .st-key-zl_tin {{padding: 10px 10px 4px;}}
   div:has(> [class*="st-key-zl_u_"]) {{max-width: 86%;}} }}
 </style>""")
 
 khung = st.container(key="zl_khung")
 with khung.container(key="zl_dau", horizontal=True, vertical_alignment="center", gap="small"):
-    st.html('<div class="zl-den"><i></i><i></i><i></i></div>', width="content")
     st.html(f'<div class="zl-giua"><div class="zl-av">{BOT_SVG}</div><div><div class="zl-ten">'
             f'{TEN_AI}</div><div class="zl-tt"><b>●</b> Trợ lý AI tuyển sinh · năm học {nam_hoc}'
             f'</div></div></div>', width="stretch")
@@ -126,6 +134,10 @@ with khung.container(key="zl_dau", horizontal=True, vertical_alignment="center",
         for k in ("tl_truoc", "tl_truoc_goc"):
             S.pop(k, None)
         st.rerun()
+    # 3 nút cửa sổ kiểu Windows (trang trí): thu nhỏ, phóng to, đóng
+    st.html('<div class="zl-win"><span class="min" title="Thu nhỏ"></span>'
+            '<span class="max" title="Phóng to"></span><span class="x" title="Đóng"></span></div>',
+            width="content")
 if not co_ai:
     with khung.expander(":material/info: Công tắc AI đang tắt vì chưa tìm thấy GEMINI_API_KEY",
                         expanded=False):
