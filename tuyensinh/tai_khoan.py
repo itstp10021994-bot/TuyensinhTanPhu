@@ -55,6 +55,12 @@ def _phien(t: dict) -> dict:
             "Quyen": quyen(t)}
 
 
+def phien_quan_tri() -> dict:
+    """Phiên Quản trị tạm khi vào bằng ADMIN_PASSWORD (không gắn tài khoản nào)."""
+    return {"id": "", "HoTen": "Quản trị", "TenDangNhap": "ADMIN_PASSWORD",
+            "VaiTro": "Quản trị", "Quyen": list(TRANG)}
+
+
 def dang_nhap(items: list[dict], ten_dang_nhap: str, mat_khau: str) -> dict | None:
     """Trả về phiên đăng nhập nếu đúng tên đăng nhập + mật khẩu và đang hoạt động."""
     for t in dang_hoat_dong(items):

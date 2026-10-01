@@ -54,6 +54,8 @@ CSS = """
 .st-key-tp_toolbar {position: fixed; top: .55rem; right: 4.5rem; z-index: 999991;
   width: auto !important; background: transparent;}
 .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 140px;}
+/* màn hình vừa: bỏ dòng nguồn dữ liệu để không đè lên menu (đủ 6 trang) */
+@media (max-width: 1500px) { .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;} }
 /* danh sách thẻ (bố cục như app cũ: danh sách trái, chi tiết phải) */
 [class*="st-key-cards_"] [data-testid="stVerticalBlockBorderWrapper"] {padding: 2px 0;}
 [class*="st-key-cards_"] button {min-height: 30px; padding: 2px 10px; font-size: .78rem;}

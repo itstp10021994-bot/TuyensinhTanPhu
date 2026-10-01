@@ -104,7 +104,8 @@ def render_tai_khoan():
         ho_ten = st.text_input("Họ tên *", t.get("HoTen", ""), key=f"{k}_ten",
                                help="Tên này ghi vào hồ sơ: người nhập, người nhận hồ sơ")
         ten_dn = st.text_input("Tên đăng nhập *", t.get("TenDangNhap", ""), key=f"{k}_dn")
-        vai_mac_dinh = "Quản trị" if not hd and not t else (t.get("VaiTro") or "Tuyển sinh")
+        co_qt = any(x.get("VaiTro") == "Quản trị" for x in hd)
+        vai_mac_dinh = "Quản trị" if not co_qt and not t else (t.get("VaiTro") or "Tuyển sinh")
         vai = st.selectbox("Vai trò", VAI_TRO, index=VAI_TRO.index(vai_mac_dinh)
                            if vai_mac_dinh in VAI_TRO else 1, key=f"{k}_vai")
         if vai == "Quản trị":

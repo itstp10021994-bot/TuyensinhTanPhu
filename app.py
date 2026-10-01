@@ -2,6 +2,7 @@
 
 Chạy:  streamlit run app.py
 """
+import hmac
 from pathlib import Path
 
 import streamlit as st
@@ -90,6 +91,29 @@ if not _has_auth() and not S.get("tk"):
                     st.rerun()
                 st.error("Sai tên đăng nhập hoặc mật khẩu.", icon=":material/error:")
             st.caption("Chưa có tài khoản hoặc quên mật khẩu: liên hệ người quản trị app.")
+            # Lối vào dự phòng khi chưa có / quên tài khoản Quản trị: mật khẩu ADMIN_PASSWORD
+            _co_qt = any(t.get("VaiTro") == "Quản trị" for t in _tks)
+            with st.expander("Đăng nhập bằng mật khẩu quản trị (ADMIN_PASSWORD)",
+                             expanded=not _co_qt):
+                if not _co_qt:
+                    st.warning("Chưa có tài khoản vai trò **Quản trị**. Đăng nhập bằng mật khẩu "
+                               "quản trị để vào Cài đặt → Tài khoản & phân quyền và tạo.",
+                               icon=":material/warning:")
+                _pw = config.get("ADMIN_PASSWORD")
+                if not _pw:
+                    st.caption("Chưa đặt **ADMIN_PASSWORD** trong Secrets của app "
+                               "(Streamlit Cloud → Manage app → Settings → Secrets).")
+                else:
+                    with st.form("dang_nhap_qt", border=False):
+                        _mk = st.text_input("Mật khẩu quản trị", type="password")
+                        _ok2 = st.form_submit_button("Vào bằng quyền quản trị",
+                                                     icon=":material/admin_panel_settings:")
+                    if _ok2:
+                        if hmac.compare_digest(_mk.encode(), str(_pw).encode()):
+                            S["tk"] = tai_khoan.phien_quan_tri()
+                            S.pop("_da_dang_xuat", None)
+                            st.rerun()
+                        st.error("Sai mật khẩu quản trị.", icon=":material/error:")
         st.stop()
 if "_ghi_nho" in S:  # lưu mã ghi nhớ sau khi đăng nhập; giữ đến khi trình duyệt xác nhận
     if ui.ghi_nho("ghi_nho_ghi", S["_ghi_nho"]) == S["_ghi_nho"]:
@@ -146,15 +170,18 @@ with st.container(horizontal=True, horizontal_alignment="right", vertical_alignm
         _tk = st.session_state["tk"]
         with st.popover(_tk["HoTen"], icon=":material/account_circle:"):
             st.caption(f"{_tk['TenDangNhap']} · {_tk['VaiTro']}")
-            with st.form("doi_mk", border=False):
-                _cu = st.text_input("Mật khẩu hiện tại", type="password")
-                _moi = st.text_input("Mật khẩu mới", type="password")
-                if st.form_submit_button("Đổi mật khẩu", icon=":material/key:"):
-                    from tuyensinh import tai_khoan
-                    from tuyensinh.schema import TAI_KHOAN
+            if not _tk.get("id"):  # vào bằng ADMIN_PASSWORD
+                st.caption("Phiên quản trị tạm — hãy tạo tài khoản Quản trị trong Cài đặt.")
+            else:
+                with st.form("doi_mk", border=False):
+                    _cu = st.text_input("Mật khẩu hiện tại", type="password")
+                    _moi = st.text_input("Mật khẩu mới", type="password")
+                    if st.form_submit_button("Đổi mật khẩu", icon=":material/key:"):
+                        from tuyensinh import tai_khoan
+                        from tuyensinh.schema import TAI_KHOAN
 
-                    ui.mutate(tai_khoan.doi_mat_khau, ui.storage(), _tk["id"], _cu, _moi,
-                              ui.records(TAI_KHOAN, optional=True), success="Đã đổi mật khẩu")
+                        ui.mutate(tai_khoan.doi_mat_khau, ui.storage(), _tk["id"], _cu, _moi,
+                                  ui.records(TAI_KHOAN, optional=True), success="Đã đổi mật khẩu")
             st.button("Đăng xuất", icon=":material/logout:", type="tertiary", on_click=_dang_xuat)
     else:
         who = st.session_state.get("nguoi_dung") or "Người thao tác"
