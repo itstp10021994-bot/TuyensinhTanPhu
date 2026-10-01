@@ -188,6 +188,12 @@ with st.container(horizontal=True, horizontal_alignment="right", vertical_alignm
         with st.popover(who, icon=":material/account_circle:"):
             st.text_input("Người thao tác", key="nguoi_dung", placeholder="Họ tên của bạn",
                           help="Ghi vào các cột Người nhận hồ sơ / Người xác nhận.")
+    _toi = st.context.theme.type == "dark"
+    if st.button("", icon=":material/light_mode:" if _toi else ":material/dark_mode:",
+                 key="tp_theme", type="tertiary",
+                 help="Chuyển sang giao diện sáng" if _toi else "Chuyển sang giao diện tối"):
+        ui.doi_giao_dien("Light" if _toi else "Dark",
+                         [getattr(P[k], "url_path", "") for k in P])
     st.button("", icon=":material/refresh:", key="tp_refresh", on_click=ui.refresh,
               help="Tải lại dữ liệu mới nhất từ SharePoint", type="tertiary")
 

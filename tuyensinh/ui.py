@@ -356,6 +356,37 @@ def ghi_nho(key: str, set_value: str | None = None) -> str | None:
     return getattr(res, "ma", None)
 
 
+_GIAO_DIEN_JS = """
+export default function(component) {
+  const { data } = component;
+  if (!data || !data.theme) return;
+  // Streamlit lưu lựa chọn giao diện theo từng đường dẫn trang (stActiveTheme-<path>-v2)
+  // -> ghi cho mọi trang của app rồi tải lại để áp dụng.
+  const p = window.location.pathname;
+  let base = p.replace(/\\/$/, "");
+  for (const s of data.slugs) {
+    if (s && base.endsWith("/" + s)) { base = base.slice(0, base.length - s.length - 1); break; }
+  }
+  const paths = new Set([p, base + "/", base || "/"]);
+  for (const s of data.slugs) if (s) paths.add(base + "/" + s);
+  try {
+    for (const x of paths) localStorage.setItem("stActiveTheme-" + x + "-v2", JSON.stringify(data.theme));
+  } catch (e) {}
+  window.location.reload();
+}
+"""
+_giao_dien = None
+
+
+def doi_giao_dien(theme: str, slugs: list[str]) -> None:
+    """Chuyển giao diện "Light" / "Dark" cho trình duyệt này (nhớ cả khi F5)."""
+    global _giao_dien
+    if _giao_dien is None:
+        from streamlit.components.v2 import component
+        _giao_dien = component("ts_giao_dien", js=_GIAO_DIEN_JS)
+    _giao_dien(key="ts_giao_dien", data={"theme": theme, "slugs": slugs}, height=0)
+
+
 def is_admin() -> bool:
     tk = st.session_state.get("tk")
     return bool(tk and tk.get("VaiTro") == "Quản trị")
