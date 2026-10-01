@@ -242,3 +242,16 @@ def test_danh_muc_giay_to_luu_va_doc(storage):
     finally:
         services.dat_giay_to(None)
     assert len(services.giay_to_can_nop("6", "IEP")) == 5  # mặc định Book1
+
+
+def test_bien_nhan_html():
+    from datetime import date as _d
+    from tuyensinh import bien_nhan
+    rec = {"HoTen": "Trần An", "NgaySinh": "2014-03-02", "Khoi": "6", "PhanHe": "IEP",
+           "NoiTruBanTru": "Nội trú", "TenMe": "Lê Hoa", "DienThoaiMe": "0909123456"}
+    page = bien_nhan.html(rec, {"Giấy khai sinh": "Bản sao"}, ["Học bạ Tiểu học"],
+                          _d(2026, 10, 21), "Lê Thiên An", "2026-2027", _d(2026, 10, 1))
+    for s in ("BẢNG KÝ NHẬN HỒ SƠ HỌC SINH", "Trần An", "02/03/2014", "Lê Hoa", "0909123456",
+              "1 hồ sơ hợp lệ", "Giấy khai sinh", "(Bản sao)", "1 hồ sơ", "21/10/2026",
+              "Lê Thiên An", "window.print()"):
+        assert s in page, s

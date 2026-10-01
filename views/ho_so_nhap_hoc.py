@@ -7,12 +7,12 @@ ngân hàng, Lựa chọn môn…) và nút Thu hồ sơ, Thanh toán học phí
 nằm ở ?id=... để giữ khi tải lại trang.
 """
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import export_vemis, services, ui
+from tuyensinh import bien_nhan, export_vemis, services, ui
 from tuyensinh.schema import (G_CHUNG, G_DIACHI, G_GIADINH, G_GIAYTO, G_HOCPHI, G_HOCTAP,
                               G_KHANCAP, G_LIENLAC, G_MON, G_NGANHANG, GIAY_TO_NHAP_HOC, MON_HOC,
                               NHAP_HOC, TINH_TRANG_HS, TUYEN_SINH)
@@ -91,8 +91,8 @@ def thu_ho_so_dialog(rec: dict):
     can = services.giay_to_can_nop(rec.get("Khoi"), rec.get("PhanHe"))
     khoi = rec.get("KhoiPH") or rec.get("Khoi") or "—"
     if can:
-        st.markdown(f"**{rec.get('HoTen')}** · khối **{khoi}** cần nộp **{len(can)}** giấy tờ "
-                    "— tích các giấy tờ đã nhận.")
+        st.markdown(f"**{rec.get('HoTen')}** · khối **{khoi}** cần nộp **{len(can)}** giấy tờ. "
+                    "Tích giấy tờ đã nhận và chọn **bản gốc / bản sao**.")
     else:
         st.warning(f"Chưa có danh sách giấy tờ cho khối {khoi} — hiện tất cả giấy tờ.",
                    icon=":material/info:")
@@ -101,27 +101,67 @@ def thu_ho_so_dialog(rec: dict):
     ds = can + [g for g in docs if g not in can]  # giấy tờ đã nộp ngoài danh sách vẫn giữ
     if tat_ca:
         ds += [g for g in GIAY_TO_NHAP_HOC if g not in ds]
-    rows = [{"Giấy tờ": g, "Cần nộp": "✔" if g in can else "", "Đã nộp": g in docs,
-             "Bản": docs.get(g, "Bản gốc")} for g in ds]
-    ed = st.data_editor(
-        pd.DataFrame(rows), hide_index=True, width="stretch", key=f"hs_{rec['id']}",
-        disabled=["Giấy tờ", "Cần nộp"], height=ui.table_height(len(rows), 600),
-        column_config={"Giấy tờ": st.column_config.TextColumn(width="large"),
-                       "Cần nộp": st.column_config.TextColumn(width="small"),
-                       "Đã nộp": st.column_config.CheckboxColumn(width="small"),
-                       "Bản": st.column_config.SelectboxColumn(
-                           options=["Bản gốc", "Bản sao"], width="small", required=True)})
-    ngay = st.date_input("Ngày nộp", ngay or ui._to_date(rec.get("NgayNhanHoSo")) or date.today(),
-                         format="DD/MM/YYYY")
-    if st.button("Lưu hồ sơ đã nộp", type="primary", icon=":material/check:", width="stretch"):
-        chon = {r["Giấy tờ"]: r["Bản"] for _, r in ed.iterrows() if r["Đã nộp"]}
-        chon.update({g: b for g, b in docs.items() if g not in set(ed["Giấy tờ"])})
+    chon: dict[str, str] = {}
+    p = f"hs_{rec['id']}_{S.nh_v}"
+    with st.container(border=True, height=min(520, 54 * len(ds) + 20)):
+        for i, g in enumerate(ds):
+            c1, c2 = st.columns([3.2, 1.3], vertical_alignment="center")
+            nhan = c1.checkbox(g + ("" if g in can else "  ·  ngoài danh sách"), value=g in docs,
+                               key=f"{p}_c{i}")
+            ban = c2.segmented_control("Bản", ["Bản gốc", "Bản sao"],
+                                       default=docs.get(g, "Bản gốc"), required=True,
+                                       key=f"{p}_b{i}", label_visibility="collapsed",
+                                       disabled=not nhan)
+            if nhan:
+                chon[g] = ban or "Bản gốc"
+    thieu = [g for g in can if g not in chon]
+    st.caption(f"Đã nhận **{len(chon)}** giấy tờ · còn thiếu **{len(thieu)}**"
+               + (": " + "; ".join(thieu) if thieu else ""))
+    c1, c2, c3 = st.columns(3)
+    ngay = c1.date_input("Ngày nộp", ngay or ui._to_date(rec.get("NgayNhanHoSo")) or date.today(),
+                         format="DD/MM/YYYY", key=f"{p}_ngay")
+    han = c2.date_input("Bổ sung trước ngày", date.today() + timedelta(days=20),
+                        format="DD/MM/YYYY", key=f"{p}_han", disabled=not thieu)
+    nguoi = c3.text_input("Người nhận hồ sơ", ui.current_user(), key=f"{p}_nguoi")
+    b1, b2 = st.columns(2)
+    luu_in = b1.button("Lưu & in bảng ký nhận", type="primary", icon=":material/print:",
+                       width="stretch")
+    luu = b2.button("Chỉ lưu", icon=":material/check:", width="stretch")
+    if luu or luu_in:
         upd = {"HoSoDaNop": services.ghi_ho_so(ngay, chon) if chon else "",
                "NgayNhanHoSo": ngay}
         if not rec.get("TinhTrangHS"):
             upd["TinhTrangHS"] = "Đang nhập hồ sơ"
-        done(ui.mutate(services.cap_nhat_nhap_hoc, storage, rec["id"], upd,
-                       success=f"Đã lưu {len(chon)} giấy tờ của {rec.get('HoTen')}"))
+        res = ui.mutate(services.cap_nhat_nhap_hoc, storage, rec["id"], upd,
+                        success=f"Đã lưu {len(chon)} giấy tờ của {rec.get('HoTen')}")
+        if res is not None:
+            if luu_in:
+                S["_in_bien_nhan"] = dict(rec=rec, da_nhan=chon, thieu=thieu, han=han,
+                                          nguoi=nguoi, ngay=ngay)
+            done(res)
+
+
+@st.dialog("Bảng ký nhận hồ sơ học sinh", width="large")
+def bien_nhan_dialog(info: dict):
+    import streamlit.components.v1 as components
+
+    page = bien_nhan.html(info["rec"], info["da_nhan"], info["thieu"], info.get("han"),
+                          info.get("nguoi", ""), nam_hoc, info.get("ngay"))
+    st.caption("Bấm **🖨 In bảng ký nhận** trong khung dưới (chọn máy in, hoặc *Lưu dưới dạng "
+               "PDF*).")
+    components.html(page, height=980, scrolling=True)
+    st.download_button("Tải file (HTML) để in sau", page.encode("utf-8"),
+                       file_name=f"KyNhanHoSo_{info['rec'].get('HoTen', '')}.html",
+                       mime="text/html", icon=":material/download:", on_click="ignore")
+
+
+def in_bien_nhan(rec: dict):
+    """Mở bảng ký nhận theo giấy tờ đã lưu của hồ sơ (in lại)."""
+    can, da, thieu = services.tien_do_giay_to(rec)
+    ngay, _ = services.doc_ho_so(rec.get("HoSoDaNop"))
+    bien_nhan_dialog(dict(rec=rec, da_nhan=da, thieu=thieu,
+                          han=date.today() + timedelta(days=20), nguoi=ui.current_user(),
+                          ngay=ngay))
 
 
 def _num(v):
@@ -452,6 +492,8 @@ def render_right(item_id: str | None):
                                    lambda: export_vemis.to_bytes(hit),
                                    file_name=f"VEMIS_{rec.get('HoTen')}.xlsx", mime=ui.XLSX,
                                    on_click="ignore", icon=":material/download:", width="stretch")
+                if st.button("In bảng ký nhận hồ sơ", icon=":material/print:", width="stretch"):
+                    in_bien_nhan(rec)
             pct = 1 - len(missing) / len(services.NHAP_HOC_CAN_CO)
             st.progress(pct, text=f"Hoàn thiện {pct:.0%}" + (
                 " · còn thiếu: " + ", ".join(services.NHAP_HOC_NHAN_NGAN[k] for k in missing)
@@ -529,3 +571,5 @@ def render_page():
 
 
 render_page()
+if S.get("_in_bien_nhan"):  # vừa lưu "Thu hồ sơ" -> mở bảng ký nhận để in
+    bien_nhan_dialog(S.pop("_in_bien_nhan"))
