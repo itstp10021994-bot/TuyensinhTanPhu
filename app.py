@@ -137,7 +137,7 @@ P = {
                   url_path="ke-toan"),
     "bc": st.Page("views/bao_cao.py", title="Báo cáo", icon=":material/monitoring:",
                   url_path="bao-cao"),
-    "tl": st.Page("views/tro_ly.py", title="Conan Ro", icon=":material/auto_awesome:",
+    "tl": st.Page("views/tro_ly.py", title="Conan Ro", icon=":material/smart_toy:",
                   url_path="tro-ly"),
     "cd": st.Page("views/cai_dat.py", title="Cài đặt & đồng bộ", icon=":material/settings:",
                   url_path="cai-dat"),
@@ -169,7 +169,7 @@ with st.container(horizontal=True, horizontal_alignment="right", vertical_alignm
     # Trợ lý AI "Conan Ro": biểu tượng AI trên thanh đầu trang (thay cho mục menu)
     if P["tl"] in _pages:
         with st.container(key="tp_ai", width="content"):
-            st.page_link(P["tl"], label="Conan Ro", icon=":material/auto_awesome:",
+            st.page_link(P["tl"], label="Conan Ro", icon=":material/smart_toy:",
                          help="Hỏi trợ lý AI Conan Ro về dữ liệu tuyển sinh")
     if _has_auth():
         with st.popover(ui.current_user() or "Tài khoản", icon=":material/account_circle:"):

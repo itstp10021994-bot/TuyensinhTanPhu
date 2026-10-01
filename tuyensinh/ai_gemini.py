@@ -22,53 +22,72 @@ from . import config
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 MODEL = "gemini-2.5-flash"
 
-HUONG_DAN = """Bạn là bộ chuyển đổi câu hỏi cho trợ lý dữ liệu tuyển sinh của một trường học
-(khối 1–12, phân hệ IEP/ESL, chế độ nội trú/bán trú/ngoại trú). Nhiệm vụ: viết lại câu hỏi của
-người dùng thành MỘT câu hỏi chuẩn, ngắn, tiếng Việt có dấu, theo đúng các mẫu dưới đây.
-Không trả lời câu hỏi, không bịa số liệu.
+HUONG_DAN = """Bạn là bộ phân tích câu hỏi cho trợ lý dữ liệu tuyển sinh của một trường học
+(khối 1–12, phân hệ IEP/ESL, chế độ Nội trú/Bán trú/Ngoại trú). Đọc câu hỏi tiếng Việt (có thể
+không dấu, viết tắt, sai chính tả) và trả về JSON mô tả Ý ĐỊNH theo schema. Không trả lời câu
+hỏi, không bịa số liệu.
 
-Dữ liệu có: liên hệ tuyển sinh với các bước "tư vấn" → "nộp hồ sơ" → "nhập học", hoặc
-"rút hồ sơ"; khối; hệ IEP/ESL; chế độ; giới tính; nguồn (Ban TS đến trường tư vấn, Bạn bè -
-Người thân, Quảng cáo tự động, Mạng xã hội, Hotline, Trực tiếp, Gần nhà, Tự tìm hiểu, PHHS trường
-giới thiệu, CBNV Trường-IGC, Giáo viên trường cũ, Đi trường TS); trường cũ, tỉnh, phường/xã của
-trường cũ; người nhận hồ sơ; ngày liên hệ; giữ chỗ / hoàn phí / học phí; giấy tờ nhập học.
+Dữ liệu: mỗi liên hệ tuyển sinh có bước "Tư vấn" → "Nộp hồ sơ" → "Nhập học" (hoặc "Rút hồ sơ"),
+khối, hệ, chế độ, giới tính, nguồn, trường cũ + tỉnh + phường/xã của trường cũ, người nhận hồ sơ,
+tên phụ huynh, giữ chỗ, tình trạng tư vấn, ngày liên hệ, họ tên học sinh.
+Nguồn có trong dữ liệu: Ban TS đến trường tư vấn, Bạn bè - Người thân, Quảng cáo tự động, Mạng xã
+hội, Hotline, Trực tiếp, Gần nhà, Tự tìm hiểu, PHHS trường giới thiệu, CBNV Trường-IGC, Giáo viên
+trường cũ, Đi trường TS.
 
-Mẫu câu chuẩn (ghép các phần khi cần):
-- Đếm: "bao nhiêu học sinh nhập học khối 10 nội trú tháng 7" | "bao nhiêu liên hệ tuần này"
-  | "bao nhiêu học sinh nữ nộp hồ sơ" | "bao nhiêu học sinh rút hồ sơ"
-- Danh sách: "danh sách học sinh nhập học khối 6 hệ IEP"
-- Thống kê: "thống kê liên hệ theo nguồn" | "nhập học theo khối" | "liên hệ theo tháng"
-  (trục: khối, nguồn, tháng, tuần, bước, chế độ, giữ chỗ, giới tính, trường cũ, tỉnh, phường,
-  người nhận)
-- Xếp hạng: "trường cũ nào có nhiều học sinh nhập học nhất" | "tỉnh nào ít liên hệ nhất"
-- Tỷ lệ: "tỷ lệ nhập học khối 10" | "tỷ lệ nhập học theo nguồn" | "nguồn nào hiệu quả nhất"
-- So sánh năm: "nhập học khối 10 so với năm trước" | "liên hệ theo khối qua các năm"
-  | "nhập học 3 năm gần đây" | "năm học 2024-2025 bao nhiêu nhập học"
-  | cùng kỳ: "liên hệ tháng 4 so với năm trước"
-- So sánh khối: "so sánh khối 6 và khối 10"
-- Tổng quan: "tổng quan" | "tổng quan tháng này"
-- Tra cứu: "tìm <họ tên>" | "tra cứu <số điện thoại>"
-- Theo tên: "bao nhiêu học sinh tên An" | "danh sách học sinh họ Nguyễn khối 10"
-  | "học sinh tên có chữ Minh" (tên = chữ cuối của họ tên; họ = chữ đầu)
-- Khác: "học sinh nào thiếu giấy tờ khối 6" | "tư vấn quá 14 ngày chưa chuyển bước"
-  | "danh sách chưa giữ chỗ" | "học sinh còn nợ học phí" | "chờ hoàn phí" | "tổng tiền giữ chỗ"
-
-Quy tắc:
-- "lớp 10", "K10", "khối mười" → "khối 10". "trúng tuyển", "đã vào học" → "nhập học".
-  "năm ngoái" → "năm trước". "học sinh mới"/"phụ huynh hỏi" → "liên hệ".
-- Nếu câu hỏi nối tiếp câu trước (vd "còn khối 11?", "thế năm trước?"), hãy ghép với
-  CÂU TRƯỚC thành một câu đầy đủ, độc lập.
-- Thời gian tương đối (hôm nay, tuần này, tháng trước, 30 ngày qua…) giữ nguyên dạng chữ.
-- Nếu câu hỏi không liên quan dữ liệu tuyển sinh, đặt ngoai_pham_vi = true.
+Cách điền:
+- loai: dem (bao nhiêu) | danh_sach (liệt kê, những ai) | thong_ke (theo/chia theo X) |
+  xep_hang (X nào nhiều/ít nhất, top) | ty_le (tỷ lệ, hiệu quả, chuyển đổi) | tong_quan |
+  tra_cuu (tìm 1 học sinh cụ thể theo họ tên đầy đủ / SĐT) | giay_to (thiếu giấy tờ) |
+  tai_chinh (tiền, giữ chỗ, hoàn phí, học phí) | qua_han (tư vấn lâu chưa chuyển bước).
+- doi_tuong: lien_he (mặc định, mọi liên hệ) | tu_van | nop_ho_so | nhap_hoc ("tuyển được",
+  "trúng tuyển", "vào học") | rut_ho_so | chua_nhap_hoc.
+- Bộ lọc dạng danh sách: nhiều giá trị = HOẶC ("khối 10 và 11" -> khoi ["10","11"]); các bộ lọc
+  khác nhau kết hợp VÀ. khoi chỉ ghi số ("lớp 10", "K10" -> "10"; "10 IEP" -> "10-IEP").
+- tinh / phuong_xa / truong_cu: ghi tên riêng ("Tây Ninh", "Phước Thái"). "từ Tây Ninh" -> tinh.
+  "trường Phước Thái" -> truong_cu.
+- ten: tên gọi ("tên An"); ho: họ ("họ Nguyễn"); ten_chua: "tên có chữ Minh".
+- Thời gian: đổi thành tu_ngay / den_ngay (YYYY-MM-DD) dựa vào "Hôm nay"; "tháng 4" = tháng 4 gần
+  nhất đã qua hoặc đang diễn ra; "tuần này" = thứ 2 đến hôm nay.
+- nam_hoc: chỉ ghi khi người dùng nêu năm học / "năm trước" (dùng danh sách năm học được cung cấp).
+  so_sanh_nam = true khi "so với năm trước", "qua các năm", "N năm gần đây" (so_nam = N).
+- theo: trục khi thống kê / xếp hạng / tỷ lệ theo nhóm: khoi, nguon, thang, tuan, buoc, che_do,
+  gioi_tinh, truong_cu, tinh, phuong_xa, nguoi_nhan, giu_cho, he, tinh_trang.
+- thu_tu: "it" khi hỏi ít nhất/thấp nhất, ngược lại "nhieu"; top: số dòng ("top 5").
+- ty_le_cua: nhap_hoc (mặc định) | nop_ho_so | rut_ho_so. "nguồn nào hiệu quả nhất" -> loai ty_le,
+  theo nguon.
+- Câu nối tiếp ("còn khối 11 thì sao?", "năm trước?"): dùng CÂU TRƯỚC làm nền, chỉ thay phần mới.
+- cau_hoi: viết lại câu hỏi đầy đủ, ngắn gọn, tiếng Việt có dấu (để hiển thị cho người dùng).
+- Không liên quan dữ liệu tuyển sinh -> ngoai_pham_vi = true.
 """
 
+_DS = {"type": "ARRAY", "items": {"type": "STRING"}}
 SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "cau_hoi": {"type": "STRING", "description": "Câu hỏi chuẩn theo mẫu"},
+        "cau_hoi": {"type": "STRING"},
         "ngoai_pham_vi": {"type": "BOOLEAN"},
+        "loai": {"type": "STRING", "enum": ["dem", "danh_sach", "thong_ke", "xep_hang", "ty_le",
+                                            "tong_quan", "tra_cuu", "giay_to", "tai_chinh",
+                                            "qua_han"]},
+        "doi_tuong": {"type": "STRING", "enum": ["lien_he", "tu_van", "nop_ho_so", "nhap_hoc",
+                                                 "rut_ho_so", "chua_nhap_hoc"]},
+        "khoi": _DS, "he": _DS, "che_do": _DS, "nguon": _DS, "tinh": _DS, "phuong_xa": _DS,
+        "truong_cu": _DS, "nguoi_nhan": _DS, "giu_cho": _DS, "tinh_trang": _DS, "phu_huynh": _DS,
+        "gioi_tinh": {"type": "STRING", "enum": ["", "Nam", "Nữ"]},
+        "ten": {"type": "STRING"}, "ho": {"type": "STRING"}, "ten_chua": {"type": "STRING"},
+        "tu_ngay": {"type": "STRING"}, "den_ngay": {"type": "STRING"},
+        "nam_hoc": _DS, "so_sanh_nam": {"type": "BOOLEAN"}, "so_nam": {"type": "INTEGER"},
+        "theo": {"type": "STRING", "enum": ["", "khoi", "nguon", "thang", "tuan", "buoc", "che_do",
+                                           "gioi_tinh", "truong_cu", "tinh", "phuong_xa",
+                                           "nguoi_nhan", "giu_cho", "he", "tinh_trang"]},
+        "thu_tu": {"type": "STRING", "enum": ["", "nhieu", "it"]},
+        "top": {"type": "INTEGER"},
+        "ty_le_cua": {"type": "STRING", "enum": ["", "nhap_hoc", "nop_ho_so", "rut_ho_so"]},
+        "tim": {"type": "STRING"}, "so_ngay": {"type": "INTEGER"},
+        "tai_chinh": {"type": "STRING", "enum": ["", "tong", "chua_giu_cho", "hoan_phi",
+                                                "con_no"]},
     },
-    "required": ["cau_hoi", "ngoai_pham_vi"],
+    "required": ["cau_hoi", "ngoai_pham_vi", "loai"],
 }
 
 
@@ -78,6 +97,7 @@ class KetQua:
     ngoai_pham_vi: bool = False
     loi: str = ""
     mo_hinh: str = ""  # mô hình đã trả lời (để hiển thị / chẩn đoán)
+    y_dinh: dict | None = None  # ý định có cấu trúc (loai + bộ lọc) -> truy_van.thuc_hien
 
 
 def tim_khoa() -> tuple[str, str]:
@@ -208,13 +228,17 @@ def _doc(r, model: str) -> KetQua:
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
         data = json.loads(text[text.find("{"): text.rfind("}") + 1])
         cau = str(data.get("cau_hoi") or "").strip()
-        return KetQua(cau or None, bool(data.get("ngoai_pham_vi")), mo_hinh=model)
+        y_dinh = {k: v for k, v in data.items() if k not in ("cau_hoi", "ngoai_pham_vi")
+                  and v not in (None, "", [], 0, False)}
+        return KetQua(cau or None, bool(data.get("ngoai_pham_vi")), mo_hinh=model,
+                      y_dinh=y_dinh if y_dinh.get("loai") else None)
     except (KeyError, IndexError, ValueError, TypeError):
         return KetQua(loi=f"Không đọc được phản hồi của Gemini ({model})", mo_hinh=model)
 
 
 def viet_lai(cau_hoi: str, truoc: str | None = None, nam_hoc: str = "",
-             hom_nay: str = "", timeout: float = 20, tong_thoi_gian: float = 40) -> KetQua:
+             hom_nay: str = "", timeout: float = 20, tong_thoi_gian: float = 40,
+             cac_nam: list[str] | None = None) -> KetQua:
     """Gửi câu hỏi (không kèm dữ liệu) cho Gemini để viết lại thành câu hỏi chuẩn.
     Lỗi 404 / quá tải / hết lượt / quá thời gian -> thử các mô hình khác key được dùng."""
     key = tim_khoa()[0]
@@ -222,11 +246,12 @@ def viet_lai(cau_hoi: str, truoc: str | None = None, nam_hoc: str = "",
         return KetQua(loi="Chưa có GEMINI_API_KEY")
     dat_rieng = str(config.get("GEMINI_MODEL") or "").strip()
     model = dat_rieng or _MO_HINH.get(key) or MODEL
-    noi_dung = (f"Năm học đang xem: {nam_hoc}. Hôm nay: {hom_nay}.\n"
+    noi_dung = (f"Năm học đang xem: {nam_hoc}. Các năm học có dữ liệu: "
+                f"{', '.join(cac_nam or []) or nam_hoc}. Hôm nay: {hom_nay}.\n"
                 f"CÂU TRƯỚC: {truoc or '(không có)'}\nCÂU HỎI: {cau_hoi}")
     body = {"systemInstruction": {"parts": [{"text": HUONG_DAN}]},
             "contents": [{"role": "user", "parts": [{"text": noi_dung}]}],
-            "generationConfig": {"temperature": 0, "maxOutputTokens": 1024,
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 2048,
                                  "responseMimeType": "application/json",
                                  "responseSchema": SCHEMA}}
     het_gio = time.monotonic() + tong_thoi_gian

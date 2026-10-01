@@ -11,11 +11,19 @@ import streamlit as st
 from tuyensinh import ai_gemini, tro_ly, ui
 from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
 
-# Ảnh đại diện AI (ngôi sao lấp lánh) — SVG nhúng dạng ảnh: st.html không cho thẻ <svg>
-_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FFFFFF">'
-        '<path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5'
-        'L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75'
-        ' 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg>')
+# Ảnh đại diện robot AI (đầu robot + ngôi sao AI) — SVG nhúng dạng ảnh vì st.html không
+# cho thẻ <svg> trực tiếp
+_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        '<path d="M12 4.2V6.4" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round"/>'
+        '<path fill="#FDE047" d="M12 0.7Q12 2.6 13.9 2.6Q12 2.6 12 4.5Q12 2.6 10.1 2.6Q12 2.6 12 0.7Z"/>'
+        '<path fill="#FDE047" d="M20.6 2.8Q20.6 4.2 22.0 4.2Q20.6 4.2 20.6 5.6Q20.6 4.2 19.2 4.2Q20.6 4.2 20.6 2.8Z"/>'
+        '<rect x="2.3" y="10.2" width="1.8" height="4.2" rx=".9" fill="#FFFFFF"/>'
+        '<rect x="19.9" y="10.2" width="1.8" height="4.2" rx=".9" fill="#FFFFFF"/>'
+        '<rect x="4.6" y="6.6" width="14.8" height="11.6" rx="3.6" fill="#FFFFFF"/>'
+        '<circle cx="9.2" cy="11.6" r="1.7" fill="#4F46E5"/>'
+        '<circle cx="14.8" cy="11.6" r="1.7" fill="#4F46E5"/>'
+        '<rect x="9.4" y="14.6" width="5.2" height="1.4" rx=".7" fill="#06B6D4"/>'
+        '</svg>')
 TEN_AI = "Conan Ro"
 BOT_SVG = ('<img alt="" src="data:image/svg+xml;base64,'
            + base64.b64encode(_SVG.encode()).decode() + '">')
@@ -47,7 +55,7 @@ st.html(f"""<style>
   background:linear-gradient(135deg,#6D28D9 0%,#2563EB 55%,#06B6D4 100%);
   display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; flex:none;}}
 .zl-av.nho {{width:30px; height:30px; font-size:15px; margin-top:2px;}}
-.zl-av img {{width:22px; height:22px;}} .zl-av.nho img {{width:17px; height:17px;}}
+.zl-av img {{width:28px; height:28px;}} .zl-av.nho img {{width:21px; height:21px;}}
 /* bong bóng co theo nội dung, tối đa 78% (người hỏi) / phần còn lại sau ảnh đại diện (trợ lý) */
 div:has(> [class*="st-key-zl_u_"]) {{flex:0 1 auto !important; max-width:78%; width:auto !important;}}
 div:has(> [class*="st-key-zl_b_"]) {{flex:0 1 auto !important; max-width:calc(100% - 40px);
@@ -116,8 +124,10 @@ def _ai(cau_hoi, truoc):
     cache = S.setdefault("tl_ai_cache", {})
     k = (cau_hoi.strip().lower(), S.get("tl_truoc_goc"))
     if k not in cache:
+        thu = ("thứ 2", "thứ 3", "thứ 4", "thứ 5", "thứ 6", "thứ 7", "chủ nhật")
         kq = ai_gemini.viet_lai(cau_hoi, S.get("tl_truoc_goc"), nam_hoc,
-                                f"{ctx.hom_nay:%d/%m/%Y}")
+                                f"{ctx.hom_nay.isoformat()} ({thu[ctx.hom_nay.weekday()]})",
+                                cac_nam=ctx.cac_nam())
         if kq.loi:  # lỗi (hết lượt...) thì không lưu đệm để lần sau thử lại
             return kq
         cache[k] = kq

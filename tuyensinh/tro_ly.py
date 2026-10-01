@@ -1010,6 +1010,17 @@ def tra_loi(cau_hoi: str, c: Ctx, truoc: str | None = None, ai=None) -> TraLoi:
             t.text = ("Câu hỏi này có vẻ nằm ngoài dữ liệu tuyển sinh của app. " + t.text)
             t.ai_hieu = "(ngoài phạm vi)"
             return t
+        yd = getattr(kq, "y_dinh", None) if kq is not None else None
+        if yd and not kq.ngoai_pham_vi:
+            try:  # ý định có cấu trúc: áp mọi bộ lọc cùng lúc
+                from . import truy_van
+                r = truy_van.thuc_hien(yd, c)
+                r.ai_hieu = kq.cau_hoi or cau_hoi
+                r.ai_mo_hinh = getattr(kq, "mo_hinh", "")
+                r.hieu_la = chuan_hoa(r.ai_hieu)
+                return r
+            except Exception:  # noqa: BLE001 — ý định lạ: dùng câu viết lại như cũ
+                pass
         if kq is not None and kq.cau_hoi:
             r = tra_loi(kq.cau_hoi, c)
             if not r.khong_hieu:
