@@ -88,3 +88,32 @@ def test_tim_khoa_moi_vi_tri(monkeypatch):
         assert ai_gemini.tim_khoa() == ("a1", vi_tri)
     monkeypatch.setattr(ai_gemini.config, "_secrets", lambda: {"auth": {"x": "y"}})
     assert ai_gemini.tim_khoa() == ("", "") and not ai_gemini.co_khoa()
+
+
+def test_tu_chon_mo_hinh_khi_404(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k2")
+    ai_gemini._MO_HINH.clear()
+    goi = []
+
+    def post(url, params, json, timeout):
+        goi.append(url)
+        if "gemini-2.5-flash:" in url:
+            return _Resp(404, {"error": {"message": "not found"}})
+        text = '```json\n{"cau_hoi": "tổng quan", "ngoai_pham_vi": false}\n```'
+        return _Resp(200, {"candidates": [{"content": {"parts": [{"text": text}]}}]})
+
+    def get(url, params, timeout):
+        return _Resp(200, {"models": [
+            {"name": "models/gemini-3.0-flash-lite", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-3.0-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-3.0-flash-image", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-3.0-pro", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/text-embedding-9", "supportedGenerationMethods": ["embedContent"]}]})
+    monkeypatch.setattr(ai_gemini.requests, "post", post)
+    monkeypatch.setattr(ai_gemini.requests, "get", get)
+    kq = ai_gemini.viet_lai("tình hình")
+    assert kq.cau_hoi == "tổng quan" and "gemini-3.0-flash:" in goi[-1]
+    # lần sau dùng luôn mô hình đã chọn, không gọi tên cũ nữa
+    goi.clear()
+    ai_gemini.viet_lai("tình hình")
+    assert len(goi) == 1 and "gemini-3.0-flash:" in goi[0]

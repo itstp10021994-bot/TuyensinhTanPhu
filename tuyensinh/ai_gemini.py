@@ -5,7 +5,8 @@ Gemini viết lại câu hỏi thành một "câu hỏi chuẩn" mà bộ máy t
 hiểu được; mọi số liệu vẫn được tính trong app. Lỗi / hết lượt -> trả về None để trợ lý
 dùng cách hiểu theo từ khóa như cũ.
 
-Secrets: GEMINI_API_KEY (bắt buộc), GEMINI_MODEL (mặc định gemini-2.5-flash).
+Secrets: GEMINI_API_KEY (bắt buộc), GEMINI_MODEL (tùy chọn; mặc định thử gemini-2.5-flash,
+không có thì tự hỏi Google danh sách mô hình và chọn bản Flash mới nhất).
 """
 from __future__ import annotations
 
@@ -100,38 +101,102 @@ def co_khoa() -> bool:
     return bool(tim_khoa()[0])
 
 
+LIST_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+_MO_HINH: dict[str, str] = {}  # key -> mô hình tự chọn (lưu trong tiến trình)
+_BO_QUA = ("image", "tts", "audio", "live", "embedding", "vision", "learnlm", "gemma", "aqa",
+           "computer-use", "robotics", "native")
+
+
+def _diem(ten: str) -> tuple:
+    """Xếp hạng mô hình: ưu tiên flash (không lite) bản ổn định, phiên bản mới nhất."""
+    m = re.search(r"gemini-(\d+(?:\.\d+)?)", ten)
+    phien_ban = float(m.group(1)) if m else 0.0
+    loai = 3 if "flash" in ten and "lite" not in ten else 2 if "flash" in ten else \
+        1 if "pro" in ten else 0
+    on_dinh = 0 if any(x in ten for x in ("preview", "exp", "-0", "latest")) else 1
+    return (loai, on_dinh, phien_ban, -len(ten))
+
+
+def chon_mo_hinh(key: str, timeout: float = 10) -> str | None:
+    """Hỏi Google các mô hình key được dùng (generateContent) và chọn bản phù hợp nhất."""
+    if key in _MO_HINH:
+        return _MO_HINH[key]
+    ds, token = [], None
+    try:
+        for _ in range(5):
+            r = requests.get(LIST_URL, params={"key": key, "pageSize": 200,
+                                               **({"pageToken": token} if token else {})},
+                             timeout=timeout)
+            if not r.ok:
+                return None
+            data = r.json()
+            ds += data.get("models", [])
+            token = data.get("nextPageToken")
+            if not token:
+                break
+    except (requests.RequestException, ValueError):
+        return None
+    ten = [str(m.get("name", "")).removeprefix("models/") for m in ds
+           if "generateContent" in (m.get("supportedGenerationMethods") or [])]
+    ten = [t for t in ten if t.startswith("gemini") and not any(x in t for x in _BO_QUA)]
+    if not ten:
+        return None
+    _MO_HINH[key] = max(ten, key=_diem)
+    return _MO_HINH[key]
+
+
+def _thong_bao(r) -> str:
+    try:
+        return str(r.json().get("error", {}).get("message", ""))[:160]
+    except (ValueError, AttributeError):
+        return ""
+
+
 def viet_lai(cau_hoi: str, truoc: str | None = None, nam_hoc: str = "",
              hom_nay: str = "", timeout: float = 12) -> KetQua:
     """Gửi câu hỏi (không kèm dữ liệu) cho Gemini để viết lại thành câu hỏi chuẩn."""
     key = tim_khoa()[0]
     if not key:
         return KetQua(loi="Chưa có GEMINI_API_KEY")
-    model = str(config.get("GEMINI_MODEL") or MODEL).strip()
+    model = str(config.get("GEMINI_MODEL") or _MO_HINH.get(key) or MODEL).strip()
     noi_dung = (f"Năm học đang xem: {nam_hoc}. Hôm nay: {hom_nay}.\n"
                 f"CÂU TRƯỚC: {truoc or '(không có)'}\nCÂU HỎI: {cau_hoi}")
-    body = {
-        "systemInstruction": {"parts": [{"text": HUONG_DAN}]},
-        "contents": [{"role": "user", "parts": [{"text": noi_dung}]}],
-        "generationConfig": {"temperature": 0, "maxOutputTokens": 256,
-                             "responseMimeType": "application/json",
-                             "responseSchema": SCHEMA},
-    }
+    cau_hinh = {"temperature": 0, "maxOutputTokens": 256,
+                "responseMimeType": "application/json", "responseSchema": SCHEMA}
+    body = {"systemInstruction": {"parts": [{"text": HUONG_DAN}]},
+            "contents": [{"role": "user", "parts": [{"text": noi_dung}]}],
+            "generationConfig": cau_hinh}
+
+    def goi(m):
+        return requests.post(URL.format(model=m), params={"key": key}, json=body,
+                             timeout=timeout)
     try:
-        r = requests.post(URL.format(model=model), params={"key": key}, json=body,
-                          timeout=timeout)
+        r = goi(model)
+        if r.status_code == 404:  # tên mô hình cũ / không có với key này -> tự chọn mô hình
+            moi = chon_mo_hinh(key)
+            if moi and moi != model:
+                model, r = moi, goi(moi)
+        if r.status_code == 400 and "api key" not in _thong_bao(r).lower():
+            cau_hinh.pop("responseSchema")  # mô hình không nhận schema -> chỉ yêu cầu JSON
+            r = goi(model)
     except requests.RequestException as e:
         return KetQua(loi=f"Không kết nối được Gemini ({type(e).__name__})")
     if r.status_code == 429:
         return KetQua(loi="Gemini đã hết lượt miễn phí (thử lại sau ít phút)")
     if r.status_code in (400, 401, 403):
+        tb = _thong_bao(r)
+        if r.status_code == 400 and "api key" not in tb.lower():
+            return KetQua(loi=f"Gemini từ chối yêu cầu ({model}): {tb}")
         return KetQua(loi=f"GEMINI_API_KEY không hợp lệ hoặc chưa bật ({r.status_code})")
     if r.status_code == 404:
-        return KetQua(loi=f"Không có mô hình '{model}' — kiểm tra GEMINI_MODEL")
+        return KetQua(loi=f"Không tìm được mô hình Gemini dùng được với key này ({model})")
     if not r.ok:
-        return KetQua(loi=f"Gemini lỗi {r.status_code}")
+        return KetQua(loi=f"Gemini lỗi {r.status_code}: {_thong_bao(r)}")
     try:
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        data = json.loads(re.sub(r"^```(?:json)?|```$", "", text.strip()))
+        cand = r.json()["candidates"][0]
+        text = "".join(p.get("text", "") for p in cand["content"]["parts"])
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+        data = json.loads(text[text.find("{"): text.rfind("}") + 1])
         cau = str(data.get("cau_hoi") or "").strip()
         return KetQua(cau or None, bool(data.get("ngoai_pham_vi")))
     except (KeyError, IndexError, ValueError, TypeError):
