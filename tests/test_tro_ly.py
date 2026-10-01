@@ -175,3 +175,12 @@ def test_hieu_them_cach_hoi():
     r1 = tro_ly.tra_loi("học sinh từ trường Phước Thái", c)
     r2 = tro_ly.tra_loi("còn trường Lê Lợi thì sao?", c, r1.hieu_la)
     assert r2.da_ghep and "Lê Lợi" in r2.text and "Phước Thái" not in r2.text
+
+
+def test_loc_theo_ten():
+    c = ctx()  # Trần Huy Long, Lê Minh Anh, Phạm Anh Thư
+    assert "**1** liên hệ (tên Anh)" in tro_ly.tra_loi("bao nhiêu học sinh tên anh", c).text
+    assert "**2** liên hệ (tên có chữ Anh)" in tro_ly.tra_loi("tên có chữ Anh", c).text
+    assert "**1** liên hệ (họ Trần)" in tro_ly.tra_loi("họ Trần có bao nhiêu", c).text
+    r = tro_ly.tra_loi("học sinh tên Long khối 10 nhập học", c)
+    assert "**1** học sinh nhập học (khối 10, tên Long)" in r.text

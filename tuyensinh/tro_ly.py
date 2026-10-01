@@ -111,6 +111,7 @@ def _col(df: pd.DataFrame, c: str) -> pd.Series:
 @dataclass
 class Loc:
     noi: tuple[str, str, str] | None = None  # (cột, giá trị không dấu, tên hiển thị)
+    ten_hs: tuple[str, str, str] | None = None  # (kiểu: ten|ho|chua, không dấu, hiển thị)
     khoi: str | None = None
     khoi_ds: list[str] = field(default_factory=list)  # "khối 10 và khối 11" -> so sánh
     gioi_tinh: str | None = None
@@ -133,6 +134,9 @@ class Loc:
             p.append(f"học sinh {self.gioi_tinh.lower()}")
         if self.nguon:
             p.append(f"nguồn {self.nguon}")
+        if self.ten_hs:
+            p.append({"ten": "tên", "ho": "họ", "chua": "tên có chữ"}[self.ten_hs[0]]
+                     + f" {self.ten_hs[2]}")
         if self.noi:
             p.append(self.noi[2])
         if self.mo_ta_tg:
@@ -216,6 +220,31 @@ _TIEN_TO_NOI = r"^(?:thanh pho|tinh|phuong|xa|thi tran|truong|trung hoc co so|tr
 _NOI_CACHE: dict = {}
 
 
+_DUNG_TEN = set("""khoi lop nhap hoc nam nu bao nhieu trong o co da la va voi cua tu den hs
+sinh lien he nop ho so rut tu van theo nao nhat danh sach thang tuan ngay nay truoc dang chua
+khong the sao nhu hien gi ai noi ban tru ngoai iep esl so luong dem tong""".split())
+
+
+def tim_ten_hs(goc: str) -> tuple[str, str, str] | None:
+    """'tên An', 'họ Nguyễn', 'tên có chữ Minh' -> bộ lọc theo họ tên học sinh."""
+    g = unicodedata.normalize("NFC", goc)
+    m = re.search(r"(?<!\w)(tên|họ)(?:\s+(?:là|có chữ|có|chứa|bắt đầu bằng|đệm))?\s+(.+)", g,
+                  re.IGNORECASE)
+    if not m:
+        return None
+    tu = []
+    for w in re.findall(r"[^\W\d_]+", m.group(2)):
+        if kd(w) in _DUNG_TEN or len(tu) >= 3:
+            break
+        tu.append(w)
+    if not tu:
+        return None
+    dau = kd(m.group(0)[:m.end(1) - m.start(0) + 20])
+    kieu = "ho" if kd(m.group(1)) == "ho" else \
+        "chua" if re.search(r"^ten\s+(?:co chu|co|chua)\b", dau) else "ten"
+    return kieu, kd(" ".join(tu)), " ".join(w[:1].upper() + w[1:] for w in tu)
+
+
 def tim_noi(q: str, ts: pd.DataFrame) -> tuple[str, str, str] | None:
     """Tên tỉnh / phường xã / trường cũ có trong câu hỏi ("học sinh từ Tây Ninh")."""
     if ts is None or ts.empty:
@@ -267,6 +296,17 @@ def loc_ts(ts: pd.DataFrame, loc: Loc, cot_ngay: str = "NgayLienHe") -> pd.DataF
         df = df[_col(df, "Nguon") == loc.nguon]
     if loc.gioi_tinh:
         df = df[_col(df, "GioiTinh").map(kd) == kd(loc.gioi_tinh)]
+    if loc.ten_hs:
+        cot = "HoTenHS" if "HoTenHS" in df else "HoTen"
+        kieu, ten, _ = loc.ten_hs
+        chu = _col(df, cot).map(kd).str.split()
+        n = len(ten.split())
+        if kieu == "ten":  # tên gọi = (các) chữ cuối của họ tên
+            df = df[chu.map(lambda w: " ".join(w[-n:]) == ten if w else False)]
+        elif kieu == "ho":
+            df = df[chu.map(lambda w: " ".join(w[:n]) == ten if w else False)]
+        else:
+            df = df[chu.map(lambda w: f" {ten} " in f" {' '.join(w)} ")]
     if loc.noi and loc.noi[0] in df:
         df = df[_col(df, loc.noi[0]).map(kd).str.contains(loc.noi[1], regex=False)]
     if (loc.tu or loc.den) and cot_ngay in df:
@@ -1001,6 +1041,7 @@ def _tra_loi(cau_hoi: str, q_day_du: str, c: Ctx) -> TraLoi:
     goc_khong_nam = re.sub(r"20\d{2}\s*[-/]\s*20\d{2}", " ", cau_hoi)
     loc = doc_loc(q, c.hom_nay, goc_khong_nam)
     loc.noi = tim_noi(q, c.ts_all if c.ts_all is not None else c.ts)
+    loc.ten_hs = tim_ten_hs(goc_khong_nam)
     if nhieu_nam:
         if _co(q, "tim", "tra cuu", "giay to", "hoc phi", "giu cho", "qua han"):
             c = c.nam(nams[-1])  # các câu này chỉ trả lời cho một năm

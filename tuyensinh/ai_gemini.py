@@ -48,6 +48,8 @@ Mẫu câu chuẩn (ghép các phần khi cần):
 - So sánh khối: "so sánh khối 6 và khối 10"
 - Tổng quan: "tổng quan" | "tổng quan tháng này"
 - Tra cứu: "tìm <họ tên>" | "tra cứu <số điện thoại>"
+- Theo tên: "bao nhiêu học sinh tên An" | "danh sách học sinh họ Nguyễn khối 10"
+  | "học sinh tên có chữ Minh" (tên = chữ cuối của họ tên; họ = chữ đầu)
 - Khác: "học sinh nào thiếu giấy tờ khối 6" | "tư vấn quá 14 ngày chưa chuyển bước"
   | "danh sách chưa giữ chỗ" | "học sinh còn nợ học phí" | "chờ hoàn phí" | "tổng tiền giữ chỗ"
 
