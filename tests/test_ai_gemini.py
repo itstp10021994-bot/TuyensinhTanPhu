@@ -144,3 +144,32 @@ def test_qua_tai_chuyen_mo_hinh_khac(monkeypatch):
     monkeypatch.setattr(ai_gemini.requests, "post",
                         lambda *a, **k: _Resp(503, {"error": {"message": "high demand"}}))
     assert "quá tải" in ai_gemini.viet_lai("x").loi
+
+
+def test_cham_thi_thu_ban_lite_va_bo_thinking(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k4")
+    ai_gemini._MO_HINH.clear()
+    ai_gemini._DS_MO_HINH.clear()
+    ai_gemini._MO_HINH["k4"] = "gemini-2.5-flash"
+    ok = '{"cau_hoi": "tổng quan", "ngoai_pham_vi": false}'
+    gui = []
+
+    def post(url, params, json, timeout):
+        gui.append((url, json["generationConfig"].get("thinkingConfig")))
+        if "gemini-2.5-flash:" in url:
+            raise ai_gemini.requests.Timeout()
+        if json["generationConfig"].get("thinkingConfig"):
+            return _Resp(400, {"error": {"message": "thinking is not supported"}})
+        return _Resp(200, {"candidates": [{"content": {"parts": [
+            {"text": "đang nghĩ", "thought": True}, {"text": ok}]}}]})
+
+    def get(url, params, timeout):
+        return _Resp(200, {"models": [
+            {"name": f"models/{n}", "supportedGenerationMethods": ["generateContent"]}
+            for n in ("gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite")]})
+    monkeypatch.setattr(ai_gemini.requests, "post", post)
+    monkeypatch.setattr(ai_gemini.requests, "get", get)
+    kq = ai_gemini.viet_lai("x")
+    assert kq.cau_hoi == "tổng quan" and kq.mo_hinh == "gemini-2.5-flash-lite"
+    assert gui[0][1] == {"thinkingBudget": 0}  # đã tắt "suy nghĩ" cho bản 2.5 flash
+    assert ai_gemini._MO_HINH["k4"] == "gemini-2.5-flash-lite"

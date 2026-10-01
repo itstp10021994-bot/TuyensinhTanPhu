@@ -75,6 +75,7 @@ class KetQua:
     cau_hoi: str | None = None
     ngoai_pham_vi: bool = False
     loi: str = ""
+    mo_hinh: str = ""  # mô hình đã trả lời (để hiển thị / chẩn đoán)
 
 
 def tim_khoa() -> tuple[str, str]:
@@ -162,65 +163,104 @@ def _thong_bao(r) -> str:
         return ""
 
 
-def viet_lai(cau_hoi: str, truoc: str | None = None, nam_hoc: str = "",
-             hom_nay: str = "", timeout: float = 12) -> KetQua:
-    """Gửi câu hỏi (không kèm dữ liệu) cho Gemini để viết lại thành câu hỏi chuẩn."""
-    key = tim_khoa()[0]
-    if not key:
-        return KetQua(loi="Chưa có GEMINI_API_KEY")
-    model = str(config.get("GEMINI_MODEL") or _MO_HINH.get(key) or MODEL).strip()
-    noi_dung = (f"Năm học đang xem: {nam_hoc}. Hôm nay: {hom_nay}.\n"
-                f"CÂU TRƯỚC: {truoc or '(không có)'}\nCÂU HỎI: {cau_hoi}")
-    cau_hinh = {"temperature": 0, "maxOutputTokens": 256,
-                "responseMimeType": "application/json", "responseSchema": SCHEMA}
-    body = {"systemInstruction": {"parts": [{"text": HUONG_DAN}]},
-            "contents": [{"role": "user", "parts": [{"text": noi_dung}]}],
-            "generationConfig": cau_hinh}
+def _phien_ban(model: str) -> float:
+    m = re.search(r"gemini-(\d+(?:\.\d+)?)", model)
+    return float(m.group(1)) if m else 0.0
 
-    def goi(m):
-        return requests.post(URL.format(model=m), params={"key": key}, json=body,
-                             timeout=timeout)
-    try:
-        r = goi(model)
-        if r.status_code == 404:  # tên mô hình cũ / không có với key này -> tự chọn mô hình
-            moi = chon_mo_hinh(key)
-            if moi and moi != model:
-                model, r = moi, goi(moi)
-        if r.status_code == 400 and "api key" not in _thong_bao(r).lower():
-            cau_hinh.pop("responseSchema")  # mô hình không nhận schema -> chỉ yêu cầu JSON
-            r = goi(model)
-        if r.status_code in (500, 502, 503, 504):  # quá tải tạm thời -> chờ chút, thử lại
-            time.sleep(1.2)
-            r = goi(model)
-        if r.status_code in (429, 500, 502, 503, 504):
-            # vẫn quá tải / hết lượt: thử mô hình khác (gói miễn phí tính lượt theo từng mô hình)
-            for khac in [m for m in ds_mo_hinh(key) if m != model][:3]:
-                r2 = goi(khac)
-                if r2.ok:
-                    model, r = khac, r2
-                    _MO_HINH[key] = khac  # dùng tiếp mô hình này cho các câu sau
-                    break
-    except requests.RequestException as e:
-        return KetQua(loi=f"Không kết nối được Gemini ({type(e).__name__})")
-    if r.status_code == 429:
-        return KetQua(loi="Gemini đã hết lượt miễn phí (thử lại sau ít phút)")
-    if r.status_code in (500, 502, 503, 504):
-        return KetQua(loi="Gemini đang quá tải (lỗi tạm thời phía Google, thử lại sau ít phút)")
-    if r.status_code in (400, 401, 403):
-        tb = _thong_bao(r)
-        if r.status_code == 400 and "api key" not in tb.lower():
-            return KetQua(loi=f"Gemini từ chối yêu cầu ({model}): {tb}")
-        return KetQua(loi=f"GEMINI_API_KEY không hợp lệ hoặc chưa bật ({r.status_code})")
-    if r.status_code == 404:
-        return KetQua(loi=f"Không tìm được mô hình Gemini dùng được với key này ({model})")
-    if not r.ok:
-        return KetQua(loi=f"Gemini lỗi {r.status_code}: {_thong_bao(r)}")
+
+def _suy_nghi(model: str) -> dict | None:
+    """Giảm 'suy nghĩ' (thinking) để trả lời nhanh: việc ở đây chỉ là viết lại câu hỏi."""
+    v = _phien_ban(model)
+    if v >= 3:
+        return {"thinkingLevel": "low"}
+    if v >= 2.5:
+        return {"thinkingBudget": 128 if "pro" in model else 0}
+    return None
+
+
+def _goi(key: str, model: str, body: dict, timeout: float):
+    """Gọi 1 mô hình; tự bỏ thiết lập thinking / responseSchema nếu mô hình không nhận."""
+    cfg = dict(body["generationConfig"])
+    if tn := _suy_nghi(model):
+        cfg["thinkingConfig"] = tn
+    for _ in range(3):
+        r = requests.post(URL.format(model=model), params={"key": key},
+                          json={**body, "generationConfig": cfg}, timeout=timeout)
+        tb = _thong_bao(r).lower() if r.status_code == 400 else ""
+        if r.status_code != 400 or "api key" in tb:
+            return r
+        if "thinking" in tb and "thinkingConfig" in cfg:
+            cfg.pop("thinkingConfig")
+        elif "responseSchema" in cfg:
+            cfg.pop("responseSchema")  # mô hình không nhận schema -> chỉ yêu cầu JSON
+        else:
+            return r
+    return r
+
+
+def _doc(r, model: str) -> KetQua:
     try:
         cand = r.json()["candidates"][0]
-        text = "".join(p.get("text", "") for p in cand["content"]["parts"])
+        text = "".join(p.get("text", "") for p in cand["content"]["parts"]
+                       if not p.get("thought"))
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
         data = json.loads(text[text.find("{"): text.rfind("}") + 1])
         cau = str(data.get("cau_hoi") or "").strip()
-        return KetQua(cau or None, bool(data.get("ngoai_pham_vi")))
+        return KetQua(cau or None, bool(data.get("ngoai_pham_vi")), mo_hinh=model)
     except (KeyError, IndexError, ValueError, TypeError):
-        return KetQua(loi="Không đọc được phản hồi của Gemini")
+        return KetQua(loi=f"Không đọc được phản hồi của Gemini ({model})", mo_hinh=model)
+
+
+def viet_lai(cau_hoi: str, truoc: str | None = None, nam_hoc: str = "",
+             hom_nay: str = "", timeout: float = 20, tong_thoi_gian: float = 40) -> KetQua:
+    """Gửi câu hỏi (không kèm dữ liệu) cho Gemini để viết lại thành câu hỏi chuẩn.
+    Lỗi 404 / quá tải / hết lượt / quá thời gian -> thử các mô hình khác key được dùng."""
+    key = tim_khoa()[0]
+    if not key:
+        return KetQua(loi="Chưa có GEMINI_API_KEY")
+    dat_rieng = str(config.get("GEMINI_MODEL") or "").strip()
+    model = dat_rieng or _MO_HINH.get(key) or MODEL
+    noi_dung = (f"Năm học đang xem: {nam_hoc}. Hôm nay: {hom_nay}.\n"
+                f"CÂU TRƯỚC: {truoc or '(không có)'}\nCÂU HỎI: {cau_hoi}")
+    body = {"systemInstruction": {"parts": [{"text": HUONG_DAN}]},
+            "contents": [{"role": "user", "parts": [{"text": noi_dung}]}],
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 1024,
+                                 "responseMimeType": "application/json",
+                                 "responseSchema": SCHEMA}}
+    het_gio = time.monotonic() + tong_thoi_gian
+    da_thu, loi_cuoi, r = [], "", None
+    hang_doi = [model]
+    while hang_doi and time.monotonic() < het_gio - 3:
+        m = hang_doi.pop(0)
+        if m in da_thu:
+            continue
+        da_thu.append(m)
+        try:
+            r = _goi(key, m, body, min(timeout, het_gio - time.monotonic()))
+            if r.status_code in (500, 502, 503, 504) and len(da_thu) == 1:
+                time.sleep(1.2)  # quá tải tạm thời -> thử lại một lần
+                r = _goi(key, m, body, min(timeout, het_gio - time.monotonic()))
+        except requests.Timeout:
+            loi_cuoi = f"Gemini trả lời quá chậm ({m})"
+            # chậm -> ưu tiên bản lite (nhanh hơn)
+            hang_doi += sorted([x for x in ds_mo_hinh(key) if x not in da_thu],
+                               key=lambda x: "lite" not in x)[:2]
+            continue
+        except requests.RequestException as e:
+            return KetQua(loi=f"Không kết nối được Gemini ({type(e).__name__})")
+        if r.ok:
+            kq = _doc(r, m)
+            if not dat_rieng and not kq.loi:
+                _MO_HINH[key] = m  # dùng tiếp mô hình chạy được cho các câu sau
+            return kq
+        if r.status_code in (404, 429, 500, 502, 503, 504):
+            loi_cuoi = {404: f"Không có mô hình '{m}'",
+                        429: "Gemini đã hết lượt miễn phí (thử lại sau ít phút)"}.get(
+                r.status_code, "Gemini đang quá tải (lỗi tạm thời phía Google, thử lại sau ít phút)")
+            hang_doi += [x for x in ds_mo_hinh(key) if x not in da_thu][:3]
+            continue
+        tb = _thong_bao(r)
+        if r.status_code in (400, 401, 403) and (r.status_code != 400 or "api key" in tb.lower()):
+            return KetQua(loi=f"GEMINI_API_KEY không hợp lệ hoặc chưa bật ({r.status_code})")
+        return KetQua(loi=f"Gemini lỗi {r.status_code} ({m}): {tb}")
+    return KetQua(loi=loi_cuoi or "Gemini không phản hồi")

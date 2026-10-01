@@ -42,6 +42,7 @@ class TraLoi:
     da_ghep: bool = False  # câu hỏi được ghép với ngữ cảnh câu trước
     khong_hieu: bool = False  # không nhận ra câu hỏi (đang trả về hướng dẫn)
     ai_hieu: str = ""      # câu hỏi chuẩn do Gemini viết lại (nếu có dùng)
+    ai_mo_hinh: str = ""   # mô hình Gemini đã dùng
     ai_loi: str = ""       # lý do không dùng được Gemini (hết lượt, sai key...)
 
 
@@ -972,7 +973,7 @@ def tra_loi(cau_hoi: str, c: Ctx, truoc: str | None = None, ai=None) -> TraLoi:
         if kq is not None and kq.cau_hoi:
             r = tra_loi(kq.cau_hoi, c)
             if not r.khong_hieu:
-                r.ai_hieu = kq.cau_hoi
+                r.ai_hieu, r.ai_mo_hinh = kq.cau_hoi, getattr(kq, "mo_hinh", "")
                 return r
         elif kq is not None:
             ai_loi = kq.loi

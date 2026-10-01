@@ -187,7 +187,8 @@ def _hien(m, i):
     r = m.get("tl")
     with _bot(f"zl_b_{i}"):
         if r is not None and r.ai_hieu:
-            st.caption(f":material/auto_awesome: AI hiểu là: *{r.ai_hieu}*")
+            nguon = f" ({r.ai_mo_hinh})" if getattr(r, "ai_mo_hinh", "") else ""
+            st.caption(f":material/auto_awesome: AI{nguon} hiểu là: *{r.ai_hieu}*")
         elif r is not None and r.da_ghep:
             st.caption(f":material/link: Hiểu theo ngữ cảnh câu trước: *{r.hieu_la}*")
         if r is not None and r.ai_loi:
