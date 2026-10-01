@@ -117,3 +117,30 @@ def test_tu_chon_mo_hinh_khi_404(monkeypatch):
     goi.clear()
     ai_gemini.viet_lai("tình hình")
     assert len(goi) == 1 and "gemini-3.0-flash:" in goi[0]
+
+
+def test_qua_tai_chuyen_mo_hinh_khac(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k3")
+    monkeypatch.setattr(ai_gemini.time, "sleep", lambda s: None)
+    ai_gemini._MO_HINH.clear()
+    ai_gemini._DS_MO_HINH.clear()
+    ai_gemini._MO_HINH["k3"] = "gemini-9-flash"
+    ok = '{"cau_hoi": "tổng quan", "ngoai_pham_vi": false}'
+
+    def post(url, params, json, timeout):
+        if "gemini-9-flash:" in url:
+            return _Resp(503, {"error": {"message": "high demand"}})
+        return _Resp(200, {"candidates": [{"content": {"parts": [{"text": ok}]}}]})
+
+    def get(url, params, timeout):
+        return _Resp(200, {"models": [
+            {"name": "models/gemini-9-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-9-flash-lite", "supportedGenerationMethods": ["generateContent"]}]})
+    monkeypatch.setattr(ai_gemini.requests, "post", post)
+    monkeypatch.setattr(ai_gemini.requests, "get", get)
+    assert ai_gemini.viet_lai("x").cau_hoi == "tổng quan"
+    assert ai_gemini._MO_HINH["k3"] == "gemini-9-flash-lite"
+    # mọi mô hình đều quá tải -> báo lỗi dễ hiểu
+    monkeypatch.setattr(ai_gemini.requests, "post",
+                        lambda *a, **k: _Resp(503, {"error": {"message": "high demand"}}))
+    assert "quá tải" in ai_gemini.viet_lai("x").loi

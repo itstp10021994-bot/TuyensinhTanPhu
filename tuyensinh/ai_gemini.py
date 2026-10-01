@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass
 
 import requests
@@ -103,6 +104,7 @@ def co_khoa() -> bool:
 
 LIST_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 _MO_HINH: dict[str, str] = {}  # key -> mô hình tự chọn (lưu trong tiến trình)
+_DS_MO_HINH: dict[str, list[str]] = {}  # key -> các mô hình dùng được, tốt nhất trước
 _BO_QUA = ("image", "tts", "audio", "live", "embedding", "vision", "learnlm", "gemma", "aqa",
            "computer-use", "robotics", "native")
 
@@ -117,10 +119,10 @@ def _diem(ten: str) -> tuple:
     return (loai, on_dinh, phien_ban, -len(ten))
 
 
-def chon_mo_hinh(key: str, timeout: float = 10) -> str | None:
-    """Hỏi Google các mô hình key được dùng (generateContent) và chọn bản phù hợp nhất."""
-    if key in _MO_HINH:
-        return _MO_HINH[key]
+def ds_mo_hinh(key: str, timeout: float = 10) -> list[str]:
+    """Các mô hình Gemini key được dùng (generateContent), xếp tốt nhất trước (lưu đệm)."""
+    if key in _DS_MO_HINH:
+        return _DS_MO_HINH[key]
     ds, token = [], None
     try:
         for _ in range(5):
@@ -128,20 +130,28 @@ def chon_mo_hinh(key: str, timeout: float = 10) -> str | None:
                                                **({"pageToken": token} if token else {})},
                              timeout=timeout)
             if not r.ok:
-                return None
+                return []
             data = r.json()
             ds += data.get("models", [])
             token = data.get("nextPageToken")
             if not token:
                 break
     except (requests.RequestException, ValueError):
-        return None
+        return []
     ten = [str(m.get("name", "")).removeprefix("models/") for m in ds
            if "generateContent" in (m.get("supportedGenerationMethods") or [])]
     ten = [t for t in ten if t.startswith("gemini") and not any(x in t for x in _BO_QUA)]
-    if not ten:
-        return None
-    _MO_HINH[key] = max(ten, key=_diem)
+    _DS_MO_HINH[key] = sorted(set(ten), key=_diem, reverse=True)
+    return _DS_MO_HINH[key]
+
+
+def chon_mo_hinh(key: str, timeout: float = 10) -> str | None:
+    """Mô hình phù hợp nhất cho key (bản Flash ổn định mới nhất)."""
+    if key not in _MO_HINH:
+        ds = ds_mo_hinh(key, timeout)
+        if not ds:
+            return None
+        _MO_HINH[key] = ds[0]
     return _MO_HINH[key]
 
 
@@ -179,10 +189,23 @@ def viet_lai(cau_hoi: str, truoc: str | None = None, nam_hoc: str = "",
         if r.status_code == 400 and "api key" not in _thong_bao(r).lower():
             cau_hinh.pop("responseSchema")  # mô hình không nhận schema -> chỉ yêu cầu JSON
             r = goi(model)
+        if r.status_code in (500, 502, 503, 504):  # quá tải tạm thời -> chờ chút, thử lại
+            time.sleep(1.2)
+            r = goi(model)
+        if r.status_code in (429, 500, 502, 503, 504):
+            # vẫn quá tải / hết lượt: thử mô hình khác (gói miễn phí tính lượt theo từng mô hình)
+            for khac in [m for m in ds_mo_hinh(key) if m != model][:3]:
+                r2 = goi(khac)
+                if r2.ok:
+                    model, r = khac, r2
+                    _MO_HINH[key] = khac  # dùng tiếp mô hình này cho các câu sau
+                    break
     except requests.RequestException as e:
         return KetQua(loi=f"Không kết nối được Gemini ({type(e).__name__})")
     if r.status_code == 429:
         return KetQua(loi="Gemini đã hết lượt miễn phí (thử lại sau ít phút)")
+    if r.status_code in (500, 502, 503, 504):
+        return KetQua(loi="Gemini đang quá tải (lỗi tạm thời phía Google, thử lại sau ít phút)")
     if r.status_code in (400, 401, 403):
         tb = _thong_bao(r)
         if r.status_code == 400 and "api key" not in tb.lower():
