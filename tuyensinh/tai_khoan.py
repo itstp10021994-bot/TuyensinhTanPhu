@@ -64,9 +64,9 @@ def dang_nhap(items: list[dict], ten_dang_nhap: str, mat_khau: str) -> dict | No
     return None
 
 
-# ---------------------------------------------------------------- ghi nhớ trên máy (cookie)
+# ---------------------------------------------------------------- ghi nhớ trên máy (bộ nhớ trình duyệt)
 def tao_ma_ghi_nho(t: dict, bi_mat: str, so_ngay: int = 30) -> str:
-    """Mã lưu trong cookie: id.hạn.chữ-ký. Chữ ký gồm cả mật khẩu đã băm -> đổi mật khẩu
+    """Mã lưu trên trình duyệt: id.hạn.chữ-ký. Chữ ký gồm cả mật khẩu đã băm -> đổi mật khẩu
     là mọi máy đang ghi nhớ phải đăng nhập lại."""
     han = int(time.time()) + so_ngay * 86400
     sig = hmac.new(bi_mat.encode(), f"{t.get('id')}.{han}.{t.get('MatKhau')}".encode(),

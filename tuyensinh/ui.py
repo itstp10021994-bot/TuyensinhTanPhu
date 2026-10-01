@@ -318,24 +318,40 @@ def current_user() -> str:
 
 
 def cookie_secret() -> str:
-    """Khóa ký cookie ghi nhớ đăng nhập (COOKIE_SECRET, hoặc mật khẩu quản trị / key flow)."""
+    """Khóa ký mã ghi nhớ đăng nhập (COOKIE_SECRET, hoặc mật khẩu quản trị / key flow)."""
     pa = config.section("powerautomate")
     return str(config.get("COOKIE_SECRET") or config.get("ADMIN_PASSWORD") or pa.get("key")
                or config.get("PA_KEY") or "tuyen-sinh-tan-phu")
 
 
-def set_cookie(name: str, value: str, days: int = 30):
-    """Ghi cookie lên trình duyệt (days < 0: xóa)."""
-    import json
+_GHI_NHO_JS = """
+export default function(component) {
+  const { data, setStateValue } = component;
+  const K = "ts_tk";
+  let ma = "";
+  try {
+    if (data && typeof data.set === "string") {
+      if (data.set) localStorage.setItem(K, data.set); else localStorage.removeItem(K);
+    }
+    ma = localStorage.getItem(K) || "";
+  } catch (e) { ma = ""; }
+  setStateValue("ma", ma);
+}
+"""
+_ghi_nho = None
 
-    import streamlit.components.v1 as components
 
-    components.html(
-        "<script>(function(){var d=window.parent.document;"
-        f"var s={json.dumps(name)}+'='+encodeURIComponent({json.dumps(value)})"
-        f"+'; path=/; max-age={max(days, 0) * 86400}; SameSite=Lax';"
-        "if(window.parent.location.protocol==='https:'){s+='; Secure';}"
-        "d.cookie=s;})();</script>", height=0)
+def ghi_nho(key: str, set_value: str | None = None) -> str | None:
+    """Mã "ghi nhớ đăng nhập" lưu trong localStorage của trình duyệt (bền qua F5 / đóng mở
+    trình duyệt, không phụ thuộc cookie). set_value: ghi mã mới ("" = xóa).
+    Trả về mã đang lưu, hoặc None khi trình duyệt chưa báo về (lần chạy đầu)."""
+    global _ghi_nho
+    if _ghi_nho is None:
+        from streamlit.components.v2 import component
+        _ghi_nho = component("ts_ghi_nho", js=_GHI_NHO_JS)
+    res = _ghi_nho(key=key, data={"set": set_value}, height=0,
+                   on_ma_change=lambda: None)
+    return getattr(res, "ma", None)
 
 
 def is_admin() -> bool:

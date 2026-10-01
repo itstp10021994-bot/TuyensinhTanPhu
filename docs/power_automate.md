@@ -167,5 +167,5 @@ tạo secret mới ở bước 1.5 và cập nhật `client_secret`.
    Đổi mật khẩu (góc phải thanh menu) hoặc bị khóa → các máy đang ghi nhớ phải đăng nhập lại.
 
 Tên tài khoản được ghi vào hồ sơ: *Người cập nhật*, *Người nhận hồ sơ* (bảng ký nhận).
-Nên thêm vào Secrets một khóa riêng để ký cookie ghi nhớ:
+Nên thêm vào Secrets một khóa riêng để ký mã ghi nhớ đăng nhập (lưu trong bộ nhớ trình duyệt):
 `COOKIE_SECRET = "chuỗi-ngẫu-nhiên-dài"` (nếu không có, app dùng `ADMIN_PASSWORD`).

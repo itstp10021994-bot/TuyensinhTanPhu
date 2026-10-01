@@ -49,9 +49,9 @@ if _has_auth() and _domain:
 
 # ------------------------------------------------------------------ tài khoản của app
 # Khi chưa bật Microsoft 365 ([auth]) mà list DanhMuc_TaiKhoan có tài khoản: bắt đăng nhập.
-# "Ghi nhớ đăng nhập": cookie chứa mã đã ký (30 ngày) -> mở lại trên máy đó không phải nhập.
+# "Ghi nhớ đăng nhập": mã đã ký (30 ngày) lưu trong bộ nhớ trình duyệt (localStorage)
+# -> F5 / mở lại trên máy đó không phải nhập.
 S = st.session_state
-COOKIE = "ts_tk"
 if not _has_auth() and not S.get("tk"):
     from tuyensinh import tai_khoan
     from tuyensinh.schema import TAI_KHOAN
@@ -61,9 +61,13 @@ if not _has_auth() and not S.get("tk"):
     except Exception:
         _items = []
     _tks = tai_khoan.dang_hoat_dong(_items)
-    _ma = st.context.cookies.get(COOKIE)
-    if _tks and _ma and not S.get("_da_dang_xuat"):
-        S["tk"] = tai_khoan.tu_ma_ghi_nho(_items, _ma, ui.cookie_secret())
+    if _tks:
+        _ma = ui.ghi_nho("ghi_nho_doc", "" if S.pop("_xoa_ghi_nho", False) else None)
+        if _ma is None:  # chờ trình duyệt gửi mã đã lưu (rất nhanh)
+            st.caption("Đang kiểm tra đăng nhập…")
+            st.stop()
+        if _ma and not S.get("_da_dang_xuat"):
+            S["tk"] = tai_khoan.tu_ma_ghi_nho(_items, _ma, ui.cookie_secret())
     if _tks and not S.get("tk"):
         _, mid, _ = st.columns([1, 1.1, 1])
         with mid, st.container(border=True):
@@ -80,23 +84,22 @@ if not _has_auth() and not S.get("tk"):
                 if _tk:
                     S["tk"] = _tk
                     S.pop("_da_dang_xuat", None)
-                    if _nho:
-                        _t = next(t for t in _items if str(t.get("id")) == _tk["id"])
-                        S["_set_cookie"] = tai_khoan.tao_ma_ghi_nho(_t, ui.cookie_secret())
+                    _t = next(t for t in _items if str(t.get("id")) == _tk["id"])
+                    # không tích ghi nhớ -> xóa mã cũ (nếu có) trên máy này
+                    S["_ghi_nho"] = tai_khoan.tao_ma_ghi_nho(_t, ui.cookie_secret()) if _nho else ""
                     st.rerun()
                 st.error("Sai tên đăng nhập hoặc mật khẩu.", icon=":material/error:")
             st.caption("Chưa có tài khoản hoặc quên mật khẩu: liên hệ người quản trị app.")
         st.stop()
-if S.get("_set_cookie"):  # ghi cookie sau khi đăng nhập (không chặn trang)
-    ui.set_cookie(COOKIE, S.pop("_set_cookie"), days=30)
-if S.pop("_xoa_cookie", False):
-    ui.set_cookie(COOKIE, "", days=-1)
+if "_ghi_nho" in S:  # lưu mã ghi nhớ sau khi đăng nhập; giữ đến khi trình duyệt xác nhận
+    if ui.ghi_nho("ghi_nho_ghi", S["_ghi_nho"]) == S["_ghi_nho"]:
+        S.pop("_ghi_nho")
 
 
 def _dang_xuat():
     S.pop("tk", None)
-    S["_da_dang_xuat"] = True  # cookie cũ của phiên này không tự đăng nhập lại
-    S["_xoa_cookie"] = True
+    S["_da_dang_xuat"] = True  # mã ghi nhớ cũ của phiên này không tự đăng nhập lại
+    S["_xoa_ghi_nho"] = True  # xóa mã ghi nhớ trên máy này
 
 
 P = {
