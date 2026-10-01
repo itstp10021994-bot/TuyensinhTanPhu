@@ -137,6 +137,8 @@ P = {
                   url_path="ke-toan"),
     "bc": st.Page("views/bao_cao.py", title="Báo cáo", icon=":material/monitoring:",
                   url_path="bao-cao"),
+    "tl": st.Page("views/tro_ly.py", title="Trợ lý", icon=":material/smart_toy:",
+                  url_path="tro-ly"),
     "cd": st.Page("views/cai_dat.py", title="Cài đặt & đồng bộ", icon=":material/settings:",
                   url_path="cai-dat"),
 }
@@ -145,8 +147,10 @@ P = {
 _pages = [P["home"], P["ts"], P["nh"], P["kt"], P["bc"], P["cd"]]
 if S.get("tk"):
     _pages = [p for p in _pages if p.title in S["tk"]["Quyen"]] or [P["home"]]
+# Trợ lý: ai cũng dùng được, câu trả lời tự giới hạn theo quyền xem của tài khoản
+_pages.insert(len(_pages) - (_pages[-1] is P["cd"]), P["tl"])
 _FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc",
-         "kt": "ke_toan", "bc": "bao_cao", "cd": "cai_dat"}
+         "kt": "ke_toan", "bc": "bao_cao", "tl": "tro_ly", "cd": "cai_dat"}
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
 pg = st.navigation(_pages, position="top")
