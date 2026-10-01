@@ -20,7 +20,7 @@ def truong() -> dict:
         "ten": config.get("TRUONG_TEN", "Trường TH-THCS-THPT Tân Phú"),
         "dia_chi": config.get("TRUONG_DIA_CHI",
                               "57/8 Kênh Tân Hóa, P. Hòa Thạnh, Q. Tân Phú, TP Hồ Chí Minh"),
-        "dien_thoai": config.get("TRUONG_DIEN_THOAI", ""),
+        "dien_thoai": config.get("TRUONG_DIEN_THOAI", "0911 97 71 71"),
         "website": config.get("TRUONG_WEBSITE", "tanphu.igcschool.edu.vn"),
         "facebook": config.get("TRUONG_FACEBOOK", "fb.com/tanphu.edu"),
     }
