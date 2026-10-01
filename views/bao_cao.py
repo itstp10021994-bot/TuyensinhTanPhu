@@ -58,6 +58,18 @@ def draw(spec: dict):
                                                             strokeWidth=1.5)
         st.altair_chart(_cfg(c, 300), width="stretch")
         return
+    if kind == "line_cat":  # trục danh mục có thứ tự (tháng trong chu kỳ) × nhiều năm
+        doms = list(dict.fromkeys(data[color]))
+        base = alt.Chart(data).encode(
+            x=alt.X(f"{x}:N", title=None, sort=list(dict.fromkeys(data[x])),
+                    axis=alt.Axis(labelAngle=0 if n <= 14 else -40)),
+            y=alt.Y(f"{y}:Q", title=None, axis=alt.Axis(format="d")),
+            color=alt.Color(f"{color}:N", scale=alt.Scale(domain=doms, range=CAT[:len(doms)])),
+            tooltip=tip)
+        c = base.mark_line(strokeWidth=2) + base.mark_point(size=60, filled=True, stroke="white",
+                                                            strokeWidth=1.5)
+        st.altair_chart(_cfg(c, 320), width="stretch")
+        return
     cat_axis = alt.Axis(labelLimit=260, labelAngle=0) if horiz else \
         alt.Axis(labelAngle=0 if n <= 12 else -40, labelLimit=140)
     # thanh ngang: xếp giảm dần; cột đứng: giữ thứ tự của bảng (khối, lớp, năm học…)
@@ -137,8 +149,7 @@ all_slot = actions.container(width="content")
 nav, main = st.columns([1, 3.3], gap="medium")
 with nav:
     groups = list(dict.fromkeys(r.group for r in reports.REPORTS))
-    grp = st.segmented_control("Nhóm", groups, default=groups[0], required=True, key="bc_grp",
-                               label_visibility="collapsed")
+    grp = st.selectbox("Nhóm báo cáo", groups, key="bc_grp", label_visibility="collapsed")
     in_grp = [r for r in reports.REPORTS if r.group == grp]
     if S.get("bc_rep") not in [r.id for r in in_grp]:
         S["bc_rep"] = in_grp[0].id
@@ -153,13 +164,19 @@ with main:
     f = st.columns([1.3, 2.4, 1.1], vertical_alignment="bottom", gap="small")
     d = pd.to_datetime(ts_year["NgayLienHe"], errors="coerce")
     rng = None
-    if rep.group == reports.G_TS and rep.id != "ts_sosanh" and d.notna().any():
+    if rep.group == reports.G_TS and d.notna().any():
         rng = f[0].date_input("Ngày liên hệ", value=(d.min().date(), d.max().date()),
                               format="DD/MM/YYYY", key="bc_rng")
     khois = [k for k in KHOI if k in set(ts_year["Khoi"]) | set(nh_year["Khoi"])]
     sel_khoi = f[1].pills("Khối", khois, selection_mode="multi", key="bc_khoi",
                           help="Bỏ trống = tất cả khối")
     params = {}
+    if "nam" in rep.params:
+        co_dl = sorted(y for y in ts_all["NamHoc"].dropna().unique() if str(y).strip())
+        mac_dinh = [y for y in co_dl if y <= nam_hoc][-3:] or co_dl[-3:]
+        params["nam"] = st.multiselect("Năm học so sánh", co_dl, default=mac_dinh,
+                                       key="bc_nam", placeholder="Chọn 2–3 năm học",
+                                       help="Mặc định 3 năm học gần nhất (tính đến năm đang chọn)")
     if "ky" in rep.params:
         params["ky"] = f[2].segmented_control("Kỳ", ["Tháng", "Tuần"], default="Tháng",
                                               required=True, key="bc_ky")
@@ -174,6 +191,7 @@ with main:
     nh = nh_year
     if sel_khoi:
         ts, nh = ts[ts["Khoi"].isin(sel_khoi)], nh[nh["Khoi"].isin(sel_khoi)]
+    params["khoi"] = sel_khoi
     ctx = reports.Ctx(ts.reset_index(drop=True), nh.reset_index(drop=True), ts_all, nam_hoc,
                       params)
 

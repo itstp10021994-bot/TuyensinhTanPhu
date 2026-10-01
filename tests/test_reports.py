@@ -61,4 +61,25 @@ def test_so_lieu():
     assert reports.nh_xe(ctx).kpis[0] == ("HS đăng ký xe", 1)
     siso = reports.nh_siso(ctx).table
     assert siso[siso["Lớp"] == "10A1"]["Sĩ số"].tolist() == [1]
-    assert len(reports.ts_sosanh(ctx).table) == 2
+    assert len(reports.xh_tongquan(ctx).table) == 2
+
+
+def test_xu_huong_cac_nam():
+    ctx = _ctx(TS + [{"id": "4", "NamHoc": "2025-2026", "HoTenHS": "Dê", "Khoi": "10",
+                      "TrangThai": "Nhập học", "Nguon": "Hotline", "NgayLienHe": "2025-06-15",
+                      "TruongCu": "THCS A", "TruongCu_Tinh": "Tây Ninh"}], NH)
+    t = reports.xh_tongquan(ctx).table
+    assert t["Năm học"].tolist() == ["2025-2026", "2026-2027"]
+    assert t["Liên hệ"].tolist() == [2, 2] and t["Liên hệ tăng/giảm"].tolist() == ["—", "0.0%"]
+    k = reports.xh_khoi(ctx).table
+    hang10 = k[k["Khối"] == "10"].iloc[0]
+    assert hang10["2025-2026"] == 1 and hang10["2026-2027"] == 1
+    # lọc năm + khối qua params
+    ctx.params.update(nam=["2026-2027"], khoi=["10"])
+    assert reports.xh_tongquan(ctx).table["Liên hệ"].tolist() == [1]
+    ctx.params.update(nam=None, khoi=None)
+    th = reports.xh_thang(ctx).table
+    # N = năm khai giảng: 01/2026 của năm học 2026-2027 là "01/N"; 09/2025 sẽ là "09/N-1"
+    assert th["Tháng"].tolist() == ["01/N", "05/N", "06/N"]  # xếp theo thời gian trong chu kỳ
+    assert th["2025-2026"].tolist() == [0, 1, 1] and th["2026-2027"].tolist() == [1, 0, 1]
+    assert reports.xh_truongcu(ctx).table.iloc[0]["Tổng"] == 2
