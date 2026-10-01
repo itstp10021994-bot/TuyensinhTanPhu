@@ -166,11 +166,6 @@ with st.container(horizontal=True, horizontal_alignment="right", vertical_alignm
     st.caption(f":material/cloud_done: {src}")
     st.selectbox("Năm học", years, key="nam_hoc", label_visibility="collapsed", width=150,
                  help="Mọi trang đều hiển thị dữ liệu của năm học này.")
-    # Trợ lý AI "Conan Ro": biểu tượng AI trên thanh đầu trang (thay cho mục menu)
-    if P["tl"] in _pages:
-        with st.container(key="tp_ai", width="content"):
-            st.page_link(P["tl"], label="Conan Ro", icon=":material/smart_toy:",
-                         help="Hỏi trợ lý AI Conan Ro về dữ liệu tuyển sinh")
     if _has_auth():
         with st.popover(ui.current_user() or "Tài khoản", icon=":material/account_circle:"):
             st.button("Đăng xuất", icon=":material/logout:", on_click=st.logout,
@@ -205,6 +200,11 @@ with st.container(horizontal=True, horizontal_alignment="right", vertical_alignm
                          [getattr(P[k], "url_path", "") for k in P])
     st.button("", icon=":material/refresh:", key="tp_refresh", on_click=ui.refresh,
               help="Tải lại dữ liệu mới nhất từ SharePoint", type="tertiary")
+    # Trợ lý AI "Conan Ro": robot nhún nhảy ở góc phải ngoài cùng (thay cho mục menu)
+    if P["tl"] in _pages:
+        with st.container(key="tp_ai", width="content"):
+            st.page_link(P["tl"], label="Conan Ro", icon=":material/smart_toy:",
+                         help="Hỏi trợ lý AI Conan Ro")
 
 try:
     if pg.url_path != "cai-dat":  # tải song song 2 list cho mọi trang (trang Cài đặt tự tải)

@@ -15,7 +15,7 @@ gatherUsageStats = false
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 baseFontSize = 15
-baseRadius = "0.5rem"
+baseRadius = "0.625rem"
 buttonRadius = "0.5rem"
 showWidgetBorder = true
 showSidebarBorder = true
@@ -24,32 +24,33 @@ headingFontWeights = [700, 600, 600, 600, 600, 600]
 metricValueFontSize = "1.625rem"
 metricValueFontWeight = 600
 linkUnderline = false
-chartCategoricalColors = ["#2563EB", "#D97706", "#059669", "#6B7280", "#7C3AED", "#DB2777"]
+chartCategoricalColors = ["#007AFF", "#FF9500", "#34C759", "#8E8E93", "#AF52DE", "#FF2D55"]
 
 [theme.light]
-primaryColor = "#1D4ED8"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F3F5F8"
-textColor = "#111827"
-borderColor = "#E3E7ED"
-dataframeHeaderBackgroundColor = "#F8FAFC"
-linkColor = "#1D4ED8"
+# Bảng màu macOS (Apple system colors)
+primaryColor = "#007AFF"
+backgroundColor = "#F5F5F7"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1D1D1F"
+borderColor = "#D9D9DE"
+dataframeHeaderBackgroundColor = "#F5F5F7"
+linkColor = "#0066CC"
 
 [theme.light.sidebar]
-backgroundColor = "#F8FAFC"
+backgroundColor = "#ECECEE"
 secondaryBackgroundColor = "#FFFFFF"
-borderColor = "#E3E7ED"
+borderColor = "#D9D9DE"
 
 [theme.dark]
-primaryColor = "#2563EB"
-backgroundColor = "#0F141B"
-secondaryBackgroundColor = "#1A212B"
-textColor = "#E6EAF0"
-borderColor = "#2A3340"
-dataframeHeaderBackgroundColor = "#161C24"
-linkColor = "#93C5FD"
+primaryColor = "#0A84FF"
+backgroundColor = "#1C1C1E"
+secondaryBackgroundColor = "#2C2C2E"
+textColor = "#F5F5F7"
+borderColor = "#3A3A3C"
+dataframeHeaderBackgroundColor = "#2C2C2E"
+linkColor = "#409CFF"
 
 [theme.dark.sidebar]
-backgroundColor = "#131921"
-secondaryBackgroundColor = "#1A212B"
-borderColor = "#2A3340"
+backgroundColor = "#232325"
+secondaryBackgroundColor = "#2C2C2E"
+borderColor = "#3A3A3C"

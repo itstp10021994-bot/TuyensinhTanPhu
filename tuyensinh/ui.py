@@ -1,7 +1,7 @@
 """Hệ thống thiết kế + thành phần giao diện dùng chung.
 
 Nguyên tắc:
-- Một màu chính (xanh #1D4ED8), nền trung tính; màu chỉ dùng để truyền đạt trạng thái.
+- Phong cách macOS: một màu chính (xanh Apple #007AFF), nền xám nhạt #F5F5F7, thẻ trắng; màu chỉ dùng để truyền đạt trạng thái.
 - Trạng thái luôn có chữ đi kèm (không dựa vào màu), nhất quán giữa bảng, badge và biểu đồ.
 - Mỗi trang: tiêu đề + mô tả ngắn + vùng hành động bên phải; nội dung chia thành các khối.
 - Danh sách → chọn dòng → trang chi tiết (drill-in) cho bản ghi dài; biểu mẫu ngắn mở dạng hộp thoại.
@@ -25,13 +25,24 @@ from . import config, danh_muc, services
 from .schema import BOOL, CHOICE, DATE, GIU_CHO, NOTE, NUMBER, TRANG_THAI, Field, ListDef
 from .storage import Storage, create_storage
 
+# Biểu đồ Altair: nền trong suốt để nằm gọn trong thẻ trắng (phong cách macOS)
+try:
+    import altair as _alt
+
+    @_alt.theme.register("tp_mac", enable=True)
+    def _tp_mac():
+        return _alt.theme.ThemeConfig({"config": {"background": "transparent",
+                                                  "view": {"stroke": None}}})
+except Exception:  # altair cũ: bỏ qua
+    pass
+
 # ---------------------------------------------------------------- tokens
 # Màu trạng thái: tên màu theme của Streamlit (tự đổi theo sáng/tối) + mã hex cho biểu đồ.
 STATUS = {
-    "Tư vấn": {"color": "blue", "hex": "#2563EB", "icon": ":material/forum:"},
-    "Nộp hồ sơ": {"color": "orange", "hex": "#D97706", "icon": ":material/description:"},
-    "Nhập học": {"color": "green", "hex": "#059669", "icon": ":material/school:"},
-    "Rút hồ sơ": {"color": "gray", "hex": "#6B7280", "icon": ":material/block:"},
+    "Tư vấn": {"color": "blue", "hex": "#007AFF", "icon": ":material/forum:"},
+    "Nộp hồ sơ": {"color": "orange", "hex": "#FF9500", "icon": ":material/description:"},
+    "Nhập học": {"color": "green", "hex": "#28A745", "icon": ":material/school:"},
+    "Rút hồ sơ": {"color": "gray", "hex": "#8E8E93", "icon": ":material/block:"},
 }
 GIU_CHO_COLOR = {
     "Chưa giữ chỗ": "gray",
@@ -42,7 +53,27 @@ GIU_CHO_COLOR = {
 STEPS = ("Tư vấn", "Nộp hồ sơ", "Nhập học")  # luồng chính; "Rút hồ sơ" là nhánh thoát
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-CSS = """
+# Biểu tượng robot AI (Conan Ro): đầu robot trắng + ngôi sao AI vàng
+ROBOT_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+             '<path d="M12 4.2V6.4" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round"/>'
+             '<path fill="#FDE047" d="M12 .7Q12 2.6 13.9 2.6Q12 2.6 12 4.5Q12 2.6 10.1 2.6Q12 2.6 12 .7Z"/>'
+             '<path fill="#FDE047" d="M20.6 2.8Q20.6 4.2 22 4.2Q20.6 4.2 20.6 5.6Q20.6 4.2 19.2 4.2Q20.6 4.2 20.6 2.8Z"/>'
+             '<rect x="2.3" y="10.2" width="1.8" height="4.2" rx=".9" fill="#FFFFFF"/>'
+             '<rect x="19.9" y="10.2" width="1.8" height="4.2" rx=".9" fill="#FFFFFF"/>'
+             '<rect x="4.6" y="6.6" width="14.8" height="11.6" rx="3.6" fill="#FFFFFF"/>'
+             '<circle cx="9.2" cy="11.6" r="1.7" fill="#4F46E5"/>'
+             '<circle cx="14.8" cy="11.6" r="1.7" fill="#4F46E5"/>'
+             '<rect x="9.4" y="14.6" width="5.2" height="1.4" rx=".7" fill="#06B6D4"/></svg>')
+
+
+def _data_uri(svg: str) -> str:
+    import base64
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
+ROBOT_URI = _data_uri(ROBOT_SVG)
+
+CSS_TEMPLATE = """
 <style>
 /* ---- khung trang ---- */
 /* chừa chỗ cho thanh header của Streamlit (cao hơn khi chạy trên Streamlit Cloud) */
@@ -56,18 +87,19 @@ CSS = """
 .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 140px;}
 /* màn hình vừa: bỏ dòng nguồn dữ liệu để không đè lên menu (đủ 6 trang) */
 @media (max-width: 1500px) { .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;}
-  .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 118px;}
+  .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 118px; width: 118px !important;}
+  .st-key-tp_toolbar .stElementContainer:has([data-testid="stSelectbox"]) {width: 118px !important;}
   /* chỉ hiện biểu tượng người dùng (bấm vào vẫn thấy tên) */
   .st-key-tp_toolbar [data-testid="stPopover"] button [data-testid="stMarkdownContainer"] {display: none;} }
 /* danh sách thẻ (bố cục như app cũ: danh sách trái, chi tiết phải) */
 [class*="st-key-cards_"] [data-testid="stVerticalBlockBorderWrapper"] {padding: 2px 0;}
 [class*="st-key-cards_"] button {min-height: 30px; padding: 2px 10px; font-size: .78rem;}
 [class*="st-key-cards_"] [class*="st-key-name_"] button {border: 0; background: none; padding: 0;
-  min-height: 0; font-size: 1rem; font-weight: 600; color: #1D4ED8;
+  min-height: 0; font-size: 1rem; font-weight: 600; color: #007AFF;
   text-align: left; justify-content: flex-start;}
 [class*="st-key-cards_"] [class*="st-key-name_"] button p {text-align: left;}
-[class*="st-key-cards_"] [class*="st-key-card_sel"] {border-left: 4px solid #1D4ED8;
-  background: rgba(37, 99, 235, .06); border-radius: 8px;}
+[class*="st-key-cards_"] [class*="st-key-card_sel"] {border-left: 4px solid #007AFF;
+  background: rgba(0, 122, 255, .07); border-radius: 8px;}
 [class*="st-key-cards_"] [class*="st-key-xoa_"] button {background: #DC2626;
   border-color: #DC2626; color: #fff;}
 [class*="st-key-cards_"] [class*="st-key-rut_"] button {color: #DC2626;}
@@ -77,7 +109,7 @@ CSS = """
 /* thanh tiêu đề khung chi tiết */
 [class*="st-key-head_"] {background: #EA580C; border-radius: 8px; padding: 8px 14px;}
 [class*="st-key-head_"] h3 {color: #fff !important; margin: 0; font-size: 1.05rem;}
-[class*="st-key-head_"] button {background: #fff; color: #1D4ED8; border: 0; font-weight: 600;}
+[class*="st-key-head_"] button {background: #fff; color: #007AFF; border: 0; font-weight: 600;}
 h1, h2, h3 {letter-spacing: -0.01em;}
 [data-testid="stSidebarNav"] {padding-top: .25rem;}
 [data-testid="stSidebarNavSeparator"] {margin: .25rem 0;}
@@ -105,8 +137,8 @@ h1, h2, h3 {letter-spacing: -0.01em;}
   border: 1.5px solid currentColor; flex: none;}
 .tp-steps .done {color: #047857; border-color: rgba(5,150,105,.35);}
 .tp-steps .done .n {background: #059669; border-color: #059669; color: #fff;}
-.tp-steps .cur {border-color: #1D4ED8; box-shadow: inset 0 0 0 1px #1D4ED8; font-weight: 600;}
-.tp-steps .cur .n {background: #1D4ED8; border-color: #1D4ED8; color: #fff;}
+.tp-steps .cur {border-color: #007AFF; box-shadow: inset 0 0 0 1px #007AFF; font-weight: 600;}
+.tp-steps .cur .n {background: #007AFF; border-color: #007AFF; color: #fff;}
 .tp-steps .todo {opacity: .6;}
 .tp-steps.off li {opacity: .45;}
 /* danh sách key-value trong thẻ phụ */
@@ -131,18 +163,72 @@ h1, h2, h3 {letter-spacing: -0.01em;}
   [data-testid="stMetric"] {padding: .6rem .75rem;}
   [data-testid="stMetricValue"] {font-size: 1.3rem;}
 }
-/* Trợ lý AI Conan Ro: nút trên thanh đầu trang; ẩn mục trùng trên menu ngang */
-.st-key-tp_ai a {background: linear-gradient(135deg, #6D28D9 0%, #2563EB 55%, #06B6D4 100%);
-  border-radius: 999px; padding: 4px 14px 4px 10px; box-shadow: 0 2px 10px rgba(79,70,229,.35);}
-.st-key-tp_ai a p, .st-key-tp_ai a span {color: #fff !important; font-weight: 600;}
-.st-key-tp_ai a:hover {filter: brightness(1.08);}
+/* ================= phong cách macOS ================= */
+/* phông San Francisco trên Mac/iPhone; Inter (đã tải) trên Windows/Android */
+.stApp, .stApp :is(p, h1, h2, h3, h4, h5, h6, li, label, button, input, textarea, td, th, a,
+  [data-testid="stMarkdownContainer"], [data-testid="stCaptionContainer"]) {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter",
+    "Helvetica Neue", "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased;}
+h1, h2, h3, .tp-title {letter-spacing: -0.022em;}
+/* thanh đầu trang mờ kính */
+header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
+  -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(0,0,0,.08);}
+[data-testid="stTopNavLinkContainer"] a {border-radius: 8px;}
+/* thẻ trắng bo góc, đổ bóng mềm */
+[class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #FFFFFF;
+  border: 1px solid rgba(0,0,0,.06) !important; border-radius: 14px !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);}
+[class*="st-key-tp_card_"] {padding: 1rem 1.15rem;}
+[data-testid="stMetricValue"] {letter-spacing: -0.02em;}
+/* nút bo tròn mềm, nút chính xanh Apple */
+.stApp button[kind="primary"], .stApp [data-testid="stBaseButton-primary"] {
+  box-shadow: 0 1px 2px rgba(0,122,255,.25);}
+.stApp [data-testid="stBaseButton-secondary"] {background: #FFFFFF;
+  box-shadow: 0 .5px 1px rgba(0,0,0,.08);}
+[data-testid="stTabs"] [role="tablist"] {gap: .25rem;}
+/* thanh cuộn mảnh kiểu Mac */
+.stApp ::-webkit-scrollbar {width: 8px; height: 8px;}
+.stApp ::-webkit-scrollbar-thumb {background: rgba(0,0,0,.18); border-radius: 8px;
+  border: 2px solid transparent; background-clip: padding-box;}
+.stApp ::-webkit-scrollbar-track {background: transparent;}
+/* ---- Trợ lý AI Conan Ro: robot nhún nhảy ở góc phải thanh đầu trang ---- */
+.st-key-tp_ai a {width: 46px; height: 46px; padding: 0 !important; border-radius: 50%;
+  background: url("ROBOT_URI") center / 32px no-repeat,
+              linear-gradient(135deg, #6D28D9 0%, #2563EB 55%, #06B6D4 100%) !important;
+  box-shadow: 0 4px 14px rgba(79,70,229,.45); animation: tp-nhun 2.6s ease-in-out infinite;
+  transform-origin: 50% 100%;}
+.st-key-tp_ai a > * {display: none !important;}
+.st-key-tp_ai a:hover {animation-play-state: paused; transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(79,70,229,.6);}
+@keyframes tp-nhun {
+  0%, 55%, 100% {transform: translateY(0) scale(1, 1);}
+  62% {transform: translateY(0) scale(1.08, .92);}
+  72% {transform: translateY(-9px) scale(.96, 1.05);}
+  82% {transform: translateY(0) scale(1.05, .95);}
+  90% {transform: translateY(-3px) scale(1, 1);}}
 header [data-testid="stTopNavLink"][href*="tro-ly"], header a[href$="/tro-ly"],
 [data-testid="stTopNavLinkContainer"]:has(a[href$="/tro-ly"]) {display: none !important;}
-@media (max-width: 1500px) { .st-key-tp_ai a p {display: none;}
-  .st-key-tp_ai a {padding: 6px 8px;} }
+.st-key-tp_toolbar {top: .3rem;}
+/* màn vừa: menu chỉ còn chữ (bỏ icon) để chừa chỗ cho thanh công cụ */
+@media (max-width: 1400px) { [data-testid="stTopNavLinkContainer"] a [data-testid="stIconMaterial"]
+  {display: none;}
+  [data-testid="stTopNavLinkContainer"] a {padding: 0 5px !important;}
+  [data-testid="stTopNavLinkContainer"] a p, [data-testid="stTopNavLinkContainer"] a span
+  {font-size: .86rem !important;} }
 @media (prefers-reduced-motion: reduce) { * {transition: none !important; animation: none !important;} }
 </style>
 """
+CSS = CSS_TEMPLATE.replace("ROBOT_URI", ROBOT_URI)
+CSS_TOI = """<style>
+header[data-testid="stHeader"] {background: rgba(28,28,30,.72) !important;
+  border-bottom-color: rgba(255,255,255,.08);}
+[class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #2C2C2E;
+  border-color: rgba(255,255,255,.07) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3);}
+.stApp [data-testid="stBaseButton-secondary"] {background: #3A3A3C;}
+.stApp ::-webkit-scrollbar-thumb {background: rgba(255,255,255,.22);}
+</style>"""
+
 
 
 # ---------------------------------------------------------------- dữ liệu
@@ -459,6 +545,9 @@ def detail_head(title: str, key: str):
 # ---------------------------------------------------------------- khung trang
 def inject_css():
     st.html(CSS)
+    if st.context.theme.type == "dark":
+        st.html(CSS_TOI)
+    st.session_state["_tp_card_n"] = 0  # đánh số thẻ (khóa CSS) lại từ đầu mỗi lần chạy
 
 
 def page_header(title: str, subtitle: str | None = None, eyebrow: str | None = None):
@@ -478,7 +567,10 @@ def page_header(title: str, subtitle: str | None = None, eyebrow: str | None = N
 
 @contextmanager
 def section(title: str | None = None, caption: str | None = None, border: bool = True):
-    with st.container(border=border):
+    n = st.session_state.get("_tp_card_n", 0) + 1
+    st.session_state["_tp_card_n"] = n
+    with st.container(border=False,
+                      key=f"tp_card_{n}" if border else None):
         if title:
             st.markdown(f"#### {title}")
         if caption:
