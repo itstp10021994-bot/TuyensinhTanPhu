@@ -118,6 +118,10 @@ P = {
 _pages = [P["home"], P["ts"], P["nh"], P["kt"], P["bc"], P["cd"]]
 if S.get("tk"):
     _pages = [p for p in _pages if p.title in S["tk"]["Quyen"]] or [P["home"]]
+_FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc",
+         "kt": "ke_toan", "bc": "bao_cao", "cd": "cai_dat"}
+# liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
+S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
 pg = st.navigation(_pages, position="top")
 
 # Thanh công cụ chung: năm học + người thao tác (thay cho thanh bên)

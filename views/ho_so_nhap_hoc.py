@@ -490,7 +490,7 @@ def render_right(item_id: str | None):
         if not new:
             with t2.popover("Khác", icon=":material/more_horiz:", width="stretch"):
                 if rec.get("TuyenSinhID"):
-                    st.page_link("views/data_tuyen_sinh.py", label="Xem liên hệ tuyển sinh",
+                    ui.page_link("views/data_tuyen_sinh.py", label="Xem liên hệ tuyển sinh",
                                  icon=":material/person_search:",
                                  query_params={"id": rec["TuyenSinhID"]})
                 st.download_button("Xuất Excel VEMIS (1 HS)",

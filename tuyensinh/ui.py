@@ -477,7 +477,7 @@ def error_state(err: Exception, compact: bool = False):
     with st.expander("Chi tiết kỹ thuật"):
         st.code(msg if compact else traceback.format_exc(), language=None)
     if "Cài đặt" in friendly:
-        st.page_link("views/cai_dat.py", label="Mở Cài đặt & đồng bộ", icon=":material/settings:")
+        page_link("views/cai_dat.py", label="Mở Cài đặt & đồng bộ", icon=":material/settings:")
     if not compact:
         st.button("Thử lại", icon=":material/refresh:", on_click=refresh, type="primary")
 
@@ -753,3 +753,23 @@ def table_key(prefix: str, ids) -> str:
     để lựa chọn cũ — lưu theo vị trí dòng — không trỏ nhầm sang học sinh khác."""
     h = hashlib.md5(",".join(map(str, ids)).encode()).hexdigest()[:10]
     return f"{prefix}_{h}"
+
+
+# ---------------------------------------------------------------- liên kết theo quyền
+def co_trang(path: str) -> bool:
+    """Tài khoản hiện tại có được vào trang (file views/...) không."""
+    ds = st.session_state.get("_trang_duoc_vao")
+    return ds is None or path in ds
+
+
+def page_link(path: str, **kw) -> None:
+    """st.page_link nhưng bỏ qua khi trang đích không nằm trong quyền của tài khoản."""
+    if co_trang(path):
+        st.page_link(path, **kw)
+
+
+def switch_page(path: str, **kw) -> None:
+    if co_trang(path):
+        st.switch_page(path, **kw)
+    else:
+        st.toast("Tài khoản của bạn không được vào trang này.", icon=":material/lock:")

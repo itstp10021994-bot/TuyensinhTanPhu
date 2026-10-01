@@ -247,7 +247,7 @@ def render_right(item_id: str | None):
                    ("Số tiền xác nhận", ui.money(rec.get("SoTienXacNhan"))),
                    ("Người xác nhận", rec.get("NguoiXacNhan")),
                    ("Ngân hàng hoàn phí", rec.get("NganHang"))])
-            st.page_link("views/ke_toan.py", label="Mở Kế toán", icon=":material/payments:")
+            ui.page_link("views/ke_toan.py", label="Mở Kế toán", icon=":material/payments:")
         with c2:
             st.markdown("**Hồ sơ nhập học**")
             nh = ui.df(NHAP_HOC)
@@ -257,7 +257,7 @@ def render_right(item_id: str | None):
             else:
                 pct = float(services.completeness(mine).iloc[0])
                 st.progress(pct, text=f"Hoàn thiện {pct:.0%}")
-                st.page_link("views/ho_so_nhap_hoc.py", label="Mở hồ sơ nhập học",
+                ui.page_link("views/ho_so_nhap_hoc.py", label="Mở hồ sơ nhập học",
                              icon=":material/assignment_ind:",
                              query_params={"id": mine.iloc[0]["id"]})
             ui.kv([("Tạo lúc", ui.fmt_date(rec.get("Created"))),

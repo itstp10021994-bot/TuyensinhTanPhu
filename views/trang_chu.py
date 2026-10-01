@@ -15,16 +15,18 @@ nh = ui.df(NHAP_HOC, nam_hoc)
 
 actions = ui.page_header("Tổng quan", f"Năm học {nam_hoc} · cập nhật lúc "
                          f"{ui.ago(ui.loaded_at())}")
-if actions.button("Thêm liên hệ", icon=":material/person_add:", type="primary"):
-    st.switch_page("views/data_tuyen_sinh.py", query_params={"new": "1"})
+if ui.co_trang("views/data_tuyen_sinh.py") and \
+        actions.button("Thêm liên hệ", icon=":material/person_add:", type="primary"):
+    ui.switch_page("views/data_tuyen_sinh.py", query_params={"new": "1"})
 
 if ts.empty:
     with ui.section():
         ui.empty_state("person_search", f"Chưa có liên hệ nào trong năm học {nam_hoc}",
                        "Bắt đầu bằng việc thêm liên hệ đầu tiên, hoặc chọn năm học khác ở thanh trên.")
         _, c, _ = st.columns([2, 1, 2])
-        if c.button("Thêm liên hệ đầu tiên", type="primary", width="stretch"):
-            st.switch_page("views/data_tuyen_sinh.py", query_params={"new": "1"})
+        if ui.co_trang("views/data_tuyen_sinh.py") and \
+                c.button("Thêm liên hệ đầu tiên", type="primary", width="stretch"):
+            ui.switch_page("views/data_tuyen_sinh.py", query_params={"new": "1"})
     st.stop()
 
 # ------------------------------------------------------------------ KPI
@@ -81,12 +83,12 @@ with right, ui.section("Cần xử lý", "Việc đang chờ trong năm học n�
         (tu_van_cu, "Liên hệ tư vấn quá 14 ngày chưa chuyển bước", "views/data_tuyen_sinh.py",
          ":material/schedule:"),
     ]
-    pending = [t for t in todo if t[0]]
+    pending = [t for t in todo if t[0] and ui.co_trang(t[2])]
     if not pending:
         ui.empty_state("task_alt", "Không có việc tồn đọng", "Mọi hồ sơ đều đã được xử lý.")
     for n, label, page, icon in pending:
         with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-            st.page_link(page, label=label, icon=icon, width="stretch")
+            ui.page_link(page, label=label, icon=icon, width="stretch")
             st.badge(str(n), color="orange")
 
 # ------------------------------------------------------------------ gần đây
@@ -94,7 +96,7 @@ with ui.section():
     h1, h2 = st.columns([3, 1], vertical_alignment="center")
     h1.markdown("#### Liên hệ gần đây")
     with h2.container(horizontal=True, horizontal_alignment="right"):
-        st.page_link("views/data_tuyen_sinh.py", label="Xem tất cả",
+        ui.page_link("views/data_tuyen_sinh.py", label="Xem tất cả",
                      icon=":material/arrow_forward:", icon_position="right")
     recent = ts.sort_values(["NgayLienHe", "id"], ascending=False).head(8).copy()
     recent["Bước"] = ui.tag_col(recent["TrangThai"])
@@ -107,6 +109,6 @@ with ui.section():
                        "Bước": ui.status_column(), "SDT": "SĐT", "Nguon": "Nguồn",
                        "NgayLienHe": st.column_config.DateColumn("Ngày liên hệ", **ui.DATE_COL)})
     if ev.selection.rows:
-        st.switch_page("views/data_tuyen_sinh.py",
+        ui.switch_page("views/data_tuyen_sinh.py",
                        query_params={"id": recent.iloc[ev.selection.rows[0]]["id"]})
     st.caption("Chọn một dòng để mở hồ sơ học sinh.")

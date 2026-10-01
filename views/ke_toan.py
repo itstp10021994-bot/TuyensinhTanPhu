@@ -120,7 +120,7 @@ with tab_xn:
                                  success=f"Đã lưu: {r['HoTenHS']} — {tinh_trang}") is not None:
                         S.kt_v += 1
                         st.rerun()
-                st.page_link("views/data_tuyen_sinh.py", label="Xem hồ sơ tuyển sinh",
+                ui.page_link("views/data_tuyen_sinh.py", label="Xem hồ sơ tuyển sinh",
                              icon=":material/open_in_new:", query_params={"id": r["id"]})
 
 # ------------------------------------------------------------------ Hoàn phí
