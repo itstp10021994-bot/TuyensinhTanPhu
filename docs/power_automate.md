@@ -153,3 +153,19 @@ tạo secret mới ở bước 1.5 và cập nhật `client_secret`.
 
 > Sau khi cập nhật app, vào **Cài đặt & đồng bộ → Kết nối & đồng bộ → Tạo list / thêm cột** để
 > thêm cột *Người cập nhật*, *Người nhận hồ sơ* vào các list.
+
+---
+
+## Tài khoản & phân quyền của app (không cần quyền quản trị Microsoft 365)
+
+1. Vào **Cài đặt & đồng bộ → Tài khoản & phân quyền** → **Tạo list tài khoản** (tạo list
+   `DanhMuc_TaiKhoan` trên SharePoint; mật khẩu chỉ lưu dạng mã hóa).
+2. Tạo **tài khoản Quản trị đầu tiên cho bạn**. Từ lúc có tài khoản, ai mở app cũng phải đăng nhập.
+3. Tạo tài khoản cho từng nhân sự: họ tên, tên đăng nhập, mật khẩu, **vai trò** (Tuyển sinh, Kế
+   toán, Giáo vụ, Chỉ xem báo cáo) và chỉnh **Trang được phép**. Tắt *Đang hoạt động* để khóa.
+4. Nhân sự đăng nhập, tích **Ghi nhớ đăng nhập trên máy này** → 30 ngày không phải nhập lại.
+   Đổi mật khẩu (góc phải thanh menu) hoặc bị khóa → các máy đang ghi nhớ phải đăng nhập lại.
+
+Tên tài khoản được ghi vào hồ sơ: *Người cập nhật*, *Người nhận hồ sơ* (bảng ký nhận).
+Nên thêm vào Secrets một khóa riêng để ký cookie ghi nhớ:
+`COOKIE_SECRET = "chuỗi-ngẫu-nhiên-dài"` (nếu không có, app dùng `ADMIN_PASSWORD`).

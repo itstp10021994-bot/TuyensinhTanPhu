@@ -22,7 +22,8 @@ class FakeFlow:
     def __init__(self):
         self.lists = {f"lists(guid'{TS_GUID}')": {"cols": [dict(c) for c in SP_COLUMNS], "items": {}},
                       "lists/GetByTitle('Data_NhapHoc')": {"cols": None, "items": {}},
-                      "lists/GetByTitle('DanhMuc_GiayTo')": {"cols": [], "items": {}}}
+                      "lists/GetByTitle('DanhMuc_GiayTo')": {"cols": [], "items": {}},
+                      "lists/GetByTitle('DanhMuc_TaiKhoan')": {"cols": [], "items": {}}}
         self.next_id = 1
         self.calls = []
 

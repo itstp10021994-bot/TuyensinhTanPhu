@@ -4,8 +4,9 @@ import hmac
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import config, importer, services, ui
-from tuyensinh.schema import GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, TUYEN_SINH
+from tuyensinh import config, importer, services, tai_khoan, ui
+from tuyensinh.schema import (GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, QUYEN_MAC_DINH, TAI_KHOAN,
+                              TRANG, TUYEN_SINH, VAI_TRO)
 
 S = st.session_state
 ui.page_header("Cài đặt & đồng bộ", "Kết nối SharePoint qua Power Automate, tạo list và "
@@ -13,7 +14,12 @@ ui.page_header("Cài đặt & đồng bộ", "Kết nối SharePoint qua Power A
 
 # Bảo vệ trang bằng mật khẩu quản trị (ADMIN_PASSWORD trong Secrets), nếu có đặt
 pw = config.get("ADMIN_PASSWORD")
-if pw and not S.get("_admin_ok"):
+if S.get("tk") and not ui.is_admin():
+    with ui.section("Cần quyền quản trị"):
+        st.info("Trang Cài đặt chỉ dành cho tài khoản vai trò **Quản trị**.",
+                icon=":material/lock:")
+    st.stop()
+if pw and not S.get("_admin_ok") and not ui.is_admin():
     with ui.section("Cần quyền quản trị"):
         entered = st.text_input("Mật khẩu quản trị", type="password")
         if st.button("Mở khóa", type="primary", icon=":material/lock_open:"):
@@ -31,6 +37,95 @@ MOI = "＋ Thêm khối mới"
 def _khoi_key(k: str):
     a, _, b = k.partition("-")
     return (int(a) if a.isdigit() else 99, b)
+
+
+MOI_TK = "＋ Thêm tài khoản mới"
+
+
+def render_tai_khoan():
+    """Danh sách tài khoản đăng nhập + trang được phép của từng người."""
+    items = ui.records(TAI_KHOAN, optional=True)
+    err = ui.list_error(TAI_KHOAN)
+    ten_list = config.list_name(TAI_KHOAN.name)
+    if err and "does not exist" not in err and "404" not in err:
+        st.error(f"Không đọc được list **{ten_list}** (lỗi kết nối). Bấm ⟳ để thử lại.",
+                 icon=":material/cloud_off:")
+        return
+    if err:
+        c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
+        c1.warning(f"Chưa có list **{ten_list}** trên SharePoint — bấm nút bên cạnh để tạo, "
+                   "sau đó thêm tài khoản.", icon=":material/info:")
+        if c2.button("Tạo list tài khoản", type="primary", icon=":material/playlist_add:",
+                     width="stretch", disabled=backend == "local"):
+            with st.status("Đang tạo list…", expanded=True) as stt:
+                try:
+                    importer.setup_lists(storage, log=stt.write, lists=[TAI_KHOAN])
+                    stt.update(label="Đã tạo list", state="complete")
+                except Exception as e:
+                    stt.update(label="Không tạo được list", state="error")
+                    ui.error_state(e, compact=True)
+                    return
+            ui.refresh()
+            st.rerun()
+        return
+
+    hd = tai_khoan.dang_hoat_dong(items)
+    if not hd:
+        st.info("Chưa có tài khoản nào: app đang mở tự do (ai cũng vào được). Tạo **tài khoản "
+                "Quản trị đầu tiên cho bạn** — sau đó mọi người phải đăng nhập.",
+                icon=":material/info:")
+    elif not any(t.get("VaiTro") == "Quản trị" for t in hd):
+        st.warning("Chưa có tài khoản **Quản trị** đang hoạt động — không ai vào được trang "
+                   "Cài đặt bằng tài khoản. Hãy đặt ít nhất 1 người là Quản trị.",
+                   icon=":material/warning:")
+
+    left, right = st.columns([1.5, 1.2], gap="medium")
+    with left, ui.section("Danh sách tài khoản", f"{len(hd)} đang hoạt động / {len(items)}"):
+        if items:
+            df = pd.DataFrame([{
+                "Họ tên": t.get("HoTen"), "Tên đăng nhập": t.get("TenDangNhap"),
+                "Vai trò": t.get("VaiTro"), "Trang được phép": ", ".join(tai_khoan.quyen(t)),
+                "Hoạt động": str(t.get("HoatDong") or "Có") != "Không"} for t in items])
+            st.dataframe(df, hide_index=True, width="stretch",
+                         height=min(520, 38 + 35 * len(df)),
+                         column_config={"Hoạt động": st.column_config.CheckboxColumn(width="small"),
+                                        "Trang được phép": st.column_config.TextColumn(
+                                            width="large")})
+        else:
+            ui.empty_state("group", "Chưa có tài khoản")
+        st.caption("Vai trò Quản trị luôn có mọi trang (gồm Cài đặt). Người dùng tự đổi mật khẩu "
+                   "ở góc phải thanh menu. Đổi mật khẩu / khóa tài khoản: các máy đang ghi nhớ "
+                   "đăng nhập phải đăng nhập lại.")
+    with right, ui.section("Thêm / sửa tài khoản"):
+        theo_ten = {f"{t.get('HoTen')} ({t.get('TenDangNhap')})": t for t in items}
+        chon = st.selectbox("Tài khoản", [MOI_TK, *theo_ten], key="tk_chon")
+        t = theo_ten.get(chon, {})
+        k = f"tk_{t.get('id', 'moi')}_{ui.data_version()}"
+        ho_ten = st.text_input("Họ tên *", t.get("HoTen", ""), key=f"{k}_ten",
+                               help="Tên này ghi vào hồ sơ: người nhập, người nhận hồ sơ")
+        ten_dn = st.text_input("Tên đăng nhập *", t.get("TenDangNhap", ""), key=f"{k}_dn")
+        vai_mac_dinh = "Quản trị" if not hd and not t else (t.get("VaiTro") or "Tuyển sinh")
+        vai = st.selectbox("Vai trò", VAI_TRO, index=VAI_TRO.index(vai_mac_dinh)
+                           if vai_mac_dinh in VAI_TRO else 1, key=f"{k}_vai")
+        if vai == "Quản trị":
+            trang = list(TRANG)
+            st.caption("Quản trị: được vào tất cả các trang.")
+        else:
+            co = tai_khoan.quyen(t) if t and t.get("VaiTro") == vai else \
+                list(QUYEN_MAC_DINH.get(vai, ()))
+            trang = st.multiselect("Trang được phép", [x for x in TRANG
+                                                        if x != "Cài đặt & đồng bộ"],
+                                   default=[x for x in co if x != "Cài đặt & đồng bộ"],
+                                   key=f"{k}_trang_{vai}")
+        mk = st.text_input("Mật khẩu" + (" *" if not t else " mới (để trống = giữ nguyên)"),
+                           type="password", key=f"{k}_mk")
+        hoat = st.toggle("Đang hoạt động", value=str(t.get("HoatDong") or "Có") != "Không",
+                         key=f"{k}_hd", help="Tắt để khóa tài khoản (nghỉ việc…)")
+        if st.button("Lưu tài khoản", type="primary", icon=":material/save:", width="stretch"):
+            if ui.mutate(tai_khoan.luu, storage, items, ho_ten, ten_dn, vai, mk or None, hoat,
+                         t.get("id"), trang, success=f"Đã lưu tài khoản {ten_dn}") is not None:
+                S.pop("tk_chon", None)
+                st.rerun()
 
 
 def render_giay_to():
@@ -126,8 +221,13 @@ def render_giay_to():
         if err:
             st.caption("Chưa lưu được vì chưa có list trên SharePoint.")
 
-tab_dm, tab_sync = st.tabs([":material/checklist: Danh mục giấy tờ",
-                           ":material/sync: Kết nối & đồng bộ"])
+tab_tk, tab_dm, tab_sync = st.tabs([":material/manage_accounts: Tài khoản & phân quyền",
+                                   ":material/checklist: Danh mục giấy tờ",
+                                   ":material/sync: Kết nối & đồng bộ"])
+
+# ------------------------------------------------------------------ tài khoản
+with tab_tk:
+    render_tai_khoan()
 
 # ------------------------------------------------------------------ danh mục giấy tờ
 with tab_dm:

@@ -296,6 +296,9 @@ def nam_hoc() -> str:
 
 
 def logged_in() -> bool:
+    """Đã đăng nhập (Microsoft 365 hoặc tài khoản của app)."""
+    if st.session_state.get("tk"):
+        return True
     try:
         return bool(st.user.is_logged_in)
     except Exception:
@@ -303,12 +306,41 @@ def logged_in() -> bool:
 
 
 def current_user() -> str:
+    tk = st.session_state.get("tk")
+    if tk:
+        return tk.get("HoTen") or tk.get("TenDangNhap") or ""
     try:
         if st.user.is_logged_in:
             return st.user.get("name") or st.user.get("email") or ""
     except Exception:
         pass
     return st.session_state.get("nguoi_dung", "")
+
+
+def cookie_secret() -> str:
+    """Khóa ký cookie ghi nhớ đăng nhập (COOKIE_SECRET, hoặc mật khẩu quản trị / key flow)."""
+    pa = config.section("powerautomate")
+    return str(config.get("COOKIE_SECRET") or config.get("ADMIN_PASSWORD") or pa.get("key")
+               or config.get("PA_KEY") or "tuyen-sinh-tan-phu")
+
+
+def set_cookie(name: str, value: str, days: int = 30):
+    """Ghi cookie lên trình duyệt (days < 0: xóa)."""
+    import json
+
+    import streamlit.components.v1 as components
+
+    components.html(
+        "<script>(function(){var d=window.parent.document;"
+        f"var s={json.dumps(name)}+'='+encodeURIComponent({json.dumps(value)})"
+        f"+'; path=/; max-age={max(days, 0) * 86400}; SameSite=Lax';"
+        "if(window.parent.location.protocol==='https:'){s+='; Secure';}"
+        "d.cookie=s;})();</script>", height=0)
+
+
+def is_admin() -> bool:
+    tk = st.session_state.get("tk")
+    return bool(tk and tk.get("VaiTro") == "Quản trị")
 
 
 def mutate(fn, *args, success: str | None = None, **kwargs):

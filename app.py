@@ -47,6 +47,58 @@ if _has_auth() and _domain:
         st.button("Đăng xuất", icon=":material/logout:", on_click=st.logout)
         st.stop()
 
+# ------------------------------------------------------------------ tài khoản của app
+# Khi chưa bật Microsoft 365 ([auth]) mà list DanhMuc_TaiKhoan có tài khoản: bắt đăng nhập.
+# "Ghi nhớ đăng nhập": cookie chứa mã đã ký (30 ngày) -> mở lại trên máy đó không phải nhập.
+S = st.session_state
+COOKIE = "ts_tk"
+if not _has_auth() and not S.get("tk"):
+    from tuyensinh import tai_khoan
+    from tuyensinh.schema import TAI_KHOAN
+
+    try:
+        _items = ui.records(TAI_KHOAN, optional=True)
+    except Exception:
+        _items = []
+    _tks = tai_khoan.dang_hoat_dong(_items)
+    _ma = st.context.cookies.get(COOKIE)
+    if _tks and _ma and not S.get("_da_dang_xuat"):
+        S["tk"] = tai_khoan.tu_ma_ghi_nho(_items, _ma, ui.cookie_secret())
+    if _tks and not S.get("tk"):
+        _, mid, _ = st.columns([1, 1.1, 1])
+        with mid, st.container(border=True):
+            st.image(_logo, width=260)
+            st.markdown("### Đăng nhập")
+            with st.form("dang_nhap", border=False):
+                _u = st.text_input("Tên đăng nhập", autocomplete="username")
+                _p = st.text_input("Mật khẩu", type="password", autocomplete="current-password")
+                _nho = st.checkbox("Ghi nhớ đăng nhập trên máy này (30 ngày)", value=True)
+                _ok = st.form_submit_button("Đăng nhập", type="primary", icon=":material/login:",
+                                            width="stretch")
+            if _ok:
+                _tk = tai_khoan.dang_nhap(_tks, _u, _p)
+                if _tk:
+                    S["tk"] = _tk
+                    S.pop("_da_dang_xuat", None)
+                    if _nho:
+                        _t = next(t for t in _items if str(t.get("id")) == _tk["id"])
+                        S["_set_cookie"] = tai_khoan.tao_ma_ghi_nho(_t, ui.cookie_secret())
+                    st.rerun()
+                st.error("Sai tên đăng nhập hoặc mật khẩu.", icon=":material/error:")
+            st.caption("Chưa có tài khoản hoặc quên mật khẩu: liên hệ người quản trị app.")
+        st.stop()
+if S.get("_set_cookie"):  # ghi cookie sau khi đăng nhập (không chặn trang)
+    ui.set_cookie(COOKIE, S.pop("_set_cookie"), days=30)
+if S.pop("_xoa_cookie", False):
+    ui.set_cookie(COOKIE, "", days=-1)
+
+
+def _dang_xuat():
+    S.pop("tk", None)
+    S["_da_dang_xuat"] = True  # cookie cũ của phiên này không tự đăng nhập lại
+    S["_xoa_cookie"] = True
+
+
 P = {
     "home": st.Page("views/trang_chu.py", title="Tổng quan", icon=":material/space_dashboard:",
                     default=True),
@@ -62,7 +114,11 @@ P = {
                   url_path="cai-dat"),
 }
 # Thanh menu ngang như app cũ: Tổng quan · Data tuyển sinh · Hồ sơ nhập học · Kế toán · Báo cáo
-pg = st.navigation([P["home"], P["ts"], P["nh"], P["kt"], P["bc"], P["cd"]], position="top")
+# Phân quyền: tài khoản của app chỉ thấy các trang được phép (Quản trị: tất cả)
+_pages = [P["home"], P["ts"], P["nh"], P["kt"], P["bc"], P["cd"]]
+if S.get("tk"):
+    _pages = [p for p in _pages if p.title in S["tk"]["Quyen"]] or [P["home"]]
+pg = st.navigation(_pages, position="top")
 
 # Thanh công cụ chung: năm học + người thao tác (thay cho thanh bên)
 years = config.school_years()
@@ -79,6 +135,20 @@ with st.container(horizontal=True, horizontal_alignment="right", vertical_alignm
         with st.popover(ui.current_user() or "Tài khoản", icon=":material/account_circle:"):
             st.button("Đăng xuất", icon=":material/logout:", on_click=st.logout,
                       type="tertiary")
+    elif st.session_state.get("tk"):
+        _tk = st.session_state["tk"]
+        with st.popover(_tk["HoTen"], icon=":material/account_circle:"):
+            st.caption(f"{_tk['TenDangNhap']} · {_tk['VaiTro']}")
+            with st.form("doi_mk", border=False):
+                _cu = st.text_input("Mật khẩu hiện tại", type="password")
+                _moi = st.text_input("Mật khẩu mới", type="password")
+                if st.form_submit_button("Đổi mật khẩu", icon=":material/key:"):
+                    from tuyensinh import tai_khoan
+                    from tuyensinh.schema import TAI_KHOAN
+
+                    ui.mutate(tai_khoan.doi_mat_khau, ui.storage(), _tk["id"], _cu, _moi,
+                              ui.records(TAI_KHOAN, optional=True), success="Đã đổi mật khẩu")
+            st.button("Đăng xuất", icon=":material/logout:", type="tertiary", on_click=_dang_xuat)
     else:
         who = st.session_state.get("nguoi_dung") or "Người thao tác"
         with st.popover(who, icon=":material/account_circle:"):

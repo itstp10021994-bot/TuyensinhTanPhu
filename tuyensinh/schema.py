@@ -294,7 +294,32 @@ GIAY_TO = ListDef(
     ),
 )
 
-ALL_LISTS = (TUYEN_SINH, NHAP_HOC, GIAY_TO)
+# Tài khoản đăng nhập của app (dùng khi chưa bật đăng nhập Microsoft 365)
+VAI_TRO = ("Quản trị", "Tuyển sinh", "Kế toán", "Giáo vụ", "Chỉ xem báo cáo")
+# Các trang có thể phân quyền (tên trùng tiêu đề trang trên thanh menu)
+TRANG = ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Kế toán", "Báo cáo",
+         "Cài đặt & đồng bộ")
+QUYEN_MAC_DINH = {
+    "Quản trị": TRANG,
+    "Tuyển sinh": ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Báo cáo"),
+    "Kế toán": ("Tổng quan", "Kế toán", "Hồ sơ nhập học", "Báo cáo"),
+    "Giáo vụ": ("Tổng quan", "Hồ sơ nhập học", "Báo cáo"),
+    "Chỉ xem báo cáo": ("Tổng quan", "Báo cáo"),
+}
+TAI_KHOAN = ListDef(
+    name="DanhMuc_TaiKhoan",
+    title="Tài khoản đăng nhập app tuyển sinh",
+    fields=(
+        Field("HoTen", "Họ tên", required=True),
+        Field("TenDangNhap", "Tên đăng nhập", required=True),
+        Field("MatKhau", "Mật khẩu (đã mã hóa)"),
+        Field("VaiTro", "Vai trò", CHOICE, VAI_TRO),
+        Field("Quyen", "Trang được phép", NOTE),
+        Field("HoatDong", "Hoạt động", CHOICE, ("Có", "Không")),
+    ),
+)
+
+ALL_LISTS = (TUYEN_SINH, NHAP_HOC, GIAY_TO, TAI_KHOAN)
 
 
 # Cột của Data_NhapHoc không có trong biểu mẫu VEMIS (chỉ dùng trong app / SharePoint)
