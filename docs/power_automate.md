@@ -110,3 +110,46 @@ Từ đây mọi thao tác trên app được ghi thẳng lên SharePoint.
 
 Dùng máy tính có Python thì các bước ở Bước 3 cũng làm được bằng
 `python scripts/setup_sharepoint.py` và `python scripts/import_excel.py …`.
+
+---
+
+## Đăng nhập bằng Microsoft 365 (ghi tên người nhập / người nhận hồ sơ)
+
+Khi bật đăng nhập, mọi người phải đăng nhập bằng tài khoản Microsoft 365 của trường trước khi dùng
+app. Tên tài khoản tự ghi vào **Người cập nhật** (Data tuyển sinh, Hồ sơ nhập học), **Người nhận
+hồ sơ** (bảng ký nhận) và **Người nhận hồ sơ / Người xác nhận** (kế toán).
+
+**1. Đăng ký app trên Microsoft Entra** (cần quyền quản trị Microsoft 365 của trường, hoặc nhờ IT):
+
+1. Vào <https://entra.microsoft.com> → **Identity → Applications → App registrations →
+   New registration**.
+2. **Name**: `Tuyen sinh Tan Phu` · **Supported account types**: *Accounts in this organizational
+   directory only (Single tenant)*.
+3. **Redirect URI**: chọn **Web**, nhập `https://tuyensinhtanphu.streamlit.app/oauth2callback`
+   (đúng địa chỉ app của bạn + `/oauth2callback`) → **Register**.
+4. Trang **Overview**: sao chép **Application (client) ID** và **Directory (tenant) ID**.
+5. **Certificates & secrets → New client secret** → chọn thời hạn → **Add** → sao chép cột
+   **Value** (chỉ hiện 1 lần).
+
+**2. Khai báo trong Secrets** của Streamlit Cloud (thêm vào cuối; dòng `AUTH_DOMAIN` phải đặt
+ở **phía trên** dòng `[auth]`, cùng chỗ với `BACKEND = …`):
+
+```toml
+AUTH_DOMAIN = "igcschool.edu.vn"   # chỉ cho tài khoản @igcschool.edu.vn (bỏ dòng này nếu không cần)
+
+[auth]
+redirect_uri = "https://tuyensinhtanphu.streamlit.app/oauth2callback"
+cookie_secret = "một-chuỗi-ngẫu-nhiên-dài-ít-nhất-32-ký-tự"
+
+[auth.microsoft]
+client_id = "Application (client) ID"
+client_secret = "Value của client secret"
+server_metadata_url = "https://login.microsoftonline.com/<Directory (tenant) ID>/v2.0/.well-known/openid-configuration"
+```
+
+Lưu Secrets → app khởi động lại và hiện màn hình **Đăng nhập với Microsoft 365**. Sau khi đăng
+nhập, tên tài khoản hiện ở góc phải thanh menu (bấm vào để đăng xuất). Khi client secret hết hạn,
+tạo secret mới ở bước 1.5 và cập nhật `client_secret`.
+
+> Sau khi cập nhật app, vào **Cài đặt & đồng bộ → Kết nối & đồng bộ → Tạo list / thêm cột** để
+> thêm cột *Người cập nhật*, *Người nhận hồ sơ* vào các list.

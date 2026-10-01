@@ -122,14 +122,18 @@ def thu_ho_so_dialog(rec: dict):
                          format="DD/MM/YYYY", key=f"{p}_ngay")
     han = c2.date_input("Bổ sung trước ngày", date.today() + timedelta(days=20),
                         format="DD/MM/YYYY", key=f"{p}_han", disabled=not thieu)
-    nguoi = c3.text_input("Người nhận hồ sơ", ui.current_user(), key=f"{p}_nguoi")
+    dang_nhap = ui.logged_in()
+    nguoi = c3.text_input("Người nhận hồ sơ", ui.current_user(), key=f"{p}_nguoi",
+                          disabled=dang_nhap,
+                          help="Tên tài khoản Microsoft 365 đang đăng nhập" if dang_nhap else
+                          "Nhập tên người nhận (hoặc đăng nhập Microsoft 365 để tự điền)")
     b1, b2 = st.columns(2)
     luu_in = b1.button("Lưu & in bảng ký nhận", type="primary", icon=":material/print:",
                        width="stretch")
     luu = b2.button("Chỉ lưu", icon=":material/check:", width="stretch")
     if luu or luu_in:
         upd = {"HoSoDaNop": services.ghi_ho_so(ngay, chon) if chon else "",
-               "NgayNhanHoSo": ngay}
+               "NgayNhanHoSo": ngay, "NguoiNhanHoSo": nguoi}
         if not rec.get("TinhTrangHS"):
             upd["TinhTrangHS"] = "Đang nhập hồ sơ"
         res = ui.mutate(services.cap_nhat_nhap_hoc, storage, rec["id"], upd,
@@ -160,7 +164,8 @@ def in_bien_nhan(rec: dict):
     can, da, thieu = services.tien_do_giay_to(rec)
     ngay, _ = services.doc_ho_so(rec.get("HoSoDaNop"))
     bien_nhan_dialog(dict(rec=rec, da_nhan=da, thieu=thieu,
-                          han=date.today() + timedelta(days=20), nguoi=ui.current_user(),
+                          han=date.today() + timedelta(days=20),
+                          nguoi=rec.get("NguoiNhanHoSo") or ui.current_user(),
                           ngay=ngay))
 
 

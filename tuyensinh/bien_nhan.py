@@ -68,9 +68,10 @@ def html(rec: dict, da_nhan: dict[str, str], can_bo_sung: list[str], han_bo_sung
     ngay = ngay_nhan or date.today()
     logo = _logo()  # logo đã có tên trường -> không in lại tên
     return f"""<!doctype html><html lang="vi"><head><meta charset="utf-8">
-<title>Bảng ký nhận hồ sơ - {escape(str(rec.get('HoTen') or ''))}</title>
+<title>&nbsp;</title>
 <style>
-@page {{ size: A4; margin: 14mm 16mm; }}
+/* lề trang = 0: trình duyệt không còn chỗ in ngày giờ / tiêu đề / địa chỉ web ở đầu-cuối trang */
+@page {{ size: A4; margin: 0; }}
 * {{ box-sizing: border-box; }}
 body {{ font-family: "Times New Roman", Times, serif; color: #111; margin: 0; background: #f1f5f9; }}
 .bar {{ position: sticky; top: 0; display: flex; gap: 8px; justify-content: flex-end; padding: 8px;
@@ -100,7 +101,8 @@ ul {{ margin: 4px 0 0 0; padding-left: 22px; font-size: 15px; }} li {{ margin: 2
 .foot {{ margin-top: 18px; border-top: 1px solid #CBD5E1; padding-top: 6px; font-size: 11.5px;
         color: #334155; text-align: center; font-family: Arial, sans-serif; }}
 @media print {{ body {{ background: #fff; }} .bar {{ display: none; }}
-  .page {{ box-shadow: none; margin: 0; width: auto; min-height: 268mm; padding: 0; }} }}
+  .page {{ box-shadow: none; margin: 0; width: 210mm; height: 297mm; min-height: 0;
+           padding: 14mm 16mm 10mm; overflow: hidden; }} }}
 </style></head><body>
 <div class="bar"><button onclick="window.print()">🖨 In bảng ký nhận</button></div>
 <div class="page">
@@ -122,7 +124,7 @@ ul {{ margin: 4px 0 0 0; padding-left: 22px; font-size: 15px; }} li {{ margin: 2
  {f'<div class="han">Bổ sung trước ngày: {_d(han_bo_sung)}</div>' if can_bo_sung and han_bo_sung else ''}
  <div class="ky">
   <div><i style="visibility:hidden">Ngày</i><b>Phụ huynh nộp hồ sơ</b><i>Ký và ghi rõ họ tên</i>
-   <div class="ten">{escape(ph)}</div></div>
+   <div class="ten">&nbsp;</div></div>
   <div><i>Ngày {ngay:%d} tháng {ngay:%m} năm {ngay:%Y}</i><b>Đơn vị nhận hồ sơ</b>
    <i>Ký và ghi rõ họ tên</i><div class="ten">{escape(nguoi_nhan)}</div></div>
  </div>

@@ -25,16 +25,27 @@ def _has_auth() -> bool:
 
 
 if _has_auth() and not st.user.is_logged_in:
-    # Màn hình đăng nhập (khi bật [auth] trong secrets.toml)
+    # Màn hình đăng nhập (khi bật [auth] trong Secrets) — tài khoản Microsoft 365 của trường
     _, mid, _ = st.columns([1, 1.2, 1])
     with mid, st.container(border=True):
-        st.image(str(ROOT / "static/logo.svg"), width=220)
+        st.image(_logo, width=260)
         st.markdown("### Đăng nhập")
-        st.caption("Dùng tài khoản Microsoft 365 của trường để tiếp tục.")
-        st.button("Đăng nhập với Microsoft", icon=":material/login:", type="primary",
+        st.caption("Dùng tài khoản Microsoft 365 của trường để tiếp tục. Tên tài khoản được ghi "
+                   "vào hồ sơ là người nhập / người nhận hồ sơ.")
+        st.button("Đăng nhập với Microsoft 365", icon=":material/login:", type="primary",
                   width="stretch", on_click=st.login,
                   args=("microsoft",) if "microsoft" in st.secrets["auth"] else ())
     st.stop()
+
+# Chỉ cho tài khoản thuộc tên miền của trường (AUTH_DOMAIN = "igcschool.edu.vn"), nếu có đặt
+_domain = str(config.get("AUTH_DOMAIN", "") or "").strip().lower().lstrip("@")
+if _has_auth() and _domain:
+    _email = str(st.user.get("email") or st.user.get("preferred_username") or "").lower()
+    if not _email.endswith("@" + _domain):
+        st.error(f"Tài khoản **{_email or 'này'}** không thuộc tên miền **{_domain}** của trường.",
+                 icon=":material/block:")
+        st.button("Đăng xuất", icon=":material/logout:", on_click=st.logout)
+        st.stop()
 
 P = {
     "home": st.Page("views/trang_chu.py", title="Tổng quan", icon=":material/space_dashboard:",

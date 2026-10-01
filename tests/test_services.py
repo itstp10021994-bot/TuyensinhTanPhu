@@ -136,7 +136,7 @@ SP_COLUMNS = [{"name": "Title", "title": "Title", "type": "Text"}] + [
 
 def test_column_map_matches_existing_list_by_display_name():
     cm = ColumnMap(TUYEN_SINH.name, SP_COLUMNS)
-    assert cm.missing == ["TruongCu_DiaChiCu", "GiuCho"]  # 2 cột chỉ có ở list mới
+    assert cm.missing == ["TruongCu_DiaChiCu", "GiuCho", "NguoiCapNhat"]  # cột chỉ có ở list mới
     by_title = {c["title"]: c["name"] for c in SP_COLUMNS}
     assert cm.internal["NamHoc"] == by_title["Nam hoc"]
     assert cm.internal["TrangThai"] == by_title["Bước"]

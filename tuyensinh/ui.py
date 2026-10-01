@@ -133,8 +133,36 @@ h1, h2, h3 {letter-spacing: -0.01em;}
 
 # ---------------------------------------------------------------- dữ liệu
 @st.cache_resource
-def storage() -> Storage:
+def _base_storage() -> Storage:
     return create_storage()
+
+
+class _UserStorage:
+    """Kho dữ liệu của phiên làm việc: mỗi lần ghi Data tuyển sinh / Hồ sơ nhập học tự lưu
+    tên người thao tác (tài khoản Microsoft 365 đăng nhập) vào cột Người cập nhật."""
+
+    def __init__(self, base: Storage, user: str):
+        self._base, self._user = base, user
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+    def _stamp(self, list_name: str, data: dict) -> dict:
+        from .schema import NHAP_HOC, TUYEN_SINH
+
+        if self._user and list_name in (TUYEN_SINH.name, NHAP_HOC.name) and data:
+            data = {**data, "NguoiCapNhat": self._user}
+        return data
+
+    def create_item(self, list_name, data):
+        return self._base.create_item(list_name, self._stamp(list_name, data))
+
+    def update_item(self, list_name, item_id, data):
+        return self._base.update_item(list_name, item_id, self._stamp(list_name, data))
+
+
+def storage() -> Storage:
+    return _UserStorage(_base_storage(), current_user())
 
 
 TTL = 600  # giây: dữ liệu sửa thẳng trên SharePoint hiện lên app sau tối đa 10 phút
@@ -265,6 +293,13 @@ def memo(ld: ListDef, key, fn):
 
 def nam_hoc() -> str:
     return st.session_state.get("nam_hoc", config.default_year())
+
+
+def logged_in() -> bool:
+    try:
+        return bool(st.user.is_logged_in)
+    except Exception:
+        return False
 
 
 def current_user() -> str:

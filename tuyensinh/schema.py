@@ -144,6 +144,8 @@ TUYEN_SINH = ListDef(
         Field("TenChuTaiKhoan", "Tên chủ tài khoản", group=G_KETOAN),
         Field("NganHang", "Ngân hàng", group=G_KETOAN),
         Field("SoTaiKhoan", "Số tài khoản", group=G_KETOAN),
+        # Tài khoản Microsoft 365 lưu gần nhất (app tự ghi)
+        Field("NguoiCapNhat", "Người cập nhật", group=G_KETOAN),
     ),
 )
 
@@ -275,6 +277,8 @@ NHAP_HOC = ListDef(
         Field("TongDaThu", "Tổng số tiền đã thu", NUMBER, group=G_HOCPHI),
         Field("NgayDongPhi", "Ngày đóng phí", DATE, group=G_HOCPHI),
         Field("KeToanXacNhan", "Kế toán xác nhận", group=G_HOCPHI),
+        Field("NguoiNhanHoSo", "Người nhận hồ sơ", group=G_HOCPHI),
+        Field("NguoiCapNhat", "Người cập nhật", group=G_HOCPHI),
         Field("GhiChu", "Ghi chú", NOTE, group=G_LIENLAC),
     ),
 )
