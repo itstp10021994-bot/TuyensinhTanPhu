@@ -7,13 +7,15 @@ from tuyensinh import tro_ly
 TS = pd.DataFrame([
     {"id": "1", "HoTenHS": "Trần Huy Long", "Khoi": "10", "PhanHe": "IEP", "TrangThai": "Nhập học",
      "GiuCho": "Đã giữ chỗ", "SoTienXacNhan": 5_000_000, "SDT": "0927666649",
-     "NgayLienHe": "2026-07-05", "Nguon": "Mạng xã hội", "CheDo": "Nội trú"},
+     "NgayLienHe": "2026-07-05", "Nguon": "Mạng xã hội", "CheDo": "Nội trú",
+     "TruongCu": "THCS Phước Thái", "TruongCu_Tinh": "Tỉnh Đồng Nai"},
     {"id": "2", "HoTenHS": "Lê Minh Anh", "Khoi": "6", "PhanHe": "", "TrangThai": "Tư vấn",
      "GiuCho": "", "SoTienXacNhan": None, "SDT": "0909000111", "NgayLienHe": "2026-06-01",
-     "Nguon": "Hotline", "CheDo": "Bán trú"},
+     "Nguon": "Hotline", "CheDo": "Bán trú", "TruongCu": "TH Lê Lợi", "TruongCu_Tinh": ""},
     {"id": "3", "HoTenHS": "Phạm Anh Thư", "Khoi": "10", "PhanHe": "ESL", "TrangThai": "Nộp hồ sơ",
      "GiuCho": "", "SoTienXacNhan": None, "SDT": "0911222333", "NgayLienHe": "2026-07-20",
-     "Nguon": "Hotline", "CheDo": "Nội trú"},
+     "Nguon": "Hotline", "CheDo": "Nội trú", "TruongCu": "thcs phuoc thai ",
+     "TruongCu_Tinh": "Tỉnh Đồng Nai"},
 ])
 NH = pd.DataFrame([
     {"id": "9", "TuyenSinhID": "1", "HoTen": "Trần Huy Long", "Khoi": "10", "PhanHe": "IEP",
@@ -74,3 +76,19 @@ def test_giay_to_va_khong_hieu():
     r = tro_ly.tra_loi("học sinh nào thiếu giấy tờ", ctx())
     assert "**1/1** hồ sơ" in r.text
     assert "chưa hiểu" in tro_ly.tra_loi("xyz qwe", ctx()).text
+
+
+def test_xep_hang():
+    r = tro_ly.tra_loi("Trường cũ nào có học sinh nhiều nhất", ctx())
+    # gộp "THCS Phước Thái" và "thcs phuoc thai " thành một trường
+    assert "**THCS Phước Thái** với **2** liên hệ" in r.text
+    assert list(r.table.columns) == ["Hạng", "Trường cũ", "Số lượng"]
+    r = tro_ly.tra_loi("tỉnh nào nhiều hs nhập học nhất", ctx())
+    assert "**Tỉnh Đồng Nai** với **1** học sinh nhập học" in r.text
+    r = tro_ly.tra_loi("nguồn nào ít nhất", ctx())
+    assert "ít liên hệ nhất: **Mạng xã hội**" in r.text
+    assert "chia theo tháng" in tro_ly.tra_loi("liên hệ theo tháng", ctx()).text
+    # "khối 10" vẫn là bộ lọc
+    assert "(khối 10)" in tro_ly.tra_loi("khối 10 có bao nhiêu liên hệ", ctx()).text
+    r = tro_ly.tra_loi("liên hệ nguồn Ban TS đến trường tư vấn", ctx())
+    assert r.text.startswith("Năm học 2026-2027: **0** liên hệ (nguồn Ban TS")

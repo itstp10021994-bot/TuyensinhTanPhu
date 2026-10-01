@@ -21,6 +21,7 @@ VI_DU = (
     "Có bao nhiêu học sinh nhập học khối 10?",
     "Liên hệ mới trong tuần này",
     "Thống kê theo nguồn",
+    "Trường cũ nào có nhiều học sinh nhập học nhất?",
     "Học sinh nào còn thiếu giấy tờ khối 6?",
     "Danh sách nộp hồ sơ nhưng chưa giữ chỗ",
     "Tìm Nguyễn Văn An",
@@ -230,41 +231,107 @@ def tong_quan(c: Ctx, loc: Loc) -> TraLoi:
                   goi_y=["Thống kê theo khối", "Thống kê theo nguồn", "Liên hệ mới trong tuần này"])
 
 
-TRUC = {  # "theo ..." -> (cột, tên, thứ tự)
-    "khoi": ("Khoi", "Khối", None), "nguon": ("Nguon", "Nguồn", NGUON),
-    "trang thai": ("TrangThai", "Bước", TRANG_THAI), "buoc": ("TrangThai", "Bước", TRANG_THAI),
-    "che do": ("CheDo", "Chế độ", CHE_DO), "giu cho": ("GiuCho", "Giữ chỗ", None),
-    "gioi tinh": ("GioiTinh", "Giới tính", None), "tinh trang": ("TinhTrang", "Tình trạng", None),
-    "he": ("PhanHe", "Hệ", None), "phan he": ("PhanHe", "Hệ", None),
-    "nguoi nhan": ("NguoiNhanHoSo", "Người nhận hồ sơ", None),
-}
+# Các trục thống kê: (từ khóa, cột, tên hiển thị, thứ tự, gộp chữ viết khác nhau)
+# Thứ tự quan trọng: cụm dài trước (tình trạng trước tỉnh, phường xã trước phường).
+TRUC = (
+    (("truong cu", "truong truoc", "truong dang hoc", "truong hoc cu", "truong"), "TruongCu", "Trường cũ",
+     None, True),
+    (("tinh trang",), "TinhTrang", "Tình trạng", None, False),
+    (("phuong xa", "phuong/xa", "xa phuong", "phuong"), "TruongCu_PhuongXa",
+     "Phường/xã (trường cũ)", None, True),
+    (("tinh thanh", "tinh", "thanh pho"), "TruongCu_Tinh", "Tỉnh/thành (trường cũ)", None, True),
+    (("nguoi gioi thieu", "gioi thieu"), "NguoiGioiThieu", "Người giới thiệu", None, True),
+    (("nguoi nhan",), "NguoiNhanHoSo", "Người nhận hồ sơ", None, True),
+    (("nguon",), "Nguon", "Nguồn", NGUON, False),
+    (("khoi",), "Khoi", "Khối", None, False),
+    (("trang thai", "buoc"), "TrangThai", "Bước", TRANG_THAI, False),
+    (("che do",), "CheDo", "Chế độ", CHE_DO, False),
+    (("giu cho",), "GiuCho", "Giữ chỗ", None, False),
+    (("gioi tinh",), "GioiTinh", "Giới tính", None, False),
+    (("phan he", "he"), "PhanHe", "Hệ", None, False),
+)
+THOI_GIAN = {"thang": ("Tháng", "%Y-%m"), "tuan": ("Tuần", "%G-T%V"), "ngay": ("Ngày", "%Y-%m-%d")}
+_SO_SANH = ("nhieu nhat", "it nhat", "dong nhat", "cao nhat", "thap nhat", "top", "xep hang",
+            "pho bien", "chu yeu", "nhieu hs nhat", "nhieu hoc sinh nhat")
+
+
+def _tim_truc(q: str):
+    """Trục thống kê trong câu hỏi: 'theo X', 'X nào ...', 'từng X', 'X ... nhiều nhất'."""
+    co_hoi = _co(q, "nao", "tung", "moi", "phan bo", "co cau", "ty le", "thong ke", "nhat",
+                 *_SO_SANH)
+    for tu, *thong_tin in TRUC:
+        for t in tu:
+            # "khối 10" / "lớp 6" là bộ lọc, không phải trục
+            for m in re.finditer(rf"(?<!\w){re.escape(t)}(?!\w)(?!\s*\d)", q):
+                if co_hoi or q[:m.start()].endswith("theo "):
+                    return t, thong_tin
+    m = re.search(r"theo (thang|tuan|ngay)", q)
+    return (m.group(1), None) if m else (None, None)
+
+
+def _dem_gop(series: pd.Series, ten: str) -> pd.DataFrame:
+    """Đếm, gộp các cách viết khác nhau (hoa/thường, có/không dấu, khoảng trắng)."""
+    s = series.fillna("").astype(str).str.strip()
+    khoa = s.map(kd)
+    nhan = s.groupby(khoa).agg(lambda x: x.value_counts().index[0])
+    vc = khoa.value_counts()
+    out = pd.DataFrame({ten: [nhan[k] or "(trống)" for k in vc.index],
+                        "Số lượng": vc.values})
+    return out
 
 
 def thong_ke(c: Ctx, q: str, loc: Loc, ts: pd.DataFrame, ten_tap: str) -> TraLoi | None:
-    m = re.search(r"theo (thang|tuan|ngay|" + "|".join(TRUC) + r")", q)
-    if not m:
+    t, tt = _tim_truc(q)
+    if not t:
         return None
-    truc = m.group(1)
-    if truc in ("thang", "tuan", "ngay"):
+    if tt is None:  # theo thời gian
+        ten, fmt = THOI_GIAN[t]
         n = pd.to_datetime(_col(ts, "NgayLienHe"), errors="coerce")
-        fmt = {"thang": "%Y-%m", "tuan": "%G-T%V", "ngay": "%Y-%m-%d"}[truc]
-        nhan = n.dt.strftime(fmt).fillna("(không có ngày)")
-        bang = nhan.value_counts().sort_index().rename_axis(
-            {"thang": "Tháng", "tuan": "Tuần", "ngay": "Ngày"}[truc]).reset_index(name="Số lượng")
+        vc = n.dt.strftime(fmt).fillna("~").value_counts().sort_index()
+        vc.index = [("(không có ngày)" if k == "~" else
+                     f"{k[5:]}/{k[:4]}" if t == "thang" else k) for k in vc.index]
+        bang = vc.rename_axis(ten).reset_index(name="Số lượng")
+        thu_tu_co_dinh = True
     else:
-        cot, ten, thu_tu = TRUC[truc]
-        bang = _dem(_col(ts, cot), ten, thu_tu)
-        if truc == "khoi":
+        cot, ten, thu_tu, gop = tt
+        bang = _dem_gop(_col(ts, cot), ten) if gop else _dem(_col(ts, cot), ten, thu_tu)
+        thu_tu_co_dinh = bool(thu_tu) or cot == "Khoi"
+        if cot == "Khoi":
             bang = bang.sort_values(ten, key=lambda s: s.map(_khoi_key)).reset_index(drop=True)
     pham_vi = f" ({loc.mo_ta()})" if loc.mo_ta() else ""
     tong = int(bang["Số lượng"].sum())
-    dau = bang.sort_values("Số lượng", ascending=False).iloc[0] if len(bang) else None
-    nhan_truc = {"thang": "tháng", "tuan": "tuần", "ngay": "ngày"}.get(truc) or \
-        TRUC[truc][1].lower()
-    text = f"{ten_tap[0].upper() + ten_tap[1:]}{pham_vi}: **{tong}**, chia theo {nhan_truc}."
-    if dau is not None and len(bang) > 1:
-        text += f" Nhiều nhất: **{dau.iloc[0]}** ({int(dau['Số lượng'])})."
-    return TraLoi(text, table=bang, chart=bang)
+    co_gia_tri = bang[~bang.iloc[:, 0].isin(["(trống)", "(không có ngày)"])]
+    trong = tong - int(co_gia_tri["Số lượng"].sum())
+    it = _co(q, "it nhat", "thap nhat")
+    ngan = ten.split(" (")[0].lower()  # "tỉnh/thành (trường cũ)" -> "tỉnh/thành"
+    so_sanh = _co(q, *_SO_SANH) or _co(q, "nhat")
+    xep = co_gia_tri.sort_values("Số lượng", ascending=it, kind="stable").reset_index(drop=True)
+    Tap = ten_tap[0].upper() + ten_tap[1:]
+    if co_gia_tri.empty:
+        return TraLoi(f"{Tap}{pham_vi}: **{tong}**, nhưng chưa có dữ liệu **{ngan}**.")
+    if so_sanh or (_co(q, "nao") and not thu_tu_co_dinh):
+        dau = xep.iloc[0]
+        cung = xep[xep["Số lượng"] == dau["Số lượng"]]
+        ten_dau = ", ".join(f"**{x}**" for x in cung.iloc[:, 0].head(5)) + (
+            f" và {len(cung) - 5} nơi khác" if len(cung) > 5 else "")
+        text = (f"{ten} có {'ít' if it else 'nhiều'} {ten_tap} nhất{pham_vi}: {ten_dau} "
+                f"với **{int(dau['Số lượng'])}** {ten_tap}")
+        if len(xep) > 1 and len(cung) == 1:
+            nhi = xep.iloc[1]
+            text += f", tiếp theo là {nhi.iloc[0]} ({int(nhi['Số lượng'])})"
+        text += f". Có {len(xep)} {ngan} khác nhau trên tổng {tong} {ten_tap}"
+        text += f" ({trong} chưa ghi {ngan})." if trong else "."
+        bang_ra = xep.copy()
+        bang_ra.insert(0, "Hạng", range(1, len(bang_ra) + 1))
+        return TraLoi(text, table=bang_ra, chart=xep.head(15),
+                      goi_y=[f"Thống kê {ten_tap} theo khối", f"Thống kê {ten_tap} theo nguồn"])
+    text = f"{Tap}{pham_vi}: **{tong}**, chia theo {ngan} ({len(co_gia_tri)} nhóm)."
+    if len(xep) > 1:
+        text += f" Nhiều nhất: **{xep.iloc[0, 0]}** ({int(xep.iloc[0]['Số lượng'])})."
+    if trong:
+        text += f" {trong} chưa ghi {ngan}."
+    return TraLoi(text, table=bang if thu_tu_co_dinh else xep,
+                  chart=bang if thu_tu_co_dinh else xep.head(15))
 
 
 def giay_to(c: Ctx, loc: Loc) -> TraLoi:
@@ -414,7 +481,10 @@ def huong_dan() -> TraLoi:
         "(không gửi ra ngoài). Bạn có thể hỏi:\n"
         "- **Đếm / liệt kê**: liên hệ, tư vấn, nộp hồ sơ, nhập học, rút hồ sơ — kèm *khối 10*, "
         "*IEP/ESL*, *nội trú*, *nguồn mạng xã hội*, *hôm nay / tuần này / tháng 7 / 30 ngày qua*\n"
-        "- **Thống kê theo** khối, nguồn, tháng, tuần, bước, chế độ, giữ chỗ\n"
+        "- **Thống kê theo** khối, nguồn, tháng, tuần, bước, chế độ, giữ chỗ, trường cũ, "
+        "tỉnh, phường/xã, người nhận hồ sơ\n"
+        "- **Xếp hạng**: *trường cũ nào nhiều học sinh nhất*, *tỉnh nào nhiều HS nhập học nhất*, "
+        "*nguồn nào ít nhất*\n"
         "- **Tra cứu học sinh** theo tên hoặc số điện thoại\n"
         "- **Giấy tờ còn thiếu**, **tư vấn quá hạn**\n"
         "- **Tài chính**: giữ chỗ, chờ hoàn phí, học phí còn nợ (tài khoản có quyền Kế toán)",
@@ -447,12 +517,14 @@ def tra_loi(cau_hoi: str, c: Ctx) -> TraLoi:
     if _co(q, "qua han", "chua chuyen buoc", "lau chua", "can cham soc", "bo quen", "ton dong"):
         return tu_van_cu(c, q, loc)
     if _co(q, "tien", "hoc phi", "giu cho", "hoan phi", "dong phi", "thu phi", "doanh thu",
-           "con no", "ke toan", "tai chinh", "chua coc", "dat cho") and "theo giu cho" not in q:
+           "con no", "ke toan", "tai chinh", "chua coc", "dat cho") and \
+            not (_tim_truc(q)[0] == "giu cho"):
         return tai_chinh(c, q, loc)
     if _co(q, "tong quan", "tinh hinh", "bao cao nhanh", "tom tat", "the nao", "ra sao"):
         return tong_quan(c, loc)
 
-    tap = next((t for t in TAP if _co(q, *t[0])), None)
+    q_tap = q.replace(kd(loc.nguon), " ") if loc.nguon else q  # "...trường tư vấn" là tên nguồn
+    tap = next((t for t in TAP if _co(q_tap, *t[0])), None)
     ts = loc_ts(c.ts, loc)
     if tap and tap[1]:
         ts = ts[_col(ts, "TrangThai") == tap[1]]
