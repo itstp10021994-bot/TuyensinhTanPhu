@@ -10,6 +10,7 @@ from tuyensinh.schema import CHE_DO, GIU_CHO, KHOI, NHAP_HOC, TRANG_THAI, TUYEN_
 
 S = st.session_state
 S.setdefault("ts_v", 0)  # tăng để nạp lại form / xóa lựa chọn trong bảng
+S.setdefault("ts_sua_id", None)  # học sinh đang ở chế độ sửa (mặc định chỉ xem)
 qp = st.query_params
 nam_hoc = ui.nam_hoc()
 storage = ui.storage()
@@ -97,95 +98,6 @@ def new_contact_dialog():
     st.rerun(scope="fragment")  # "Lưu và thêm tiếp": giữ hộp thoại, form trống
 
 
-@st.dialog("Xem hồ sơ", width="large")
-def view_dialog(rec: dict):
-    """Toàn bộ thông tin liên hệ ở dạng chỉ đọc."""
-    def v(k):
-        x = rec.get(k)
-        if k in ("NgayLienHe", "NgaySinh"):
-            return ui.fmt_date(x)
-        if k == "SoTienXacNhan":
-            return ui.money(x) if x else ""
-        return "" if x is None or str(x) in ("nan", "NaT") else str(x)
-
-    def nhom(ds):
-        return [(F(k).label, v(k)) for k in ds if v(k)]
-    st.subheader(rec.get("HoTenHS") or "(Chưa có tên)", anchor=False)
-    st.caption(" · ".join(x for x in (f"Bước: {rec.get('TrangThai') or 'Tư vấn'}",
-                                      f"Khối {rec['Khoi']}" if rec.get("Khoi") else "",
-                                      rec.get("CheDo"), rec.get("SDT")) if x))
-    c1, c2 = st.columns(2, gap="large")
-    with c1:
-        st.markdown("**Học sinh**")
-        ui.kv(nhom(("HoTenHS", "NgaySinh", "GioiTinh", "Khoi", "PhanHe", "CheDo")))
-        st.markdown("**Trường cũ**")
-        ui.kv(nhom(("TruongCu", "TruongCu_PhuongXa", "TruongCu_Tinh")) or [("—", "")])
-        diem = nhom(("Toan1", "Van1", "Anh1", "TV1", "HanhKiem1",
-                     "Toan2", "Van2", "Anh2", "TV2", "HanhKiem2"))
-        if diem:
-            st.markdown("**Kết quả học tập**")
-            ui.kv(diem)
-    with c2:
-        st.markdown("**Liên hệ & tư vấn**")
-        ui.kv(nhom(("NgayLienHe", "SDT", "TenLienHe", "Nguon", "NguoiGioiThieu", "TinhTrang",
-                    "NguoiNhanHoSo", "NamHoc")))
-        st.markdown("**Giữ chỗ**")
-        ui.kv([("Giữ chỗ", rec.get("GiuCho") or "Chưa giữ chỗ")]
-              + nhom(("SoTienXacNhan", "NguoiXacNhan")))
-    if v("GhiChu"):
-        st.markdown("**Ghi chú / nội dung trao đổi**")
-        st.text(v("GhiChu"))
-
-
-@st.dialog("Sửa hồ sơ", width="large")
-def edit_dialog(rec: dict):
-    """Sửa toàn bộ thông tin liên hệ trong một hộp thoại (giữ nguyên bước hiện tại)."""
-    item_id = str(rec["id"])
-    S.setdefault("ts_edit_v", 0)
-    prefix = f"ts_edit_{item_id}_{S.ts_edit_v}"
-    st.markdown(f"**{rec.get('HoTenHS') or '(Chưa có tên)'}** · bước "
-                f"**{rec.get('TrangThai') or 'Tư vấn'}**")
-    values = {}
-    tabs = st.tabs(["Liên hệ & tư vấn", "Học sinh", "Trường cũ & kết quả"])
-    with tabs[0]:
-        values.update(ui.record_form(
-            [F(k) for k in ("NgayLienHe", "SDT", "NamHoc", "Nguon", "TenLienHe",
-                            "NguoiGioiThieu", "TinhTrang", "NguoiNhanHoSo")], rec, prefix, 2))
-        values.update(ui.record_form([F("GhiChu")], rec, prefix, 1))
-    with tabs[1]:
-        values.update(ui.record_form(
-            [F(k) for k in ("HoTenHS", "NgaySinh", "GioiTinh", "Khoi", "PhanHe", "CheDo")],
-            rec, prefix, 2))
-    with tabs[2]:
-        values.update(ui.record_form(
-            [F(k) for k in ("TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu")],
-            rec, prefix, 2, TRUONG_LABELS))
-        short = {"Toan1": "Toán", "Van1": "Văn", "Anh1": "Anh", "TV1": "Tiếng Việt",
-                 "HanhKiem1": "Hạnh kiểm", "Toan2": "Toán", "Van2": "Văn",
-                 "Anh2": "Anh", "TV2": "Tiếng Việt", "HanhKiem2": "Hạnh kiểm"}
-        for n in ("1", "2"):
-            st.markdown(f"**Kết quả {n}**")
-            values.update(ui.record_form([F(k) for k in (f"Toan{n}", f"Van{n}", f"Anh{n}",
-                                                         f"TV{n}", f"HanhKiem{n}")],
-                                         rec, prefix, 5, short))
-    c1, c2 = st.columns(2)
-    if c1.button("Lưu hồ sơ", type="primary", icon=":material/save:", width="stretch"):
-        values["TrangThai"] = rec.get("TrangThai") or "Tư vấn"
-        values["NamHoc"] = values.get("NamHoc") or nam_hoc
-        dups = services.find_duplicates(ui.records(TUYEN_SINH), values, item_id)
-        if ui.mutate(services.save_tuyen_sinh, storage, values, item_id,
-                     success="Đã lưu hồ sơ") is not None:
-            if dups:
-                st.toast(f"Lưu ý: có {len(dups)} liên hệ khác trùng họ tên và SĐT.",
-                         icon=":material/content_copy:")
-            S.ts_v += 1
-            S.ts_edit_v += 1
-            st.rerun()
-    if c2.button("Hủy", width="stretch"):
-        S.ts_edit_v += 1
-        st.rerun()
-
-
 @st.dialog("Rút hồ sơ")
 def withdraw_dialog(rec: dict):
     st.write(f"Chuyển **{rec['HoTenHS']}** sang trạng thái **Rút hồ sơ**.")
@@ -260,10 +172,26 @@ def card(r: dict, selected: bool):
 
 
 # ================================================================== chi tiết (phải)
+def _bat_sua(item_id):
+    S.ts_sua_id = item_id
+
+
+def _tat_sua():
+    S.ts_sua_id = None
+    S.ts_v += 1  # bỏ các thay đổi chưa lưu
+
+
 def render_right(item_id: str | None):
-    h2 = ui.detail_head("Thông tin chi tiết học sinh", "ts")
-    save_top = h2.button("Lưu thay đổi", icon=":material/save:", key="ts_save_top",
-                         width="stretch", disabled=not item_id)
+    # Mặc định chỉ XEM hồ sơ (ô bị khóa); bấm "Sửa hồ sơ" mới sửa được toàn bộ
+    sua = bool(item_id) and S.get("ts_sua_id") == item_id
+    h2 = ui.detail_head("Thông tin chi tiết học sinh" + (" · đang sửa" if sua else ""), "ts")
+    if sua:
+        save_top = h2.button("Lưu thay đổi", icon=":material/save:", key="ts_save_top",
+                             width="stretch")
+    else:
+        save_top = False
+        h2.button("Sửa hồ sơ", icon=":material/edit:", key="ts_edit_top", width="stretch",
+                  disabled=not item_id, on_click=_bat_sua, args=(item_id,))
     if not item_id:
         with st.container(border=True, height=700):
             ui.empty_state("touch_app", "Chọn một học sinh",
@@ -284,12 +212,12 @@ def render_right(item_id: str | None):
                                      f"Liên hệ {ui.fmt_date(rec.get('NgayLienHe'))}"] if x)
         t1.markdown(f"**{rec['HoTenHS'] or '(Chưa có tên)'}**  \n:gray[{sub}]")
         with t2.popover("Thao tác", icon=":material/more_horiz:", width="stretch"):
-            if st.button("Xem hồ sơ", icon=":material/visibility:", width="stretch",
-                         key="ts_xem"):
-                view_dialog(rec)
-            if st.button("Sửa hồ sơ…", icon=":material/edit:", width="stretch",
-                         key="ts_sua"):
-                edit_dialog(rec)
+            if sua:
+                st.button("Hủy sửa", icon=":material/close:", width="stretch", key="ts_huy_menu",
+                          on_click=_tat_sua)
+            else:
+                st.button("Sửa hồ sơ", icon=":material/edit:", width="stretch", key="ts_sua",
+                          on_click=_bat_sua, args=(item_id,))
             nh_cua = ui.df(NHAP_HOC)
             nh_cua = nh_cua[nh_cua["TuyenSinhID"] == item_id]
             if nh_cua.empty:
@@ -319,13 +247,15 @@ def render_right(item_id: str | None):
         nxt = ui.next_step(step)
         if nxt:
             label = "Xác nhận nhập học" if nxt == "Nhập học" else f"Chuyển sang {nxt}"
-            if st.button(label, type="primary", icon=ui.STATUS[nxt]["icon"], key="ts_next"):
+            if st.button(label, type="primary", icon=ui.STATUS[nxt]["icon"], key="ts_buoc_tiep"):
                 set_step(item_id, nxt)
         elif step == "Rút hồ sơ":
             st.caption("Học sinh đã rút hồ sơ. Chọn bước ở **Thao tác** nếu cần khôi phục.")
 
     prefix = f"ts_{item_id}_{S.ts_v}"
     values = {}
+    khoa = ui.chi_doc(not sua)
+    khoa.__enter__()
     tabs = st.tabs(["Liên hệ & tư vấn", "Học sinh", "Trường cũ & kết quả", "Giữ chỗ & hồ sơ"])
     with tabs[0], st.container(border=True):
         values.update(ui.record_form(
@@ -373,8 +303,13 @@ def render_right(item_id: str | None):
             ui.kv([("Tạo lúc", ui.fmt_date(rec.get("Created"))),
                    ("Cập nhật", ui.fmt_date(rec.get("Modified")))])
 
-    save_bottom = st.button("Lưu thay đổi", type="primary", icon=":material/save:",
-                            key="ts_save_bot", width="stretch")
+    khoa.__exit__(None, None, None)
+    save_bottom = False
+    if sua:
+        b1, b2 = st.columns([3, 1])
+        save_bottom = b1.button("Lưu thay đổi", type="primary", icon=":material/save:",
+                                key="ts_save_bot", width="stretch")
+        b2.button("Hủy", key="ts_huy_bot", width="stretch", on_click=_tat_sua)
     if save_top or save_bottom:
         values["TrangThai"] = step
         values["NamHoc"] = values.get("NamHoc") or nam_hoc
@@ -385,6 +320,7 @@ def render_right(item_id: str | None):
                 st.toast(f"Lưu ý: có {len(dups)} liên hệ khác trùng họ tên và SĐT.",
                          icon=":material/content_copy:")
             S.ts_v += 1
+            S.ts_sua_id = None  # lưu xong quay về chế độ xem
             st.rerun()
 
 

@@ -548,6 +548,7 @@ def inject_css():
     if st.context.theme.type == "dark":
         st.html(CSS_TOI)
     st.session_state["_tp_card_n"] = 0  # đánh số thẻ (khóa CSS) lại từ đầu mỗi lần chạy
+    st.session_state["_chi_doc"] = False  # chế độ chỉ xem luôn tắt khi bắt đầu một lần chạy
 
 
 def page_header(title: str, subtitle: str | None = None, eyebrow: str | None = None):
@@ -742,28 +743,43 @@ def _to_date(v) -> date | None:
         return None
 
 
+@contextmanager
+def chi_doc(bat: bool = True):
+    """Trong khối này mọi ô nhập vẽ bằng field_input / record_form đều bị khóa (chỉ xem)."""
+    cu = st.session_state.get("_chi_doc", False)
+    st.session_state["_chi_doc"] = bat
+    try:
+        yield
+    finally:
+        st.session_state["_chi_doc"] = cu
+
+
 def field_input(f: Field, record: dict, prefix: str, container=st, label: str | None = None):
     """Vẽ ô nhập cho trường `f`; giá trị lấy từ `record`. Trả về giá trị mới."""
+    ro = bool(st.session_state.get("_chi_doc"))
+    if ro:  # chế độ xem: khóa ô, key riêng để không đụng trạng thái khi sửa
+        prefix = f"{prefix}_xem"
     key = f"{prefix}_{f.key}"
     label = (label or f.label) + (" *" if f.required else "")
     v = record.get(f.key)
     if f.type == DATE:
         return container.date_input(label, value=_to_date(v), key=key, format="DD/MM/YYYY",
-                                    min_value=date(1940, 1, 1), max_value=date(2100, 12, 31))
+                                    min_value=date(1940, 1, 1), max_value=date(2100, 12, 31),
+                                    disabled=ro)
     if f.type == NUMBER:
         empty = v is None or v == "" or (isinstance(v, float) and pd.isna(v))
         is_money = f.key.startswith("SoTien")
         return container.number_input(
             label, value=None if empty else float(v), key=key, min_value=0.0,
             max_value=None if is_money or (not empty and float(v) > 10) else 10.0, step=100000.0 if is_money else 0.25,
-            format="%.0f" if is_money else "%.2f", placeholder="—")
+            format="%.0f" if is_money else "%.2f", placeholder="—", disabled=ro)
     if f.type == BOOL:
-        return container.checkbox(label, value=bool(v), key=key)
+        return container.checkbox(label, value=bool(v), key=key, disabled=ro)
     if f.type == NOTE:
-        return container.text_area(label, value=str(v or ""), key=key, height=96)
+        return container.text_area(label, value=str(v or ""), key=key, height=96, disabled=ro)
     if f.type == CHOICE:
         return _choice_input(f, record, prefix, container, label, key, v)
-    return container.text_input(label, value=str(v or ""), key=key)
+    return container.text_input(label, value=str(v or ""), key=key, disabled=ro)
 
 
 @st.cache_data(show_spinner=False)
@@ -849,14 +865,15 @@ def _choice_input(f: Field, record: dict, prefix: str, container, label: str, ke
 
         val = container.selectbox(label, opts, index=opts.index(v) if v in opts else None,
                                   key=key, placeholder=ph, accept_new_options=True,
-                                  format_func=_fmt,
+                                  format_func=_fmt, disabled=bool(st.session_state.get("_chi_doc")),
                                   help="Gợi ý theo Phường/Xã đã chọn. Có thể gõ tên trường "
                                        "chưa có trong danh sách." if is_school else None)
     else:
         waiting = parent_keys and not opts
         ph = "Chọn Tỉnh/Thành phố trước" if waiting else "Chọn…"
         val = container.selectbox(label, opts, index=opts.index(v) if v in opts else None,
-                                  key=key, placeholder=ph, disabled=bool(waiting))
+                                  key=key, placeholder=ph,
+                                  disabled=bool(waiting) or bool(st.session_state.get("_chi_doc")))
     cur[f.key] = val or ""
     return val
 
