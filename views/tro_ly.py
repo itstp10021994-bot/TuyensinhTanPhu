@@ -51,19 +51,25 @@ st.html(f"""<style>
 .st-key-zl_dau {{padding: 0 0 0 14px; background: {M['thanh']};
   border-bottom: 1px solid {M['vien']}; min-height: 52px; align-items: stretch !important;}}
 .st-key-zl_dau > div {{align-self: center;}}
-.st-key-zl_dau > div:has(.zl-win) {{align-self: stretch;}}
-.zl-win {{display: flex; height: 100%; margin-left: 6px;}}
-.zl-win span {{width: 46px; height: 100%; min-height: 52px; display: flex; align-items: center;
-  justify-content: center; position: relative; cursor: default; transition: background .1s;}}
-.zl-win span:hover {{background: {'rgba(255,255,255,.08)' if TOI else 'rgba(0,0,0,.06)'};}}
-.zl-win span.x:hover {{background: #C42B1C;}}
-.zl-win span::before, .zl-win span::after {{content: ""; position: absolute;
-  border-color: {M['bot_chu']};}}
-.zl-win .min::before {{width: 10px; border-top: 1px solid;}}
-.zl-win .max::before {{width: 9px; height: 9px; border: 1px solid; border-radius: 1.5px;}}
-.zl-win .x::before, .zl-win .x::after {{width: 13px; border-top: 1px solid;}}
-.zl-win .x::before {{transform: rotate(45deg);}} .zl-win .x::after {{transform: rotate(-45deg);}}
-.zl-win .x:hover::before, .zl-win .x:hover::after {{border-color: #fff;}}
+.st-key-zl_win {{align-self: stretch !important; gap: 0 !important; margin-left: 6px;
+  flex-wrap: nowrap !important;}}
+.st-key-zl_win button {{width: 46px; min-width: 46px; height: 100%; min-height: 52px; padding: 0;
+  border: 0 !important; border-radius: 0 !important; background: transparent !important;
+  box-shadow: none !important; position: relative; transition: background .1s;}}
+.st-key-zl_win button p {{display: none;}}
+.st-key-zl_win button:hover {{background: {'rgba(255,255,255,.08)' if TOI else 'rgba(0,0,0,.06)'}
+  !important;}}
+.st-key-zl_win .st-key-tl_win_x button:hover {{background: #C42B1C !important;}}
+.st-key-zl_win button::before, .st-key-zl_win button::after {{content: ""; position: absolute;
+  left: 50%; top: 50%; border-color: {M['bot_chu']};}}
+.st-key-tl_win_min button::before {{width: 10px; margin-left: -5px; border-top: 1px solid;}}
+.st-key-tl_win_max button::before {{width: 9px; height: 9px; margin: -5px 0 0 -5px;
+  border: 1px solid; border-radius: 1.5px;}}
+.st-key-tl_win_x button::before, .st-key-tl_win_x button::after {{width: 13px;
+  margin-left: -6.5px; border-top: 1px solid;}}
+.st-key-tl_win_x button::before {{transform: rotate(45deg);}}
+.st-key-tl_win_x button::after {{transform: rotate(-45deg);}}
+.st-key-tl_win_x button:hover::before, .st-key-tl_win_x button:hover::after {{border-color: #fff;}}
 .zl-giua {{display: flex; align-items: center; justify-content: flex-start; gap: 10px;}}
 .zl-ten {{font-weight: 600; font-size: .95rem; line-height: 1.15;}}
 .zl-tt {{font-size: .74rem; color: {M['phu']};}} .zl-tt b {{color: #28C840;}}
@@ -113,11 +119,21 @@ div:has(> [class*="st-key-zl_b_"]) {{flex: 0 1 auto !important; max-width: calc(
   .st-key-zl_khung {{width: 100% !important; height: calc(100dvh - 9.4rem) !important;
     border-radius: 10px;}}
   .st-key-zl_dau {{flex-wrap: nowrap !important; padding: 6px 10px;}}
-  .zl-win, .zl-tt {{display: none;}}
+  .st-key-zl_win, .zl-tt {{display: none;}}
   .st-key-zl_tin {{padding: 10px 10px 4px;}}
   div:has(> [class*="st-key-zl_u_"]) {{max-width: 86%;}} }}
 </style>""")
 
+if S.get("tl_to"):  # phóng to: rộng hết trang, không giữ tỷ lệ 16:9
+    st.html(f"""<style>.st-key-zl_khung {{width: 100% !important;}}
+.block-container {{max-width: 100% !important; padding-left: 1.2rem !important;
+  padding-right: 1.2rem !important;}}
+/* biểu tượng "thu về": 2 ô vuông chồng nhau */
+.st-key-tl_win_max button::before {{width: 8px !important; height: 8px !important;
+  margin: -3px 0 0 -6px !important;}}
+.st-key-tl_win_max button::after {{width: 8px; height: 8px; margin: -6px 0 0 -3px;
+  border-top: 1px solid; border-right: 1px solid; border-radius: 0 1.5px 0 0;
+  border-color: {M['bot_chu']};}}</style>""")
 khung = st.container(key="zl_khung")
 with khung.container(key="zl_dau", horizontal=True, vertical_alignment="center", gap="small"):
     st.html(f'<div class="zl-giua"><div class="zl-av">{BOT_SVG}</div><div><div class="zl-ten">'
@@ -134,10 +150,21 @@ with khung.container(key="zl_dau", horizontal=True, vertical_alignment="center",
         for k in ("tl_truoc", "tl_truoc_goc"):
             S.pop(k, None)
         st.rerun()
-    # 3 nút cửa sổ kiểu Windows (trang trí): thu nhỏ, phóng to, đóng
-    st.html('<div class="zl-win"><span class="min" title="Thu nhỏ"></span>'
-            '<span class="max" title="Phóng to"></span><span class="x" title="Đóng"></span></div>',
-            width="content")
+    # 3 nút cửa sổ kiểu Windows: thu nhỏ (giữ cuộc trò chuyện), phóng to / thu về, đóng
+    to = S.get("tl_to", False)
+    with st.container(key="zl_win", horizontal=True, width="content", gap=None):
+        nut_min = st.button(" ", key="tl_win_min", help="Thu nhỏ (giữ cuộc trò chuyện)")
+        nut_max = st.button(" ", key="tl_win_max", help="Thu về" if to else "Phóng to")
+        nut_x = st.button(" ", key="tl_win_x", help="Đóng (xóa cuộc trò chuyện)")
+    if nut_max:
+        S["tl_to"] = not to
+        st.rerun()
+    if nut_min or nut_x:
+        if nut_x:
+            msgs.clear()
+            for k in ("tl_truoc", "tl_truoc_goc"):
+                S.pop(k, None)
+        ui.switch_page(S.get("_trang_truoc", "views/trang_chu.py"))
 if not co_ai:
     with khung.expander(":material/info: Công tắc AI đang tắt vì chưa tìm thấy GEMINI_API_KEY",
                         expanded=False):

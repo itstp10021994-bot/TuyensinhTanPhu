@@ -154,6 +154,10 @@ _FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc",
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
 pg = st.navigation(_pages, position="top")
+# nhớ trang đang xem (khác Trợ lý) để nút đóng / thu nhỏ của khung chat quay về đúng chỗ
+for _k, _p in P.items():
+    if _p is pg and _k != "tl":
+        S["_trang_truoc"] = f"views/{_FILE[_k]}.py"
 
 # Thanh công cụ chung: năm học + người thao tác (thay cho thanh bên)
 years = config.school_years()
