@@ -1,4 +1,4 @@
-"""Báo cáo: 24 mẫu báo cáo (tuyển sinh, tài chính, nhập học) — xem biểu đồ, bảng, xuất Excel.
+"""Báo cáo: các mẫu báo cáo (tuyển sinh, tài chính, nhập học, xu hướng) — biểu đồ, bảng, Excel.
 
 Tính toán nằm ở tuyensinh/reports.py; trang này chỉ chọn mẫu, lọc, vẽ và xuất file.
 """
@@ -8,7 +8,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import reports, ui
+from tuyensinh import dia_ban, reports, ui
 from tuyensinh.schema import KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
 
 S = st.session_state
@@ -24,6 +24,7 @@ AXIS = {"labelFontSize": 12, "titleFontSize": 12, "titleFontWeight": 500, "gridO
 MONEY_WORDS = ("tiền", "thanh toán", "còn lại", "đã thu")
 
 ts_all = ui.df(TUYEN_SINH)
+nh_all = ui.df(NHAP_HOC)
 nh_year = ui.df(NHAP_HOC, nam_hoc)
 ts_year = ts_all[ts_all["NamHoc"] == nam_hoc].reset_index(drop=True)
 
@@ -172,11 +173,33 @@ with main:
                           help="Bỏ trống = tất cả khối")
     params = {}
     if "nam" in rep.params:
-        co_dl = sorted(y for y in ts_all["NamHoc"].dropna().unique() if str(y).strip())
+        nguon = [ts_all, nh_all] if rep.group == reports.G_XNH else [ts_all]
+        co_dl = sorted({str(y) for d in nguon for y in d["NamHoc"].dropna().unique()
+                        if str(y).strip()})
         mac_dinh = [y for y in co_dl if y <= nam_hoc][-3:] or co_dl[-3:]
         params["nam"] = st.multiselect("Năm học so sánh", co_dl, default=mac_dinh,
                                        key="bc_nam", placeholder="Chọn 2–3 năm học",
                                        help="Mặc định 3 năm học gần nhất (tính đến năm đang chọn)")
+    loc = [k for k in ("cap", "tinh", "loai") if k in rep.params]
+    if loc:
+        g = st.columns([2.2, 1.6, 1.6][:len(loc)], vertical_alignment="bottom", gap="small")
+        o = dict(zip(loc, g))
+        if "cap" in o:
+            params["cap"] = o["cap"].segmented_control(
+                "Chi tiết theo", list(dia_ban.CAP), default=dia_ban.CAP[1], required=True,
+                key="bc_cap", help="Quận/huyện là địa giới CŨ (trước sáp nhập 2025), suy ra từ "
+                                   "địa chỉ cũ hoặc phường/xã mới.")
+        if "tinh" in o:
+            nh_dia = rep.group in (reports.G_NH, reports.G_XNH)
+            ds = (dia_ban.dia_ban_nh(nh_all) if nh_dia else dia_ban.dia_ban_ts(ts_all))[
+                dia_ban.CAP[0]].value_counts()
+            ds = [t for t in ds.index if t != dia_ban.CHUA_RO]
+            params["tinh"] = o["tinh"].selectbox("Tỉnh/Thành", ["Tất cả", *ds], key="bc_tinh")
+        if "loai" in o:
+            params["loai"] = o["loai"].segmented_control(
+                "Học sinh", ["Tất cả", "HS mới", "HS cũ học tiếp"], default="Tất cả",
+                required=True, key="bc_loai",
+                help="HS mới = qua tuyển sinh; HS cũ = học sinh của trường lên lớp")
     if "ky" in rep.params:
         params["ky"] = f[2].segmented_control("Kỳ", ["Tháng", "Tuần"], default="Tháng",
                                               required=True, key="bc_ky")
@@ -193,7 +216,7 @@ with main:
         ts, nh = ts[ts["Khoi"].isin(sel_khoi)], nh[nh["Khoi"].isin(sel_khoi)]
     params["khoi"] = sel_khoi
     ctx = reports.Ctx(ts.reset_index(drop=True), nh.reset_index(drop=True), ts_all, nam_hoc,
-                      params)
+                      params, nh_all=nh_all)
 
     # ---- nội dung báo cáo
     with st.container(border=True):

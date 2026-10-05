@@ -83,3 +83,34 @@ def test_xu_huong_cac_nam():
     assert th["Tháng"].tolist() == ["01/N", "05/N", "06/N"]  # xếp theo thời gian trong chu kỳ
     assert th["2025-2026"].tolist() == [0, 1, 1] and th["2026-2027"].tolist() == [1, 0, 1]
     assert reports.xh_truongcu(ctx).table.iloc[0]["Tổng"] == 2
+
+
+def test_dia_ban_quan_huyen_cu():
+    from tuyensinh import dia_ban
+    assert dia_ban.quan_cu("Quận Tân Phú, Thành phố Hồ Chí Minh") == "Quận Tân Phú"
+    assert dia_ban.quan_cu("Thành phố Thủ Đức, Thành phố Hồ Chí Minh") == "Thành phố Thủ Đức"
+    assert dia_ban.quan_cu("Tỉnh Tây Ninh") == ""
+    hcm = "Thành phố Hồ Chí Minh"
+    ts = [{"id": str(i), "NamHoc": "2026-2027", "TrangThai": "Nhập học" if i < 2 else "Tư vấn",
+           "Khoi": "6", "TruongCu_Tinh": hcm, "TruongCu_PhuongXa": "Phường Tân Phú",
+           "TruongCu_DiaChiCu": "Quận Tân Phú, Thành phố Hồ Chí Minh" if i < 3 else ""}
+          for i in range(4)]
+    nh = [{"id": "9", "NamHoc": "2026-2027", "Khoi": "6", "TinhTrangHS": "Đang đóng phí",
+           "ChoO_Tinh": hcm, "ChoO_Xa": "Phường Tân Phú"},
+          {"id": "8", "NamHoc": "2025-2026", "Khoi": "6", "TinhTrangHS": "Học tiếp"},
+          {"id": "7", "NamHoc": "2025-2026", "Khoi": "6", "TinhTrangHS": "Không học tiếp"}]
+    ctx = _ctx(ts, nh)
+    ctx.params["cap"] = dia_ban.CAP[1]
+    t = reports.ts_diaban(ctx).table
+    # liên hệ thứ 4 không có địa chỉ cũ nhưng suy ra được từ phường/xã mới
+    assert t.iloc[0]["Quận/Huyện (cũ)"].startswith("Quận Tân Phú") and t.iloc[0]["Liên hệ"] == 4
+    n = reports.nh_diaban(ctx).table
+    assert n.iloc[0]["Quận/Huyện (cũ)"].startswith("Quận Tân Phú") and n.iloc[0]["Số HS"] == 1
+    ctx.nh_all = ctx.nh
+    tq = reports.xnh_tongquan(ctx).table.set_index("Năm học")
+    assert tq.loc["2025-2026", "HS cũ học tiếp"] == 1
+    assert tq.loc["2025-2026", "Tỷ lệ HS cũ ở lại (%)"] == 50.0
+    assert tq.loc["2026-2027", "HS mới nhập học"] == 1
+    dc = reports.xnh_doichieu(ctx).table.set_index("Năm học")
+    assert dc.loc["2026-2027", "Nhập học theo Data tuyển sinh"] == 2
+    assert dc.loc["2026-2027", "Nhập học nhưng chưa có hồ sơ"] == 2  # hồ sơ chưa liên kết

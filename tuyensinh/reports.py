@@ -12,10 +12,12 @@ from typing import Callable
 
 import pandas as pd
 
+from . import dia_ban as DB
 from . import services
 from .schema import GIAY_TO_NHAP_HOC, KHOI, TRANG_THAI
 
-G_TS, G_KT, G_NH, G_XH = "Tuyển sinh", "Tài chính", "Nhập học", "Xu hướng các năm"
+G_TS, G_KT, G_NH = "Tuyển sinh", "Tài chính", "Nhập học"
+G_XH, G_XNH = "Xu hướng tuyển sinh", "Xu hướng nhập học"
 
 
 @dataclass
@@ -25,6 +27,7 @@ class Ctx:
     ts_all: pd.DataFrame        # Data tuyển sinh mọi năm (so sánh năm học)
     nam_hoc: str
     params: dict = field(default_factory=dict)
+    nh_all: pd.DataFrame | None = None  # Hồ sơ nhập học mọi năm (xu hướng nhập học)
 
 
 @dataclass
@@ -189,22 +192,79 @@ def ts_truongcu(c: Ctx) -> Result:
                    "x": "Trường cũ", "y": "Số HS", "color": "Chỉ số", "horizontal": True})
 
 
+# ------------------------------------------------------------------ địa bàn (3 cấp)
+def _cap(c: Ctx) -> str:
+    cap = c.params.get("cap")
+    return cap if cap in DB.CAP else DB.CAP[1]
+
+
+def _bang_quan(c: Ctx) -> dict:
+    """Phường/xã mới → quận/huyện cũ, học từ Data tuyển sinh mọi năm (lưu trong params)."""
+    if "_bang_quan" not in c.params:
+        c.params["_bang_quan"] = DB.bang_phuong_quan(c.ts_all)
+    return c.params["_bang_quan"]
+
+
+def _theo_tinh(g: pd.DataFrame, c: Ctx) -> pd.Series:
+    t = c.params.get("tinh")
+    if not t or t == "Tất cả":
+        return pd.Series(True, index=g.index)
+    return g[DB.CAP[0]] == t
+
+
+def _ts_dia_ban(c: Ctx, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(liên hệ đã lọc tỉnh, bảng địa bàn 3 cấp tương ứng)."""
+    g = DB.dia_ban_ts(df, _bang_quan(c))
+    m = _theo_tinh(g, c)
+    return df[m], g[m]
+
+
+def _ts_bang_cap(df: pd.DataFrame, g: pd.DataFrame, cap: str) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=[cap, "Liên hệ", "Nộp hồ sơ (gồm nhập học)", "Nhập học",
+                                     "Rút hồ sơ", "Tỷ lệ nhập học (%)"])
+    t = _steps(df.assign(_n=DB.nhan(g, cap)), "_n")
+    t["Nộp hồ sơ (gồm nhập học)"] = t["Nộp hồ sơ"] + t["Nhập học"]
+    t = t.sort_values(["Tổng", "Nhập học"], ascending=False).rename_axis(cap).reset_index()
+    t = t.rename(columns={"Tổng": "Liên hệ"})[
+        [cap, "Liên hệ", "Nộp hồ sơ (gồm nhập học)", "Nhập học", "Rút hồ sơ",
+         "Tỷ lệ nhập học (%)"]]
+    return _total_row(_chua_ro_cuoi(t, cap), cap,
+                      {"Tỷ lệ nhập học (%)": ("Nhập học", "Liên hệ")})
+
+
+def _chua_ro_cuoi(t: pd.DataFrame, col: str) -> pd.DataFrame:
+    """Đưa các dòng "Chưa rõ…" xuống cuối (giữ thứ tự còn lại), trước dòng Tổng cộng."""
+    ro = t[col].astype(str).str.startswith(DB.CHUA_RO)
+    tong = t[col] == "Tổng cộng"
+    return t.loc[[*t.index[~ro & ~tong], *t.index[ro], *t.index[tong]]]
+
+
+def _kpi_dia_ban(t: pd.DataFrame, cap: str, ten: str) -> list:
+    body = t[t[cap] != "Tổng cộng"]
+    ro = body[~body[cap].str.startswith(DB.CHUA_RO)]
+    k = [(f"Số {cap.split(' (')[0].lower()}", len(ro))]
+    if len(ro):
+        k.append((f"Nhiều {ten} nhất", f"{ro.iloc[0][cap].split(' · ')[0]}"))
+    chua = body[body[cap].str.startswith(DB.CHUA_RO)]
+    if len(chua):
+        k.append((f"Chưa rõ {cap.split(' (')[0].lower()}", int(chua.iloc[:, 1].sum())))
+    return k
+
+
 def ts_diaban(c: Ctx) -> Result:
-    df = c.ts.assign(Tinh=_blank(c.ts["TruongCu_Tinh"]), Xa=_blank(c.ts["TruongCu_PhuongXa"]))
-    g = df.groupby(["Tinh", "Xa"]).agg(
-        **{"Liên hệ": ("id", "count"),
-           "Nhập học": ("TrangThai", lambda s: int((s == "Nhập học").sum()))}).reset_index()
-    g = g.sort_values(["Liên hệ"], ascending=False)
-    tinh = g.groupby("Tinh")[["Liên hệ", "Nhập học"]].sum().sort_values("Liên hệ",
-                                                                        ascending=False)
-    t = g.rename(columns={"Tinh": "Tỉnh/Thành (trường cũ)", "Xa": "Phường/Xã"})
-    tinh_t = tinh.rename_axis("Tỉnh/Thành").reset_index()
-    return Result(t, [("Số tỉnh/thành", len(tinh)), ("Số phường/xã", len(g))],
-                  {"kind": "group", "data": tinh_t.head(12).melt(
-                      "Tỉnh/Thành", ["Liên hệ", "Nhập học"], var_name="Chỉ số",
-                      value_name="Số HS"),
-                   "x": "Tỉnh/Thành", "y": "Số HS", "color": "Chỉ số", "horizontal": True},
-                  sheets={"Theo_tinh": tinh_t, "Theo_phuong_xa": t})
+    cap = _cap(c)
+    df, g = _ts_dia_ban(c, c.ts)
+    t = _ts_bang_cap(df, g, cap)
+    body = t[t[cap] != "Tổng cộng"].head(15)
+    return Result(t, _kpi_dia_ban(t, cap, "liên hệ"),
+                  {"kind": "group", "data": body.melt(cap, ["Liên hệ", "Nhập học"],
+                                                       var_name="Chỉ số", value_name="Số HS"),
+                   "x": cap, "y": "Số HS", "color": "Chỉ số", "horizontal": True},
+                  note="Địa bàn theo TRƯỜNG CŨ của học sinh. Quận/huyện cũ lấy từ địa chỉ trước "
+                       "sáp nhập; nếu thiếu thì suy ra từ phường/xã mới. Excel có đủ 3 cấp.",
+                  sheets={k.split(" (")[0].replace("/", "_"): _ts_bang_cap(df, g, k)
+                          for k in DB.CAP})
 
 
 def ts_chedo(c: Ctx) -> Result:
@@ -460,17 +520,38 @@ def nh_tohop(c: Ctx) -> Result:
                    "x": "Tổ hợp (lựa chọn 1)", "y": "Tổng"})
 
 
+def _nh_bang_cap(df: pd.DataFrame, g: pd.DataFrame, cap: str) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=[cap, "Số HS"])
+    d = df.assign(_n=DB.nhan(g, cap), Khoi=_blank(df["Khoi"]))
+    t = d.groupby("_n").agg(**{
+        "Số HS": ("id", "count"),
+        "HS mới": ("TinhTrangHS", lambda s: int((~s.isin(HS_CU)).sum())),
+        "HS cũ học tiếp": ("TinhTrangHS", lambda s: int((s == "Học tiếp").sum())),
+        "Nội trú": ("NoiTruBanTru", lambda s: int(s.fillna("").str.startswith("Nội trú").sum())),
+        "Bán trú": ("NoiTruBanTru", lambda s: int(s.fillna("").str.startswith("Bán trú").sum())),
+    })
+    k = pd.crosstab(d["_n"], d["Khoi"])
+    k = k[_khoi_order(k.columns) + (["Chưa rõ"] if "Chưa rõ" in k.columns else [])]
+    t = t.join(k.add_prefix("Khối "))
+    t = t.sort_values("Số HS", ascending=False).rename_axis(cap).reset_index()
+    return _total_row(_chua_ro_cuoi(t, cap), cap)
+
+
 def nh_diaban(c: Ctx) -> Result:
+    cap = _cap(c)
     df = _nh_dang_hoc(c)
-    df = df.assign(Tinh=_blank(df["ChoO_Tinh"]), Xa=_blank(df["ChoO_Xa"]))
-    g = df.groupby(["Tinh", "Xa"]).size().reset_index(name="Số HS").sort_values(
-        "Số HS", ascending=False)
-    tinh = df["Tinh"].value_counts().rename_axis("Tỉnh/Thành").reset_index(name="Số HS")
-    t = g.rename(columns={"Tinh": "Tỉnh/Thành (chỗ ở)", "Xa": "Phường/Xã"})
-    return Result(t, [("Số tỉnh/thành", int((tinh["Tỉnh/Thành"] != "Chưa rõ").sum())),
-                      ("Chưa có địa chỉ", int((df["Tinh"] == "Chưa rõ").sum()))],
-                  {"kind": "hbar", "data": tinh.head(12), "x": "Tỉnh/Thành", "y": "Số HS"},
-                  sheets={"Theo_tinh": tinh, "Theo_phuong_xa": t})
+    g = DB.dia_ban_nh(df, _bang_quan(c))
+    m = _theo_tinh(g, c)
+    df, g = df[m], g[m]
+    t = _nh_bang_cap(df, g, cap)
+    body = t[t[cap] != "Tổng cộng"].head(15)
+    return Result(t, _kpi_dia_ban(t, cap, "học sinh"),
+                  {"kind": "hbar", "data": body, "x": cap, "y": "Số HS"},
+                  note="Địa bàn theo CHỖ Ở HIỆN NAY của học sinh đang học (thiếu thì lấy hộ khẩu). "
+                       "Quận/huyện cũ suy ra từ phường/xã mới. Excel có đủ 3 cấp.",
+                  sheets={k.split(" (")[0].replace("/", "_"): _nh_bang_cap(df, g, k)
+                          for k in DB.CAP})
 
 
 def nh_hocluc(c: Ctx) -> Result:
@@ -567,7 +648,8 @@ def xh_tongquan(c: Ctx) -> Result:
         a, b = t.iloc[-2], t.iloc[-1]
         kpis += [(f"Liên hệ {b['Năm học']}", f"{int(b['Liên hệ'])} ({_pct_doi(a['Liên hệ'], b['Liên hệ'])})"),
                  (f"Nhập học {b['Năm học']}", f"{int(b['Nhập học'])} ({_pct_doi(a['Nhập học'], b['Nhập học'])})"),
-                 ("Tỷ lệ nhập học", f"{a['Tỷ lệ nhập học (%)']}% → {b['Tỷ lệ nhập học (%)']}%")]
+                 (f"Tỷ lệ nhập học {b['Năm học']}",
+                  f"{b['Tỷ lệ nhập học (%)']}% ({b['Tỷ lệ nhập học (%)'] - a['Tỷ lệ nhập học (%)']:+.1f} điểm)")]
     return Result(t, kpis,
                   {"kind": "group", "data": t.melt("Năm học", ["Liên hệ", "Nộp hồ sơ (gồm nhập học)",
                                                                "Nhập học"],
@@ -634,17 +716,37 @@ def xh_truongcu(c: Ctx) -> Result:
 
 def xh_diaban(c: Ctx) -> Result:
     df, nams = _xh(c)
-    t = _pivot_nam(df, "TruongCu_Tinh", nams, "Tỉnh/Thành (trường cũ)") \
-        .sort_values("Tổng", ascending=False)
-    t = _bien_dong(t, nams)
-    nh = _pivot_nam(df, "TruongCu_Tinh", nams, "Tỉnh/Thành (trường cũ)", chi_nhap_hoc=True) \
-        .sort_values("Tổng", ascending=False)
-    return Result(t, [("Số tỉnh/thành", len(t))],
-                  {"kind": "group", "data": t.head(10).melt("Tỉnh/Thành (trường cũ)", nams,
-                                                            var_name="Năm học", value_name="Số HS"),
-                   "x": "Tỉnh/Thành (trường cũ)", "y": "Số HS", "color": "Năm học",
+    cap = _cap(c)
+    df, g = _ts_dia_ban(c, df)
+    df = df.assign(_n=DB.nhan(g, cap))
+    lh = _pivot_nam(df, "_n", nams, cap).set_index(cap)
+    nh = _pivot_nam(df, "_n", nams, cap, chi_nhap_hoc=True).set_index(cap) \
+        .reindex(lh.index, fill_value=0)
+    t = pd.DataFrame(index=lh.index)
+    for n in nams:
+        t[f"Liên hệ {n}"] = lh[n]
+        t[f"Nhập học {n}"] = nh[n]
+        t[f"Tỷ lệ NH {n} (%)"] = [_pct(a, b) for a, b in zip(nh[n], lh[n])]
+    if len(nams) >= 2:
+        t[f"Liên hệ: tăng/giảm {nams[-1]}"] = [_pct_doi(a, b) for a, b in
+                                              zip(lh[nams[-2]], lh[nams[-1]])]
+        t[f"Nhập học: tăng/giảm {nams[-1]}"] = [_pct_doi(a, b) for a, b in
+                                               zip(nh[nams[-2]], nh[nams[-1]])]
+    t = _chua_ro_cuoi(t.assign(_s=lh["Tổng"]).sort_values("_s", ascending=False)
+                      .drop(columns="_s").rename_axis(cap).reset_index(), cap)
+    data = lh.reset_index().assign(_s=lh["Tổng"].values).sort_values("_s", ascending=False) \
+        .head(12).melt(cap, nams, var_name="Năm học", value_name="Số HS")
+    kpis = []
+    bd = _bien_dong_so(lh[~lh.index.str.startswith(DB.CHUA_RO)], nams)
+    if len(bd):
+        kpis = [(f"Tăng mạnh nhất ({bd.max():+}%)", bd.idxmax().split(" · ")[0]),
+                (f"Giảm mạnh nhất ({bd.min():+}%)", bd.idxmin().split(" · ")[0])]
+    return Result(t, kpis,
+                  {"kind": "group", "data": data, "x": cap, "y": "Số HS", "color": "Năm học",
                    "horizontal": True},
-                  sheets={"Lien_he_theo_tinh": t, "Nhap_hoc_theo_tinh": _bien_dong(nh, nams)})
+                  note="Theo trường cũ của liên hệ tuyển sinh. Biểu đồ: số liên hệ 12 địa bàn "
+                       "nhiều nhất; bảng có nhập học, tỷ lệ và tăng/giảm. Tăng/giảm mạnh nhất chỉ "
+                       "xét địa bàn có từ 5 liên hệ ở năm trước.")
 
 
 def _thang_chu_ky(d: pd.Series, nam_hoc: pd.Series) -> pd.Series:
@@ -677,6 +779,230 @@ def xh_thang(c: Ctx) -> Result:
                        "N = năm khai giảng (vd năm học 2026-2027 thì N = 2026; 05/N-1 = tháng 5/2025).")
 
 
+# ------------------------------------------------------------------ xu hướng nhập học
+HS_CU = ("Học tiếp", "Không học tiếp")   # học sinh cũ của trường (không qua tuyển sinh)
+NGHI = ("Rút hồ sơ", "Không học tiếp")
+
+
+def _xnh(c: Ctx) -> tuple[pd.DataFrame, list[str]]:
+    """Hồ sơ nhập học các năm được chọn + lọc khối; thêm cột Loai (HS mới / HS cũ)."""
+    nh = c.nh_all if c.nh_all is not None else c.nh
+    df = nh.assign(NamHoc=_blank(nh["NamHoc"]), TT=_blank(nh["TinhTrangHS"]))
+    nams = [n for n in (c.params.get("nam") or sorted(df["NamHoc"].unique())) if n != "Chưa rõ"]
+    df = df[df["NamHoc"].isin(nams)]
+    if c.params.get("khoi"):
+        df = df[df["Khoi"].isin(c.params["khoi"])]
+    df = df.assign(Loai=["HS cũ" if t in HS_CU else "HS mới" for t in df["TT"]])
+    return df, sorted(nams)
+
+
+def _dang_hoc(df: pd.DataFrame, c: Ctx) -> pd.DataFrame:
+    """Học sinh đang học (bỏ rút hồ sơ / không học tiếp), lọc theo đối tượng đã chọn."""
+    df = df[~df["TT"].isin(NGHI)]
+    loai = c.params.get("loai") or "Tất cả"
+    if loai == "HS mới":
+        df = df[df["Loai"] == "HS mới"]
+    elif loai == "HS cũ học tiếp":
+        df = df[df["Loai"] == "HS cũ"]
+    return df
+
+
+def _dem(df: pd.DataFrame, nams: list[str]) -> pd.Series:
+    return df["NamHoc"].value_counts().reindex(nams, fill_value=0)
+
+
+def xnh_tongquan(c: Ctx) -> Result:
+    df, nams = _xnh(c)
+    if df.empty:
+        return Result(pd.DataFrame(columns=["Năm học"]))
+    moi, cu = df[df["Loai"] == "HS mới"], df[df["Loai"] == "HS cũ"]
+    t = pd.DataFrame(index=nams)
+    t["Hồ sơ nhập học"] = _dem(df, nams)
+    t["HS mới (qua tuyển sinh)"] = _dem(moi, nams)
+    t["HS mới rút hồ sơ"] = _dem(moi[moi["TT"] == "Rút hồ sơ"], nams)
+    t["HS mới nhập học"] = t["HS mới (qua tuyển sinh)"] - t["HS mới rút hồ sơ"]
+    t["HS cũ học tiếp"] = _dem(cu[cu["TT"] == "Học tiếp"], nams)
+    t["HS cũ không học tiếp"] = _dem(cu[cu["TT"] == "Không học tiếp"], nams)
+    t["Sĩ số (đang học)"] = t["HS mới nhập học"] + t["HS cũ học tiếp"]
+    t["Tỷ lệ HS cũ ở lại (%)"] = [_pct(a, a + b) for a, b in
+                                  zip(t["HS cũ học tiếp"], t["HS cũ không học tiếp"])]
+    hoc = df[~df["TT"].isin(NGHI)]
+    t["Nam"] = _dem(hoc[hoc["GioiTinh"] == "Nam"], nams)
+    t["Nữ"] = _dem(hoc[hoc["GioiTinh"] == "Nữ"], nams)
+    t["Nội trú"] = _dem(hoc[hoc["NoiTruBanTru"].fillna("").str.startswith("Nội trú")], nams)
+    t["Bán trú"] = _dem(hoc[hoc["NoiTruBanTru"].fillna("").str.startswith("Bán trú")], nams)
+    for col in ("Sĩ số (đang học)", "HS mới nhập học"):
+        t[f"{col.split(' (')[0]} tăng/giảm"] = ["—"] + [_pct_doi(a, b) for a, b in
+                                                     zip(t[col].iloc[:-1], t[col].iloc[1:])]
+    t = t.rename_axis("Năm học").reset_index()
+    kpis = []
+    if len(t):
+        b = t.iloc[-1]
+        a = t.iloc[-2] if len(t) >= 2 else None
+        doi = (lambda col: f" ({_pct_doi(a[col], b[col])})") if a is not None else (lambda col: "")
+        kpis = [(f"Sĩ số {b['Năm học']}", f"{int(b['Sĩ số (đang học)'])}{doi('Sĩ số (đang học)')}"),
+                ("HS mới nhập học", f"{int(b['HS mới nhập học'])}{doi('HS mới nhập học')}"),
+                ("HS cũ học tiếp", int(b["HS cũ học tiếp"])),
+                ("Rút / không học tiếp", int(b["HS mới rút hồ sơ"] + b["HS cũ không học tiếp"]))]
+    note = ("Lấy từ danh sách HỒ SƠ NHẬP HỌC (không phải Data tuyển sinh). HS mới = hồ sơ tạo "
+            "từ tuyển sinh; HS cũ = học sinh của trường lên lớp (tình trạng Học tiếp / Không học "
+            "tiếp). Sĩ số = HS mới nhập học + HS cũ học tiếp.")
+    if len(t) >= 2 and t.iloc[-1]["HS cũ học tiếp"] == 0 and t.iloc[-2]["HS cũ học tiếp"] > 0:
+        note += (f" Năm {t.iloc[-1]['Năm học']} chưa có HS cũ học tiếp — có thể chưa nhập danh "
+                 "sách lên lớp, nên sĩ số năm này còn thấp.")
+    return Result(t, kpis,
+                  {"kind": "stack_cat", "data": t.melt("Năm học", ["HS mới nhập học",
+                                                                   "HS cũ học tiếp"],
+                                                       var_name="Nhóm", value_name="Số HS"),
+                   "x": "Năm học", "y": "Số HS", "color": "Nhóm"},
+                  note=note)
+
+
+def _lop_key(lop: str) -> tuple:
+    so = "".join(ch for ch in str(lop) if ch.isdigit())[:2]
+    return (int(so) if so else 99, str(lop))
+
+
+def _xnh_pivot(df: pd.DataFrame, by: str, nams: list[str], label: str) -> pd.DataFrame:
+    t = pd.crosstab(_blank(df[by]), df["NamHoc"]).reindex(columns=nams, fill_value=0) \
+        if len(df) else pd.DataFrame(columns=nams)
+    t["Tổng"] = t.sum(axis=1)
+    t = t.rename_axis(label).reset_index()
+    t.columns.name = None
+    return _bien_dong(t, nams)
+
+
+def xnh_khoi(c: Ctx) -> Result:
+    df, nams = _xnh(c)
+    hoc = _dang_hoc(df, c)
+    if hoc.empty:
+        return Result(pd.DataFrame(columns=["Khối"]))
+    t = _xnh_pivot(hoc, "Khoi", nams, "Khối")
+    order = _khoi_order(t["Khối"]) + (["Chưa rõ"] if "Chưa rõ" in set(t["Khối"]) else [])
+    t = t.set_index("Khối").reindex(order).reset_index()
+    t = _total_row(t, "Khối")
+    lop = _xnh_pivot(hoc.assign(LopHoc=_blank(hoc["LopHoc"], "Chưa xếp lớp")), "LopHoc", nams,
+                     "Lớp")
+    lop = lop.sort_values("Lớp", key=lambda s: s.map(_lop_key))
+    kpis = []
+    bd = _bien_dong_so(t[t["Khối"] != "Tổng cộng"].set_index("Khối"), nams)
+    if len(bd):
+        kpis = [("Khối tăng mạnh nhất", f"{bd.idxmax()} ({bd.max():+}%)"),
+                ("Khối giảm mạnh nhất", f"{bd.idxmin()} ({bd.min():+}%)")]
+    return Result(t, kpis,
+                  {"kind": "group", "data": t[t["Khối"] != "Tổng cộng"].melt(
+                      "Khối", nams, var_name="Năm học", value_name="Số HS"),
+                   "x": "Khối", "y": "Số HS", "color": "Năm học"},
+                  note="Học sinh đang học theo khối (hồ sơ nhập học). Excel: thêm sheet sĩ số "
+                       "theo lớp qua các năm.",
+                  sheets={"Theo_khoi": t, "Theo_lop": lop})
+
+
+def xnh_chedo(c: Ctx) -> Result:
+    df, nams = _xnh(c)
+    hoc = _dang_hoc(df, c)
+    if hoc.empty:
+        return Result(pd.DataFrame(columns=["Nhóm"]))
+    phan = []
+    for nhom, col, f in (("Chế độ", "NoiTruBanTru", lambda s: s.str.split(" ").str[:2].str.join(" ")),
+                         ("Phân hệ", "PhanHe", lambda s: s.replace("", "Thường")),
+                         ("Giới tính", "GioiTinh", lambda s: s)):
+        d = hoc.assign(_g=f(hoc[col].fillna("").astype(str).str.strip()))
+        x = _xnh_pivot(d, "_g", nams, "Nhóm")
+        x.insert(0, "Tiêu chí", nhom)
+        phan.append(x)
+    t = pd.concat(phan, ignore_index=True)
+    data = t[t["Tiêu chí"] != "Giới tính"].melt(["Tiêu chí", "Nhóm"], nams,
+                                                var_name="Năm học", value_name="Số HS")
+    return Result(t, [],
+                  {"kind": "group", "data": data, "x": "Nhóm", "y": "Số HS", "color": "Năm học"},
+                  note="Học sinh đang học theo nội trú/bán trú, phân hệ (IEP/ESL/thường) và giới "
+                       "tính qua các năm.")
+
+
+def xnh_diaban(c: Ctx) -> Result:
+    df, nams = _xnh(c)
+    cap = _cap(c)
+    hoc = _dang_hoc(df, c)
+    g = DB.dia_ban_nh(hoc, _bang_quan(c))
+    m = _theo_tinh(g, c)
+    hoc, g = hoc[m], g[m]
+    if hoc.empty:
+        return Result(pd.DataFrame(columns=[cap]))
+    t = _chua_ro_cuoi(_xnh_pivot(hoc.assign(_n=DB.nhan(g, cap)), "_n", nams, cap)
+                      .sort_values("Tổng", ascending=False), cap).reset_index(drop=True)
+    kpis = []
+    bd = _bien_dong_so(t[~t[cap].str.startswith(DB.CHUA_RO)].set_index(cap), nams)
+    if len(bd):
+        kpis = [(f"Tăng mạnh nhất ({bd.max():+}%)", bd.idxmax().split(" · ")[0]),
+                (f"Giảm mạnh nhất ({bd.min():+}%)", bd.idxmin().split(" · ")[0])]
+    chua = t[t[cap].str.startswith(DB.CHUA_RO)]
+    if len(chua):
+        kpis.append(("Chưa rõ địa bàn (các năm)", int(chua["Tổng"].sum())))
+    return Result(t, kpis,
+                  {"kind": "group", "data": t.head(12).melt(cap, nams, var_name="Năm học",
+                                                            value_name="Số HS"),
+                   "x": cap, "y": "Số HS", "color": "Năm học", "horizontal": True},
+                  note="Theo CHỖ Ở HIỆN NAY của học sinh đang học (thiếu thì lấy hộ khẩu). Quận/"
+                       "huyện cũ suy ra từ phường/xã mới.")
+
+
+def xnh_truongcu(c: Ctx) -> Result:
+    df, nams = _xnh(c)
+    hoc = _dang_hoc(df, c)
+    if hoc.empty:
+        return Result(pd.DataFrame(columns=["Trường cũ"]))
+    hoc = hoc[hoc["TruongCu"].fillna("").str.strip() != ""]
+    t = _xnh_pivot(hoc, "TruongCu", nams, "Trường cũ").sort_values("Tổng", ascending=False) \
+        .head(int(c.params.get("top", 30)))
+    return Result(t, [("Số trường (mọi năm)", hoc["TruongCu"].nunique())],
+                  {"kind": "group", "data": t.head(12).melt("Trường cũ", nams, var_name="Năm học",
+                                                            value_name="Số HS"),
+                   "x": "Trường cũ", "y": "Số HS", "color": "Năm học", "horizontal": True},
+                  note="Trường cũ của học sinh đang học (theo hồ sơ nhập học).")
+
+
+def xnh_doichieu(c: Ctx) -> Result:
+    """Đối chiếu Data tuyển sinh (bước Nhập học) với danh sách hồ sơ nhập học HS mới."""
+    ts, nams = _xh(c)
+    df, nams_nh = _xnh(c)
+    nams = sorted(set(nams) | set(nams_nh))
+    moi = df[df["Loai"] == "HS mới"]
+    lien_ket = set(moi["TuyenSinhID"].fillna("").astype(str)) - {""}
+    ts_nh = ts[ts["TrangThai"] == "Nhập học"]
+    chua_hs = ts_nh[~ts_nh["id"].astype(str).isin(lien_ket)]
+    t = pd.DataFrame(index=nams)
+    t["Liên hệ (tuyển sinh)"] = _dem(ts, nams)
+    t["Nhập học theo Data tuyển sinh"] = _dem(ts_nh, nams)
+    t["Hồ sơ nhập học HS mới"] = _dem(moi, nams)
+    t["  trong đó rút hồ sơ"] = _dem(moi[moi["TT"] == "Rút hồ sơ"], nams)
+    t["  trong đó chưa liên kết tuyển sinh"] = _dem(
+        moi[moi["TuyenSinhID"].fillna("").astype(str) == ""], nams)
+    t["Nhập học nhưng chưa có hồ sơ"] = _dem(chua_hs, nams)
+    t["Tỷ lệ liên hệ → hồ sơ nhập học (%)"] = [
+        _pct(a - r, b) for a, r, b in zip(t["Hồ sơ nhập học HS mới"], t["  trong đó rút hồ sơ"],
+                                          t["Liên hệ (tuyển sinh)"])]
+    t = t.rename_axis("Năm học").reset_index()
+    ds = chua_hs[["NamHoc", "HoTenHS", "Khoi", "SDT", "NgayLienHe"]].rename(columns={
+        "NamHoc": "Năm học", "HoTenHS": "Học sinh", "Khoi": "Khối", "SDT": "SĐT",
+        "NgayLienHe": "Ngày liên hệ"}).sort_values(["Năm học", "Học sinh"])
+    kpis = []
+    if len(t):
+        b = t.iloc[-1]
+        kpis = [(f"Nhập học (Data TS) {b['Năm học']}", int(b["Nhập học theo Data tuyển sinh"])),
+                ("Hồ sơ HS mới còn học", int(b["Hồ sơ nhập học HS mới"] - b["  trong đó rút hồ sơ"])),
+                ("Nhập học chưa có hồ sơ", int(b["Nhập học nhưng chưa có hồ sơ"]))]
+    return Result(t, kpis,
+                  {"kind": "group", "data": t.melt("Năm học", ["Nhập học theo Data tuyển sinh",
+                                                               "Hồ sơ nhập học HS mới"],
+                                                   var_name="Nguồn số liệu", value_name="Số HS"),
+                   "x": "Năm học", "y": "Số HS", "color": "Nguồn số liệu"},
+                  note="So sánh số nhập học ghi ở Data tuyển sinh với số hồ sơ nhập học HS mới. "
+                       "Lệch nhau nghĩa là còn học sinh chưa tạo hồ sơ hoặc hồ sơ chưa liên kết. "
+                       "Excel: thêm danh sách học sinh đã nhập học nhưng chưa có hồ sơ.",
+                  sheets={"Doi_chieu": t, "Chua_co_ho_so": ds})
+
+
 REPORTS = [
     Report("ts_khoi", G_TS, "Phễu tuyển sinh theo khối",
            "Số học sinh ở từng bước (tư vấn → nộp hồ sơ → nhập học) theo khối, tỷ lệ chuyển đổi.",
@@ -693,8 +1019,8 @@ REPORTS = [
     Report("ts_truongcu", G_TS, "Trường cũ có nhiều học sinh",
            "Top trường cũ theo số liên hệ và số nhập học.", ts_truongcu, ("top",)),
     Report("ts_diaban", G_TS, "Địa bàn tuyển sinh",
-           "Liên hệ và nhập học theo tỉnh/thành, phường/xã của trường cũ (địa giới mới).",
-           ts_diaban),
+           "Liên hệ, nộp hồ sơ, nhập học theo tỉnh/thành → quận/huyện (cũ) → phường/xã (mới) của "
+           "trường cũ.", ts_diaban, ("cap", "tinh")),
     Report("ts_chedo", G_TS, "Chế độ & phân hệ nhập học",
            "Học sinh nhập học theo khối × nội trú/bán trú × IEP/ESL.", ts_chedo),
     Report("ts_quahan", G_TS, "Liên hệ tư vấn quá hạn",
@@ -724,29 +1050,48 @@ REPORTS = [
     Report("nh_tohop", G_NH, "Tổ hợp môn lựa chọn (THPT)",
            "Số học sinh khối 10–12 theo tổ hợp môn lựa chọn 1.", nh_tohop),
     Report("nh_diaban", G_NH, "Địa bàn cư trú học sinh",
-           "Học sinh theo tỉnh/thành, phường/xã chỗ ở hiện nay (địa giới mới).", nh_diaban),
+           "Học sinh đang học theo tỉnh/thành → quận/huyện (cũ) → phường/xã chỗ ở, kèm số theo "
+           "khối.", nh_diaban, ("cap", "tinh")),
     Report("nh_hocluc", G_NH, "Kết quả học tập đầu vào",
            "Học lực kết quả 1 theo khối và điểm trung bình Toán / Văn / Anh.", nh_hocluc),
     Report("nh_danhsach", G_NH, "Danh sách học sinh theo lớp",
            "Danh sách từng lớp (STT, họ tên, ngày sinh, chế độ, liên lạc) để in.", nh_danhsach),
 ]
 REPORTS += [
-    Report("xh_tongquan", G_XH, "Tổng quan qua các năm",
-           "Liên hệ, nộp hồ sơ, nhập học, rút hồ sơ, tỷ lệ chuyển đổi và tăng/giảm từng năm.",
-           xh_tongquan, ("nam",)),
-    Report("xh_khoi", G_XH, "Nhập học theo khối qua các năm",
-           "Số học sinh nhập học từng khối của các năm, tăng/giảm so với năm trước.", xh_khoi,
-           ("nam",)),
+    Report("xh_tongquan", G_XH, "Phễu tuyển sinh qua các năm",
+           "Data tuyển sinh: liên hệ, nộp hồ sơ, nhập học, rút hồ sơ, tỷ lệ chuyển đổi và "
+           "tăng/giảm từng năm.", xh_tongquan, ("nam",)),
+    Report("xh_khoi", G_XH, "Chốt nhập học theo khối qua các năm",
+           "Data tuyển sinh: số học sinh ở bước Nhập học từng khối của các năm (Excel có thêm số "
+           "liên hệ).", xh_khoi, ("nam",)),
     Report("xh_nguon", G_XH, "Nguồn tuyển sinh qua các năm",
            "Liên hệ, nhập học và tỷ lệ nhập học của từng nguồn theo năm.", xh_nguon, ("nam",)),
     Report("xh_truongcu", G_XH, "Trường cũ qua các năm",
            "Top trường cũ theo số liên hệ của từng năm, trường tăng/giảm.", xh_truongcu,
            ("nam", "top")),
-    Report("xh_diaban", G_XH, "Địa bàn qua các năm",
-           "Liên hệ và nhập học theo tỉnh/thành của trường cũ qua các năm.", xh_diaban, ("nam",)),
+    Report("xh_diaban", G_XH, "Địa bàn tuyển sinh qua các năm",
+           "Liên hệ, nhập học, tỷ lệ theo tỉnh/thành → quận/huyện → phường/xã của trường cũ.",
+           xh_diaban, ("nam", "cap", "tinh")),
     Report("xh_thang", G_XH, "Tiến độ tuyển sinh theo tháng qua các năm",
            "Liên hệ mới mỗi tháng và lũy kế, căn theo chu kỳ tuyển sinh để so cùng kỳ.",
            xh_thang, ("nam",)),
+    Report("xnh_tongquan", G_XNH, "Sĩ số và học sinh mới qua các năm",
+           "Hồ sơ nhập học: HS mới nhập học, HS cũ học tiếp / không học tiếp, rút hồ sơ, sĩ số, "
+           "nam/nữ, nội trú/bán trú.", xnh_tongquan, ("nam",)),
+    Report("xnh_doichieu", G_XNH, "Đối chiếu tuyển sinh và nhập học",
+           "Số nhập học ở Data tuyển sinh so với số hồ sơ nhập học HS mới; danh sách đã nhập học "
+           "nhưng chưa có hồ sơ.", xnh_doichieu, ("nam",)),
+    Report("xnh_khoi", G_XNH, "Học sinh theo khối và lớp qua các năm",
+           "Học sinh đang học theo khối (Excel: sĩ số từng lớp) và tăng/giảm.", xnh_khoi,
+           ("nam", "loai")),
+    Report("xnh_chedo", G_XNH, "Chế độ, phân hệ, giới tính qua các năm",
+           "Nội trú/bán trú, IEP/ESL, nam/nữ của học sinh đang học.", xnh_chedo, ("nam", "loai")),
+    Report("xnh_diaban", G_XNH, "Địa bàn cư trú qua các năm",
+           "Học sinh đang học theo tỉnh/thành → quận/huyện → phường/xã chỗ ở.", xnh_diaban,
+           ("nam", "loai", "cap", "tinh")),
+    Report("xnh_truongcu", G_XNH, "Trường cũ của học sinh qua các năm",
+           "Top trường cũ của học sinh đang học, tăng/giảm.", xnh_truongcu,
+           ("nam", "loai", "top")),
 ]
 BY_ID = {r.id: r for r in REPORTS}
 
