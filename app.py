@@ -48,11 +48,45 @@ if _has_auth() and _domain:
         st.button("Đăng xuất", icon=":material/logout:", on_click=st.logout)
         st.stop()
 
+P = {
+    "home": st.Page("views/trang_chu.py", title="Tổng quan", icon=":material/space_dashboard:",
+                    default=True),
+    "ts": st.Page("views/data_tuyen_sinh.py", title="Data tuyển sinh",
+                  icon=":material/person_search:", url_path="data-tuyen-sinh"),
+    "nh": st.Page("views/ho_so_nhap_hoc.py", title="Hồ sơ nhập học",
+                  icon=":material/assignment_ind:", url_path="ho-so-nhap-hoc"),
+    "kt": st.Page("views/ke_toan.py", title="Kế toán", icon=":material/payments:",
+                  url_path="ke-toan"),
+    "bc": st.Page("views/bao_cao.py", title="Báo cáo", icon=":material/monitoring:",
+                  url_path="bao-cao"),
+    "tl": st.Page("views/tro_ly.py", title="Conan Ro", icon=":material/smart_toy:",
+                  url_path="tro-ly"),
+    "cd": st.Page("views/cai_dat.py", title="Cài đặt & đồng bộ", icon=":material/settings:",
+                  url_path="cai-dat"),
+}
+
+
+def _dung_lai():
+    """Dừng ở màn hình đăng nhập nhưng vẫn khai báo các trang (ẩn) để giữ trang đang mở trên
+    đường dẫn — đăng nhập xong (hoặc F5) quay về đúng trang đó, không về Tổng quan."""
+    from urllib.parse import urlparse
+
+    try:  # nhớ trang + tham số đang mở (vd ?id=…) để mở lại sau khi tự đăng nhập bằng mã ghi nhớ
+        trang = urlparse(st.context.url or "").path.rstrip("/").rsplit("/", 1)[-1]
+        S.setdefault("_trang_dich", (trang, st.query_params.to_dict()))
+    except Exception:
+        pass
+    st.navigation(list(P.values()), position="hidden")
+    st.stop()
+
+
 # ------------------------------------------------------------------ tài khoản của app
 # Khi chưa bật Microsoft 365 ([auth]) mà list DanhMuc_TaiKhoan có tài khoản: bắt đăng nhập.
 # "Ghi nhớ đăng nhập": mã đã ký (30 ngày) lưu trong bộ nhớ trình duyệt (localStorage)
 # -> F5 / mở lại trên máy đó không phải nhập.
 S = st.session_state
+if "nam_hoc" in S:  # giữ năm học đang chọn qua các lần chạy không vẽ ô chọn (màn hình đăng nhập)
+    S["nam_hoc"] = S["nam_hoc"]
 if not _has_auth() and not S.get("tk"):
     from tuyensinh import tai_khoan
     from tuyensinh.schema import TAI_KHOAN
@@ -63,10 +97,9 @@ if not _has_auth() and not S.get("tk"):
         _items = []
     _tks = tai_khoan.dang_hoat_dong(_items)
     if _tks:
+        # Mã ghi nhớ do trình duyệt gửi về (lần chạy đầu là None). Không chờ: vẫn hiện ô đăng
+        # nhập, mã tới sau sẽ tự đăng nhập — trình duyệt chặn bộ nhớ cũng không bị kẹt.
         _ma = ui.ghi_nho("ghi_nho_doc", "" if S.pop("_xoa_ghi_nho", False) else None)
-        if _ma is None:  # chờ trình duyệt gửi mã đã lưu (rất nhanh)
-            st.caption("Đang kiểm tra đăng nhập…")
-            st.stop()
         if _ma and not S.get("_da_dang_xuat"):
             S["tk"] = tai_khoan.tu_ma_ghi_nho(_items, _ma, ui.cookie_secret())
     if _tks and not S.get("tk"):
@@ -114,7 +147,7 @@ if not _has_auth() and not S.get("tk"):
                             S.pop("_da_dang_xuat", None)
                             st.rerun()
                         st.error("Sai mật khẩu quản trị.", icon=":material/error:")
-        st.stop()
+        _dung_lai()
 if "_ghi_nho" in S:  # lưu mã ghi nhớ sau khi đăng nhập; giữ đến khi trình duyệt xác nhận
     if ui.ghi_nho("ghi_nho_ghi", S["_ghi_nho"]) == S["_ghi_nho"]:
         S.pop("_ghi_nho")
@@ -126,22 +159,6 @@ def _dang_xuat():
     S["_xoa_ghi_nho"] = True  # xóa mã ghi nhớ trên máy này
 
 
-P = {
-    "home": st.Page("views/trang_chu.py", title="Tổng quan", icon=":material/space_dashboard:",
-                    default=True),
-    "ts": st.Page("views/data_tuyen_sinh.py", title="Data tuyển sinh",
-                  icon=":material/person_search:", url_path="data-tuyen-sinh"),
-    "nh": st.Page("views/ho_so_nhap_hoc.py", title="Hồ sơ nhập học",
-                  icon=":material/assignment_ind:", url_path="ho-so-nhap-hoc"),
-    "kt": st.Page("views/ke_toan.py", title="Kế toán", icon=":material/payments:",
-                  url_path="ke-toan"),
-    "bc": st.Page("views/bao_cao.py", title="Báo cáo", icon=":material/monitoring:",
-                  url_path="bao-cao"),
-    "tl": st.Page("views/tro_ly.py", title="Conan Ro", icon=":material/smart_toy:",
-                  url_path="tro-ly"),
-    "cd": st.Page("views/cai_dat.py", title="Cài đặt & đồng bộ", icon=":material/settings:",
-                  url_path="cai-dat"),
-}
 # Thanh menu ngang như app cũ: Tổng quan · Data tuyển sinh · Hồ sơ nhập học · Kế toán · Báo cáo
 # Phân quyền: tài khoản của app chỉ thấy các trang được phép (Quản trị: tất cả)
 _pages = [P["home"], P["ts"], P["nh"], P["kt"], P["bc"], P["cd"]]
@@ -154,6 +171,13 @@ _FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc",
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
 pg = st.navigation(_pages, position="top")
+_dich = S.pop("_trang_dich", None) if S.get("tk") else None
+if _dich and _dich[0] and getattr(pg, "url_path", "") != _dich[0]:
+    _p = next((x for x in _pages if getattr(x, "url_path", "") == _dich[0]), None)
+    if _p is not None:  # vừa đăng nhập: quay lại đúng trang đã mở trước đó
+        st.switch_page(_p, query_params=_dich[1] or None)
+elif _dich and _dich[1] and not st.query_params:  # đúng trang nhưng mất ?id=… khi tự đăng nhập
+    st.query_params.from_dict(_dich[1])
 # nhớ trang đang xem (khác Trợ lý) để nút đóng / thu nhỏ của khung chat quay về đúng chỗ
 for _k, _p in P.items():
     if _p is pg and _k != "tl":

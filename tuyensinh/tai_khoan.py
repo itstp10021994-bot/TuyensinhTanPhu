@@ -64,8 +64,11 @@ def phien_quan_tri() -> dict:
 def dang_nhap(items: list[dict], ten_dang_nhap: str, mat_khau: str) -> dict | None:
     """Trả về phiên đăng nhập nếu đúng tên đăng nhập + mật khẩu và đang hoạt động."""
     for t in dang_hoat_dong(items):
-        if _ten(t.get("TenDangNhap")) == _ten(ten_dang_nhap) and \
-                dung_mat_khau(mat_khau, t.get("MatKhau")):
+        if _ten(t.get("TenDangNhap")) == _ten(ten_dang_nhap) and (
+                dung_mat_khau(mat_khau, t.get("MatKhau")) or
+                # dán mật khẩu kèm dấu cách thừa ở đầu/cuối
+                (mat_khau != mat_khau.strip() and dung_mat_khau(mat_khau.strip(),
+                                                                t.get("MatKhau")))):
             return _phien(t)
     return None
 
