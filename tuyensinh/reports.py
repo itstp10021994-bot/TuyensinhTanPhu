@@ -755,6 +755,76 @@ def _thang_chu_ky(d: pd.Series, nam_hoc: pd.Series) -> pd.Series:
     return (d.dt.year * 12 + d.dt.month) - (start * 12 + 9)
 
 
+def _doi_nam(d: date, so_nam: int) -> date:
+    """Cùng ngày/tháng của năm khác (29/02 → 28/02)."""
+    try:
+        return d.replace(year=d.year + so_nam)
+    except ValueError:
+        return d.replace(year=d.year + so_nam, day=28)
+
+
+def xh_cungky(c: Ctx) -> Result:
+    """Tuyển mới theo khối của các năm học, tính đến cùng một mốc ngày mỗi năm."""
+    df, nams = _xh(c)
+    moc = c.params.get("moc") or date.today()
+    if isinstance(moc, datetime):
+        moc = moc.date()
+    goc = int(str(c.nam_hoc)[:4]) if str(c.nam_hoc)[:4].isdigit() else moc.year
+    d = pd.to_datetime(df["NgayLienHe"], errors="coerce").dt.date
+    df = df.assign(_d=d, Khoi=_blank(df["Khoi"]))
+    cols, moc_nam, toan_nam, thieu_ngay = [], {}, {}, {}
+    out = None
+    for n in nams:
+        bd = int(n[:4]) if n[:4].isdigit() else goc
+        m = _doi_nam(moc, bd - goc)
+        moc_nam[n] = m
+        x = df[df["NamHoc"] == n]
+        toan_nam[n] = int((x["TrangThai"] == "Nhập học").sum())
+        thieu_ngay[n] = int(x["_d"].isna().sum())
+        x = x[x["_d"].notna() & (x["_d"] <= m)]
+        g = x.groupby("Khoi").agg(**{
+            f"Liên hệ {n}": ("id", "count"),
+            f"Nộp hồ sơ {n}": ("TrangThai", lambda s: int(s.isin(["Nộp hồ sơ", "Nhập học"]).sum())),
+            f"Nhập học {n}": ("TrangThai", lambda s: int((s == "Nhập học").sum())),
+        })
+        out = g if out is None else out.join(g, how="outer")
+        cols.append(n)
+    if out is None or out.empty:
+        return Result(pd.DataFrame(columns=["Khối"]),
+                      note=f"Không có liên hệ nào trước mốc {moc:%d/%m/%Y} (cùng kỳ các năm).")
+    out = out.fillna(0).astype(int)
+    out = out.reindex(_khoi_order(out.index) + (["Chưa rõ"] if "Chưa rõ" in out.index else []))
+    if len(nams) >= 2:
+        a, b = nams[-2], nams[-1]
+        out[f"Nhập học chênh lệch ({b} − {a})"] = out[f"Nhập học {b}"] - out[f"Nhập học {a}"]
+        out["Nhập học tăng/giảm (%)"] = [_pct_doi(x, y) for x, y in
+                                          zip(out[f"Nhập học {a}"], out[f"Nhập học {b}"])]
+    out = _total_row(out.rename_axis("Khối").reset_index(), "Khối")
+    if len(nams) >= 2:
+        tong = out.iloc[-1]
+        out.loc[out.index[-1], "Nhập học tăng/giảm (%)"] = _pct_doi(
+            tong[f"Nhập học {nams[-2]}"], tong[f"Nhập học {nams[-1]}"])
+    tong = out.iloc[-1]
+    kpis = [(f"Nhập học đến {moc_nam[n]:%d/%m/%Y}", int(tong[f"Nhập học {n}"])) for n in nams[-3:]]
+    if len(nams) >= 2:
+        kpis.append(("Tăng/giảm cùng kỳ", out.iloc[-1]["Nhập học tăng/giảm (%)"]))
+    body = out[out["Khối"] != "Tổng cộng"]
+    data = body.melt("Khối", [f"Nhập học {n}" for n in nams], var_name="Năm học",
+                     value_name="Số HS")
+    data["Năm học"] = data["Năm học"].str.replace("Nhập học ", "", regex=False)
+    ca_nam = "; ".join(f"{n}: {toan_nam[n]} HS" for n in nams[:-1])
+    return Result(out, kpis,
+                  {"kind": "group", "data": data, "x": "Khối", "y": "Số HS", "color": "Năm học"},
+                  note="Tuyển mới = liên hệ trong Data tuyển sinh có NGÀY LIÊN HỆ đến mốc "
+                       + ", ".join(f"{moc_nam[n]:%d/%m/%Y} ({n})" for n in nams)
+                       + ". Bước (nộp hồ sơ / nhập học) là bước hiện tại của học sinh, vì app "
+                         "không lưu ngày chuyển bước."
+                       + (f" Nhập học cả năm để tham khảo — {ca_nam}." if ca_nam else "")
+                       + (" Không tính liên hệ CHƯA CÓ ngày liên hệ: "
+                          + "; ".join(f"{n}: {v}" for n, v in thieu_ngay.items() if v) + "."
+                          if any(thieu_ngay.values()) else ""))
+
+
 def xh_thang(c: Ctx) -> Result:
     df, nams = _xh(c)
     d = pd.to_datetime(df["NgayLienHe"], errors="coerce")
@@ -1075,6 +1145,9 @@ REPORTS += [
     Report("xh_thang", G_XH, "Tiến độ tuyển sinh theo tháng qua các năm",
            "Liên hệ mới mỗi tháng và lũy kế, căn theo chu kỳ tuyển sinh để so cùng kỳ.",
            xh_thang, ("nam",)),
+    Report("xh_cungky", G_XH, "Tuyển mới theo khối — cùng kỳ các năm",
+           "Liên hệ, nộp hồ sơ, nhập học từng khối tính đến cùng một mốc ngày mỗi năm "
+           "(vd đến 30/09/2026 so với 30/09/2025).", xh_cungky, ("nam", "moc")),
     Report("xnh_tongquan", G_XNH, "Sĩ số và học sinh mới qua các năm",
            "Hồ sơ nhập học: HS mới nhập học, HS cũ học tiếp / không học tiếp, rút hồ sơ, sĩ số, "
            "nam/nữ, nội trú/bán trú.", xnh_tongquan, ("nam",)),

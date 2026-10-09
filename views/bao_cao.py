@@ -176,10 +176,13 @@ with main:
         nguon = [ts_all, nh_all] if rep.group == reports.G_XNH else [ts_all]
         co_dl = sorted({str(y) for d in nguon for y in d["NamHoc"].dropna().unique()
                         if str(y).strip()})
-        mac_dinh = [y for y in co_dl if y <= nam_hoc][-3:] or co_dl[-3:]
+        so = 2 if rep.id == "xh_cungky" else 3  # cùng kỳ: mặc định năm này và năm trước
+        mac_dinh = [y for y in co_dl if y <= nam_hoc][-so:] or co_dl[-so:]
         params["nam"] = st.multiselect("Năm học so sánh", co_dl, default=mac_dinh,
-                                       key="bc_nam", placeholder="Chọn 2–3 năm học",
-                                       help="Mặc định 3 năm học gần nhất (tính đến năm đang chọn)")
+                                       key="bc_nam_ck" if so == 2 else "bc_nam",
+                                       placeholder="Chọn 2–3 năm học",
+                                       help=f"Mặc định {so} năm học gần nhất (tính đến năm đang "
+                                            "chọn)")
     loc = [k for k in ("cap", "tinh", "loai") if k in rep.params]
     if loc:
         g = st.columns([2.2, 1.6, 1.6][:len(loc)], vertical_alignment="bottom", gap="small")
@@ -200,6 +203,11 @@ with main:
                 "Học sinh", ["Tất cả", "HS mới", "HS cũ học tiếp"], default="Tất cả",
                 required=True, key="bc_loai",
                 help="HS mới = qua tuyển sinh; HS cũ = học sinh của trường lên lớp")
+    if "moc" in rep.params:
+        params["moc"] = f[2].date_input(
+            "Tính đến ngày", value=date.today(), format="DD/MM/YYYY", key="bc_moc",
+            help=f"Mốc của năm học {nam_hoc}; các năm khác lấy cùng ngày/tháng tương ứng "
+                 "(lùi đúng số năm).")
     if "ky" in rep.params:
         params["ky"] = f[2].segmented_control("Kỳ", ["Tháng", "Tuần"], default="Tháng",
                                               required=True, key="bc_ky")

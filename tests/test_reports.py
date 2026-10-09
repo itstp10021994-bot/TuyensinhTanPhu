@@ -114,3 +114,22 @@ def test_dia_ban_quan_huyen_cu():
     dc = reports.xnh_doichieu(ctx).table.set_index("Năm học")
     assert dc.loc["2026-2027", "Nhập học theo Data tuyển sinh"] == 2
     assert dc.loc["2026-2027", "Nhập học nhưng chưa có hồ sơ"] == 2  # hồ sơ chưa liên kết
+
+
+def test_tuyen_moi_cung_ky():
+    from datetime import date
+    ts = [{"id": "1", "NamHoc": "2025-2026", "Khoi": "6", "TrangThai": "Nhập học",
+           "NgayLienHe": "2025-05-01"},
+          {"id": "2", "NamHoc": "2025-2026", "Khoi": "6", "TrangThai": "Nhập học",
+           "NgayLienHe": "2025-08-01"},   # sau mốc 30/06/2025 -> không tính
+          {"id": "3", "NamHoc": "2026-2027", "Khoi": "6", "TrangThai": "Nhập học",
+           "NgayLienHe": "2026-06-30"},
+          {"id": "4", "NamHoc": "2026-2027", "Khoi": "10", "TrangThai": "Tư vấn",
+           "NgayLienHe": "2026-03-01"},
+          {"id": "5", "NamHoc": "2026-2027", "Khoi": "10", "TrangThai": "Nhập học"}]  # thiếu ngày
+    ctx = _ctx(ts, [])
+    ctx.params.update(moc=date(2026, 6, 30))
+    t = reports.xh_cungky(ctx).table.set_index("Khối")
+    assert t.loc["6", "Nhập học 2025-2026"] == 1 and t.loc["6", "Nhập học 2026-2027"] == 1
+    assert t.loc["10", "Liên hệ 2026-2027"] == 1 and t.loc["10", "Nhập học 2026-2027"] == 0
+    assert t.loc["Tổng cộng", "Liên hệ 2026-2027"] == 2
