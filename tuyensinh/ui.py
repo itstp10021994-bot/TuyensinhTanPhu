@@ -186,7 +186,21 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
   box-shadow: 0 1px 2px rgba(0,122,255,.25);}
 .stApp [data-testid="stBaseButton-secondary"] {background: #FFFFFF;
   box-shadow: 0 .5px 1px rgba(0,0,0,.08);}
-[data-testid="stTabs"] [role="tablist"] {gap: .25rem;}
+/* tab dạng "segmented control" của macOS: mỗi tab là một ô tách biệt, tab đang chọn nổi lên */
+[data-testid="stTabs"] [role="tablist"] {gap: .3rem; padding: .3rem; margin-bottom: .6rem;
+  background: rgba(118,118,128,.12); border-radius: 12px; width: fit-content; max-width: 100%;
+  overflow-x: auto; scrollbar-width: none;}
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {display: none;}
+[data-testid="stTabs"] [role="tab"] {padding: .42rem .95rem !important; height: auto;
+  border-radius: 9px; color: #3C3C43; white-space: nowrap; transition: background .15s, color .15s;}
+[data-testid="stTabs"] [role="tab"] p {font-size: .9rem; font-weight: 500; margin: 0;}
+[data-testid="stTabs"] [role="tab"]:hover {background: rgba(255,255,255,.6); color: #1D1D1F;}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {background: #FFFFFF; color: #007AFF;
+  box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.04);}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] p {font-weight: 600;}
+[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+[data-testid="stTabs"] [data-baseweb="tab-border"],
+[data-testid="stTabs"] [role="tablist"] .react-aria-SelectionIndicator {display: none;}
 /* thanh cuộn mảnh kiểu Mac */
 .stApp ::-webkit-scrollbar {width: 8px; height: 8px;}
 .stApp ::-webkit-scrollbar-thumb {background: rgba(0,0,0,.18); border-radius: 8px;
@@ -226,6 +240,11 @@ header[data-testid="stHeader"] {background: rgba(28,28,30,.72) !important;
 [class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #2C2C2E;
   border-color: rgba(255,255,255,.07) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3);}
 .stApp [data-testid="stBaseButton-secondary"] {background: #3A3A3C;}
+[data-testid="stTabs"] [role="tablist"] {background: rgba(118,118,128,.24);}
+[data-testid="stTabs"] [role="tab"] {color: #EBEBF5;}
+[data-testid="stTabs"] [role="tab"]:hover {background: rgba(255,255,255,.08); color: #FFFFFF;}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {background: #636366; color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);}
 .stApp ::-webkit-scrollbar-thumb {background: rgba(255,255,255,.22);}
 </style>"""
 
