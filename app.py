@@ -57,6 +57,8 @@ P = {
                   icon=":material/assignment_ind:", url_path="ho-so-nhap-hoc"),
     "kt": st.Page("views/ke_toan.py", title="Kế toán", icon=":material/payments:",
                   url_path="ke-toan"),
+    "nt": st.Page("views/noi_tru.py", title="Nội trú", icon=":material/bed:",
+                  url_path="noi-tru"),
     "bc": st.Page("views/bao_cao.py", title="Báo cáo", icon=":material/monitoring:",
                   url_path="bao-cao"),
     "tl": st.Page("views/tro_ly.py", title="Conan Ro", icon=":material/smart_toy:",
@@ -161,13 +163,13 @@ def _dang_xuat():
 
 # Thanh menu ngang như app cũ: Tổng quan · Data tuyển sinh · Hồ sơ nhập học · Kế toán · Báo cáo
 # Phân quyền: tài khoản của app chỉ thấy các trang được phép (Quản trị: tất cả)
-_pages = [P["home"], P["ts"], P["nh"], P["kt"], P["bc"], P["cd"]]
+_pages = [P["home"], P["ts"], P["nh"], P["kt"], P["nt"], P["bc"], P["cd"]]
 if S.get("tk"):
     _pages = [p for p in _pages if p.title in S["tk"]["Quyen"]] or [P["home"]]
 # Trợ lý: ai cũng dùng được, câu trả lời tự giới hạn theo quyền xem của tài khoản
 _pages.insert(len(_pages) - (_pages[-1] is P["cd"]), P["tl"])
 _FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc",
-         "kt": "ke_toan", "bc": "bao_cao", "tl": "tro_ly", "cd": "cai_dat"}
+         "kt": "ke_toan", "nt": "noi_tru", "bc": "bao_cao", "tl": "tro_ly", "cd": "cai_dat"}
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
 pg = st.navigation(_pages, position="top")

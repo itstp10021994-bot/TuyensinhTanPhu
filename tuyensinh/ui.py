@@ -225,8 +225,9 @@ header [data-testid="stTopNavLink"][href*="tro-ly"], header a[href$="/tro-ly"],
 [data-testid="stTopNavLinkContainer"]:has(a[href$="/tro-ly"]) {display: none !important;}
 .st-key-tp_toolbar {top: .3rem;}
 /* màn vừa: menu chỉ còn chữ (bỏ icon) để chừa chỗ cho thanh công cụ */
-@media (max-width: 1400px) { [data-testid="stTopNavLinkContainer"] a [data-testid="stIconMaterial"]
-  {display: none;}
+@media (max-width: 1400px) { [data-testid="stTopNavLinkContainer"] a [data-testid="stIconMaterial"],
+  [data-testid="stTopNavLinkContainer"] a > span:has([data-testid="stIconMaterial"])
+  {display: none !important;}
   [data-testid="stTopNavLinkContainer"] a {padding: 0 5px !important;}
   [data-testid="stTopNavLinkContainer"] a p, [data-testid="stTopNavLinkContainer"] a span
   {font-size: .86rem !important;} }

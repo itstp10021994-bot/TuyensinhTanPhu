@@ -294,10 +294,43 @@ GIAY_TO = ListDef(
     ),
 )
 
+# ---------------------------------------------------------------- Nội trú
+# Đánh giá hằng ngày của giáo viên quản nhiệm phòng: nề nếp và học bài tối
+MUC_DANH_GIA = ("Tốt", "Khá", "Trung bình", "Chưa tốt")
+NOI_TRU_PHONG = ListDef(
+    name="NoiTru_Phong",
+    title="Phòng nội trú, giáo viên quản nhiệm và học sinh trong phòng",
+    fields=(
+        Field("NamHoc", "Năm học", required=True),
+        Field("TenPhong", "Tên phòng", required=True),
+        Field("Khu", "Khu / dãy nhà"),
+        Field("GiaoVienID", "ID tài khoản giáo viên quản nhiệm"),
+        Field("GiaoVien", "Giáo viên quản nhiệm"),
+        Field("HocSinhIDs", "Học sinh trong phòng (ID hồ sơ nhập học)", NOTE),
+        Field("GhiChu", "Ghi chú", NOTE),
+    ),
+)
+# Mỗi bản ghi = một phòng trong một ngày; đánh giá từng học sinh lưu dạng JSON (ghi 1 lần/phòng)
+NOI_TRU_DANH_GIA = ListDef(
+    name="NoiTru_DanhGia",
+    title="Đánh giá nội trú theo ngày (nề nếp, học bài tối)",
+    fields=(
+        Field("NamHoc", "Năm học", required=True),
+        Field("Ngay", "Ngày", DATE, required=True),
+        Field("PhongID", "ID phòng"),
+        Field("Phong", "Phòng"),
+        Field("NguoiDanhGia", "Người đánh giá"),
+        Field("DuLieu", "Đánh giá từng học sinh (JSON)", NOTE),
+        Field("SoHS", "Số học sinh", NUMBER),
+        Field("SoChuaTot", "Số lượt Trung bình / Chưa tốt", NUMBER),
+    ),
+)
+
 # Tài khoản đăng nhập của app (dùng khi chưa bật đăng nhập Microsoft 365)
-VAI_TRO = ("Quản trị", "Tuyển sinh", "Kế toán", "Giáo vụ", "Chỉ xem báo cáo")
+VAI_TRO = ("Quản trị", "Tuyển sinh", "Kế toán", "Giáo vụ", "Chỉ xem báo cáo",
+           "GV quản nhiệm", "Tổ trưởng quản nhiệm")
 # Các trang có thể phân quyền (tên trùng tiêu đề trang trên thanh menu)
-TRANG = ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Kế toán", "Báo cáo",
+TRANG = ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Kế toán", "Nội trú", "Báo cáo",
          "Cài đặt & đồng bộ")
 QUYEN_MAC_DINH = {
     "Quản trị": TRANG,
@@ -305,6 +338,8 @@ QUYEN_MAC_DINH = {
     "Kế toán": ("Tổng quan", "Kế toán", "Hồ sơ nhập học", "Báo cáo"),
     "Giáo vụ": ("Tổng quan", "Hồ sơ nhập học", "Báo cáo"),
     "Chỉ xem báo cáo": ("Tổng quan", "Báo cáo"),
+    "GV quản nhiệm": ("Nội trú",),
+    "Tổ trưởng quản nhiệm": ("Nội trú",),
 }
 TAI_KHOAN = ListDef(
     name="DanhMuc_TaiKhoan",
@@ -319,7 +354,7 @@ TAI_KHOAN = ListDef(
     ),
 )
 
-ALL_LISTS = (TUYEN_SINH, NHAP_HOC, GIAY_TO, TAI_KHOAN)
+ALL_LISTS = (TUYEN_SINH, NHAP_HOC, GIAY_TO, TAI_KHOAN, NOI_TRU_PHONG, NOI_TRU_DANH_GIA)
 
 
 # Cột của Data_NhapHoc không có trong biểu mẫu VEMIS (chỉ dùng trong app / SharePoint)
