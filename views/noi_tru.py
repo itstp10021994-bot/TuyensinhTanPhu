@@ -1,6 +1,7 @@
 """Nội trú: giáo viên quản nhiệm phòng đánh giá nề nếp và học bài tối của từng học sinh mỗi ngày.
 
-- Nhập đánh giá: chỉ giáo viên quản nhiệm của phòng (mặc định mọi em "Tốt", sửa em có vấn đề).
+- Nhập đánh giá: giáo viên quản nhiệm (phòng mình); Tổ trưởng quản nhiệm, Quản trị (mọi phòng).
+  Mặc định mọi em "Tốt", chỉ sửa em có vấn đề.
 - Xem đánh giá: mọi người vào được trang.
 - Báo cáo, Phòng & giáo viên: Tổ trưởng quản nhiệm và Quản trị.
 """
@@ -90,7 +91,7 @@ ui.kpi(k[2], "Phòng đã đánh giá hôm nay", f"{hn['PhongID'].nunique()}/{le
 ui.kpi(k[3], "Lượt TB / Chưa tốt hôm nay",
        int(hn["Nề nếp"].isin(NT.CAN_CHU_Y).sum() + hn["Học bài tối"].isin(NT.CAN_CHU_Y).sum()))
 
-phong_cua_toi = [p for p in phongs if NT.duoc_nhap(p, tk)]  # chỉ phòng mình quản nhiệm
+phong_cua_toi = [p for p in phongs if NT.duoc_nhap(p, tk)]  # GV: phòng mình; quản lý: mọi phòng
 ten_tab = []
 if phong_cua_toi:
     ten_tab.append(":material/edit_note: Nhập đánh giá")
@@ -116,7 +117,8 @@ def render_nhap():
     phong = c2.selectbox("Phòng", phong_cua_toi, key="nt_phong",
                          format_func=lambda p: f"{p['TenPhong']}"
                          + (f" · {p['Khu']}" if p.get("Khu") else "")
-                         + f" · {len(NT.hs_ids(p))} học sinh")
+                         + f" · {len(NT.hs_ids(p))} học sinh"
+                         + (f" · GV {p['GiaoVien']}" if quan_ly and p.get("GiaoVien") else ""))
     ids = NT.hs_ids(phong)
     if not ids:
         ui.empty_state("group_off", "Phòng chưa có học sinh",
@@ -343,8 +345,9 @@ def render_phong():
                           index=gv_opts.index(gv_cu) if gv_cu else 0, key=f"{k}_gv",
                           format_func=lambda t: "— Chưa phân công —" if t is None else
                           f"{t.get('HoTen')} ({t.get('VaiTro')})",
-                          help="Chỉ giáo viên này nhập được đánh giá của phòng. Tạo tài khoản "
-                               "vai trò \"GV quản nhiệm\" ở Cài đặt → Tài khoản.")
+                          help="Giáo viên này nhập đánh giá của phòng (Tổ trưởng và Quản trị "
+                               "cũng nhập được mọi phòng). Tạo tài khoản vai trò \"GV quản "
+                               "nhiệm\" ở Cài đặt → Tài khoản.")
         o_khac = {i for q in phongs if q.get("id") != p.get("id") for i in NT.hs_ids(q)}
         lua_chon = [i for i in HS if i not in o_khac]
         hien_tai = NT.hs_ids(p)

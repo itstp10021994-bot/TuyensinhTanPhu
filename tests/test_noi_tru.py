@@ -31,8 +31,9 @@ def test_phong_va_quyen(st_):
         NT.luu_phong(st_, phongs, NAM, "P102", "", GV2, ["2", "3"])
     p2 = NT.luu_phong(st_, phongs, NAM, "P102", "", GV2, ["3"])
     assert NT.hs_ids(p1) == ["1", "2"]
-    # chỉ GV quản nhiệm của phòng được nhập; tổ trưởng chỉ xem + quản lý
-    assert NT.duoc_nhap(p1, GV1) and not NT.duoc_nhap(p1, GV2) and not NT.duoc_nhap(p1, TT)
+    # GV chỉ nhập phòng mình; tổ trưởng / quản trị nhập mọi phòng
+    assert NT.duoc_nhap(p1, GV1) and not NT.duoc_nhap(p1, GV2)
+    assert NT.duoc_nhap(p1, TT) and NT.duoc_nhap(p2, {"id": "", "VaiTro": "Quản trị"})
     assert NT.duoc_nhap(p2, GV2)
     assert NT.la_quan_ly(TT) and not NT.la_quan_ly(GV1) and NT.la_quan_ly(None)
 

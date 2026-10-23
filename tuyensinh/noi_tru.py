@@ -5,7 +5,8 @@
 - Đánh giá (list NoiTru_DanhGia): mỗi bản ghi là MỘT PHÒNG trong MỘT NGÀY, đánh giá từng học
   sinh lưu dạng JSON — lưu cả phòng chỉ cần 1 lần ghi lên SharePoint.
 
-Quyền: nhập/sửa đánh giá chỉ giáo viên quản nhiệm của phòng; xem đánh giá: mọi người vào được
+Quyền: nhập/sửa đánh giá: giáo viên quản nhiệm của phòng (phòng mình), Tổ trưởng quản nhiệm và
+Quản trị (mọi phòng); xem đánh giá: mọi người vào được
 trang; quản lý phòng và báo cáo tổng hợp: Tổ trưởng quản nhiệm, Quản trị.
 """
 from __future__ import annotations
@@ -32,8 +33,8 @@ def la_quan_ly(tk: dict | None) -> bool:
 
 
 def duoc_nhap(phong: dict, tk: dict | None) -> bool:
-    """Chỉ giáo viên quản nhiệm của phòng được nhập / sửa đánh giá."""
-    if not tk:
+    """Giáo viên quản nhiệm nhập phòng mình; Tổ trưởng quản nhiệm / Quản trị nhập mọi phòng."""
+    if la_quan_ly(tk):
         return True
     return bool(tk.get("id")) and str(phong.get("GiaoVienID") or "") == str(tk["id"])
 
