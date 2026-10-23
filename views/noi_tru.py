@@ -32,10 +32,23 @@ phongs_all = ui.records(NOI_TRU_PHONG, optional=True)
 dg_all = ui.records(NOI_TRU_DANH_GIA, optional=True)
 loi = ui.list_error(NOI_TRU_PHONG) or ui.list_error(NOI_TRU_DANH_GIA)
 if loi:
-    with ui.section("Chưa có dữ liệu nội trú trên SharePoint"):
-        st.warning("Chưa đọc được list **NoiTru_Phong** / **NoiTru_DanhGia** (có thể chưa tạo).",
-                   icon=":material/warning:")
-        st.caption(f"Chi tiết: {loi}")
+    chua_tao = "does not exist" in loi or "404" in loi
+    with ui.section("Thiết lập phân hệ Nội trú" if chua_tao else "Không đọc được dữ liệu nội trú"):
+        if chua_tao:
+            st.info("Phân hệ Nội trú cần **2 list mới trên SharePoint** (NoiTru_Phong, "
+                    "NoiTru_DanhGia) nhưng chưa được tạo. Đây là bước làm **một lần**.",
+                    icon=":material/info:")
+            if quan_ly:
+                st.markdown("Bấm **Tạo list nội trú** bên dưới — app tự tạo list và các cột "
+                            "(khoảng 30 giây).")
+            else:
+                st.markdown("Nhờ **Quản trị** hoặc **Tổ trưởng quản nhiệm** mở trang này và bấm "
+                            "**Tạo list nội trú**.")
+        else:
+            st.warning("Chưa đọc được list nội trú trên SharePoint (lỗi kết nối hoặc quyền).",
+                       icon=":material/warning:")
+        with st.expander("Chi tiết kỹ thuật"):
+            st.code(loi, language=None, wrap_lines=True)
         if quan_ly and st.button("Tạo list nội trú", type="primary",
                                  icon=":material/playlist_add:"):
             with st.status("Đang tạo list…", expanded=True) as stt:
