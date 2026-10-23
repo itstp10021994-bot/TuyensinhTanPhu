@@ -5,8 +5,8 @@ import pandas as pd
 import streamlit as st
 
 from tuyensinh import config, importer, services, tai_khoan, ui
-from tuyensinh.schema import (GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, QUYEN_MAC_DINH, TAI_KHOAN,
-                              TRANG, TUYEN_SINH, VAI_TRO)
+from tuyensinh.schema import (ALL_LISTS, GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, QUYEN_MAC_DINH,
+                              TAI_KHOAN, TRANG, TUYEN_SINH, VAI_TRO)
 
 S = st.session_state
 ui.page_header("Cài đặt & đồng bộ", "Kết nối SharePoint qua Power Automate, tạo list và "
@@ -243,8 +243,8 @@ with tab_sync:
         url = str(config.get("PA_FLOW_URL") or config.section("powerautomate").get("flow_url") or "")
         ui.kv([("Cách lưu dữ liệu", names.get(backend, backend)),
                ("Flow URL", (url[:48] + "…" + url[-8:]) if len(url) > 60 else (url or "—")),
-               ("List Data tuyển sinh", config.list_name(TUYEN_SINH.name)),
-               ("List Hồ sơ nhập học", config.list_name(NHAP_HOC.name))])
+               ("Các list SharePoint", ", ".join(config.list_name(ld.name)
+                                                 for ld in ALL_LISTS))])
         if backend == "local":
             st.warning("Đang lưu trên máy chủ app, sẽ **mất khi app khởi động lại**. Làm theo hướng dẫn "
                        "bên dưới để chuyển sang SharePoint.", icon=":material/warning:")
@@ -281,18 +281,45 @@ with tab_sync:
 
     # ------------------------------------------------------------------ 2. tạo list
     with ui.section("2. Tạo list / thêm cột còn thiếu",
-                    "Tạo list Data_TuyenSinh, Data_NhapHoc (nếu chưa có) và thêm cột còn thiếu. "
-                    "Không xóa hay đổi cột đã có. Tài khoản chạy flow cần quyền Owner trên site."):
-        if st.button("Tạo list / thêm cột", icon=":material/playlist_add:",
-                     disabled=backend == "local"):
-            logs = []
+                    f"Tạo / cập nhật toàn bộ {len(ALL_LISTS)} list SharePoint của app (list chưa có "
+                    "thì tạo mới, list đã có thì thêm cột còn thiếu). Không xóa hay đổi cột đã có. "
+                    "Tài khoản chạy flow cần quyền Owner trên site."):
+        tinh_trang = {r["list"].name: r for r in S.get("_check", [])}
+
+        def _tt(ld) -> str:
+            r = tinh_trang.get(ld.name)
+            if r is None:
+                return "Chưa kiểm tra"
+            if r["loi"]:
+                return "Lỗi kết nối"
+            if not r["co_list"]:
+                return "Chưa có list"
+            return f"Thiếu {len(r['thieu'])} cột" if r["thieu"] else "Đủ cột"
+
+        st.dataframe(pd.DataFrame([{
+            "List trên SharePoint": config.list_name(ld.name), "Dùng cho": ld.title,
+            "Số cột": len(ld.fields), "Tình trạng": _tt(ld)} for ld in ALL_LISTS]),
+            hide_index=True, width="stretch", column_config={
+                "Dùng cho": st.column_config.TextColumn(width="large")})
+        b1, b2 = st.columns(2)
+        if b1.button("Tạo list / thêm cột (tất cả)", type="primary",
+                     icon=":material/playlist_add:", disabled=backend == "local",
+                     width="stretch"):
             try:
                 with st.status("Đang thiết lập…", expanded=True) as stt:
-                    importer.setup_lists(storage, log=lambda m: (logs.append(m), stt.write(m)))
+                    importer.setup_lists(storage, log=stt.write, lists=ALL_LISTS)
+                    stt.update(label="Đã thiết lập xong — đang kiểm tra lại…", state="running")
+                    S["_check"] = importer.check_lists(storage)
                     stt.update(label="Đã thiết lập xong", state="complete")
-                S.pop("_check", None)
+                ui.refresh()
+                st.rerun()
             except Exception as e:
                 ui.error_state(e, compact=True)
+        if b2.button("Kiểm tra tình trạng các list", icon=":material/fact_check:",
+                     disabled=backend == "local", width="stretch"):
+            with st.spinner("Đang kiểm tra…"):
+                S["_check"] = importer.check_lists(storage)
+            st.rerun()
 
     # ------------------------------------------------------------------ 3. nhập Excel
     with ui.section("3. Nhập dữ liệu từ Excel",
