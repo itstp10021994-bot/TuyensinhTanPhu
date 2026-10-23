@@ -86,6 +86,8 @@ CSS_TEMPLATE = """
   width: auto !important; background: transparent;}
 .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 140px;}
 /* màn hình vừa: bỏ dòng nguồn dữ liệu để không đè lên menu (đủ 6 trang) */
+[data-testid="stToolbarActions"] {display: none !important;}  /* Share, ★, GitHub của Cloud */
+@media (max-width: 1720px) { .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;} }
 @media (max-width: 1500px) { .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;}
   .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 118px; width: 118px !important;}
   .st-key-tp_toolbar .stElementContainer:has([data-testid="stSelectbox"]) {width: 118px !important;}

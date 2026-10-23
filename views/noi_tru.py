@@ -93,7 +93,7 @@ ui.kpi(k[3], "Lượt TB / Chưa tốt hôm nay",
 
 phong_cua_toi = [p for p in phongs if NT.duoc_nhap(p, tk)]  # GV: phòng mình; quản lý: mọi phòng
 ten_tab = []
-if phong_cua_toi:
+if phong_cua_toi or quan_ly:  # quản lý luôn thấy tab (chưa có phòng: hướng dẫn tạo phòng)
     ten_tab.append(":material/edit_note: Nhập đánh giá")
 ten_tab.append(":material/visibility: Xem đánh giá")
 if quan_ly:
@@ -111,6 +111,11 @@ def _to_mau(v):
 
 # ------------------------------------------------------------------ nhập đánh giá
 def render_nhap():
+    if not phong_cua_toi:
+        ui.empty_state("meeting_room", "Chưa có phòng nội trú",
+                       f"Năm học {nam_hoc} chưa có phòng. Vào tab Phòng & giáo viên để tạo phòng, "
+                       "chọn giáo viên quản nhiệm và xếp học sinh — sau đó nhập đánh giá ở đây.")
+        return
     c1, c2 = st.columns([1, 2], vertical_alignment="bottom")
     ngay = c1.date_input("Ngày", hom_nay, max_value=hom_nay, format="DD/MM/YYYY",
                          key="nt_ngay")
