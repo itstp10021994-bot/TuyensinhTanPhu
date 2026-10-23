@@ -1,6 +1,7 @@
 """Thiết lập list SharePoint và nhập dữ liệu Excel — dùng chung cho trang "Cài đặt" và scripts/."""
 from __future__ import annotations
 
+import re
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
@@ -9,7 +10,8 @@ import pandas as pd
 
 from . import config, danh_muc, services
 from .export_vemis import COLUMNS, HEADER_ROW
-from .schema import ALL_LISTS, NHAP_HOC, TUYEN_SINH, ListDef
+from .schema import (ALL_LISTS, BOOL, CHOICE, DATE, NHAP_HOC, NOTE, NUMBER, TUYEN_SINH,
+                     ListDef)
 from .storage.base import Storage
 from .storage.convert import ColumnMap
 
@@ -108,7 +110,129 @@ def read_frame(src, ld: ListDef, sheet: str | None = None, vemis: bool = False,
     keep = [c for c in df.columns if c in ld.keys or c == "Title"]
     skipped = [str(c) for c in df.columns if c not in keep]
     df = df[keep].dropna(how="all")
+    for f in ld.fields:  # ngày gõ dạng 01/05/2012 (kiểu Việt Nam) -> 2012-05-01
+        if f.type == DATE and f.key in df.columns:
+            df[f.key] = df[f.key].map(ngay_chuan)
     return df, skipped
+
+
+def ngay_chuan(v):
+    """Chuẩn hóa ngày trong file: "2012-05-01 00:00:00" / "01/05/2012" / "1-5-2012" -> ISO."""
+    if _blank(v):
+        return v
+    s = str(v).strip()
+    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
+        return s[:10]
+    d = pd.to_datetime(s, dayfirst=True, errors="coerce")
+    return s if pd.isna(d) else d.date().isoformat()
+
+
+# ------------------------------------------------------------------ file mẫu
+BO_QUA_MAU = {"TuyenSinhID"}  # trường app tự quản lý, không cho nhập tay
+
+
+def truong_mau(ld: ListDef) -> list:
+    return [f for f in ld.fields if f.key not in BO_QUA_MAU and f.group != "_"]
+
+
+def _lua_chon(f) -> list[str]:
+    """Danh sách chọn cố định của trường (bỏ danh mục phụ thuộc như phường/xã, trường học)."""
+    if f.type != CHOICE:
+        return []
+    if isinstance(f.options, str) and (f.options.startswith("@xa:")
+                                       or f.options.startswith("@truong:")):
+        return []
+    try:
+        return [str(x) for x in danh_muc.options_for(f)]
+    except Exception:
+        return []
+
+
+def file_mau(ld: ListDef) -> bytes:
+    """File Excel mẫu để nhập: sheet nhập liệu (tiêu đề = tên cột trong app, có ô chọn) và
+    sheet hướng dẫn. Tên sheet nhập liệu = tên list -> trang Cài đặt tự nhận đúng list."""
+    import io
+
+    from openpyxl import Workbook
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    fields = truong_mau(ld)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = ld.name
+    dm = wb.create_sheet("DanhMuc")
+    hd = wb.create_sheet("HuongDan")
+    bat_buoc = PatternFill("solid", fgColor="FFE0B2")
+    thuong = PatternFill("solid", fgColor="DCEBFF")
+    n_dong = 2000
+    cot_dm = 0
+    for i, f in enumerate(fields, 1):
+        c = ws.cell(1, i, f.label)
+        c.font = Font(bold=True)
+        c.fill = bat_buoc if f.required else thuong
+        c.alignment = Alignment(wrap_text=True, vertical="center")
+        col = get_column_letter(i)
+        ws.column_dimensions[col].width = max(14, min(36, len(f.label) + 4))
+        if f.type == DATE:
+            for r in range(2, n_dong + 1):
+                ws.cell(r, i).number_format = "DD/MM/YYYY"
+            c.comment = Comment("Ngày dạng dd/mm/yyyy, vd 01/05/2012", "App tuyển sinh")
+        ds = _lua_chon(f)
+        if ds:
+            cot_dm += 1
+            dcol = get_column_letter(cot_dm)
+            dm.cell(1, cot_dm, f.label).font = Font(bold=True)
+            for r, v in enumerate(ds, 2):
+                dm.cell(r, cot_dm, v)
+            dv = DataValidation(type="list", allow_blank=True,
+                                formula1=f"=DanhMuc!${dcol}$2:${dcol}${len(ds) + 1}",
+                                showErrorMessage=not f.free, errorStyle="warning")
+            dv.add(f"{col}2:{col}{n_dong}")
+            ws.add_data_validation(dv)
+    ws.freeze_panes = "B2"
+    ws.row_dimensions[1].height = 42
+    dm.sheet_state = "hidden"
+
+    hd.column_dimensions["A"].width = 34
+    hd.column_dimensions["B"].width = 11
+    hd.column_dimensions["C"].width = 12
+    hd.column_dimensions["D"].width = 70
+    loi = [f"FILE MẪU NHẬP: {ld.title.upper()} (list {config.list_name(ld.name)})", "",
+           f"1. Nhập mỗi học sinh một dòng ở sheet \"{ld.name}\", bắt đầu từ dòng 2. Không đổi "
+           "tên, không xóa dòng tiêu đề.",
+           "2. Cột tô CAM là bắt buộc; cột XANH để trống được. Cột không dùng có thể xóa cả cột.",
+           "3. Ô có mũi tên: chọn trong danh sách. Ngày gõ dạng dd/mm/yyyy (vd 01/05/2012).",
+           "4. Năm học để trống thì app lấy năm học chọn lúc nhập.",
+           "5. Vào app: Cài đặt & đồng bộ → Kết nối & đồng bộ → 3. Nhập dữ liệu từ Excel → tải file "
+           "lên → kiểm tra bảng xem trước → bấm Nhập.",
+           "6. Nhập lại cùng file vẫn an toàn: dòng đã có (trùng họ tên + "
+           + ("ngày sinh" if ld is NHAP_HOC else "SĐT + ngày liên hệ") + " + năm học) được bỏ qua.",
+           ""]
+    for r, t in enumerate(loi, 1):
+        hd.cell(r, 1, t).font = Font(bold=r == 1, size=13 if r == 1 else 11)
+    r0 = len(loi) + 1
+    for j, t in enumerate(("Cột", "Bắt buộc", "Kiểu", "Giá trị hợp lệ / ghi chú"), 1):
+        c = hd.cell(r0, j, t)
+        c.font = Font(bold=True)
+        c.fill = thuong
+    kieu = {DATE: "Ngày", NUMBER: "Số", CHOICE: "Chọn", NOTE: "Văn bản dài", BOOL: "Có/Không"}
+    for k, f in enumerate(fields, r0 + 1):
+        ds = _lua_chon(f)
+        ghi = ", ".join(ds[:15]) + (f" … ({len(ds)} giá trị, xem ô chọn)" if len(ds) > 15 else "")
+        if not ds and isinstance(f.options, str) and f.options.startswith(("@xa:", "@truong:")):
+            ghi = "Tên theo địa giới mới (gõ tay), vd Phường Tân Phú"
+        if f.free and ds:
+            ghi += " — được gõ giá trị khác"
+        hd.cell(k, 1, f.label)
+        hd.cell(k, 2, "Có" if f.required else "")
+        hd.cell(k, 3, kieu.get(f.type, "Chữ"))
+        hd.cell(k, 4, ghi).alignment = Alignment(wrap_text=True)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 # ------------------------------------------------------------------ nhập

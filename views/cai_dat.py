@@ -323,9 +323,18 @@ with tab_sync:
 
     # ------------------------------------------------------------------ 3. nhập Excel
     with ui.section("3. Nhập dữ liệu từ Excel",
-                    "Dùng file Data_TuyenSinh_chuan_hoa.xlsx (hoặc file Export to Excel từ list). "
+                    "Bước 1: tải file mẫu, điền mỗi học sinh một dòng. Bước 2: tải file lên ở dưới, "
+                    "xem trước rồi bấm Nhập. Nhận cả file Export to Excel từ list và file VEMIS. "
                     "Chạy lại an toàn: dòng đã có trên list sẽ được bỏ qua."):
-        up = st.file_uploader("File Excel", type=["xlsx", "csv"])
+        m1, m2 = st.columns(2)
+        for col, ld_mau in ((m1, NHAP_HOC), (m2, TUYEN_SINH)):
+            col.download_button(
+                f"Tải file mẫu {ld_mau.title}", lambda ld_mau=ld_mau: importer.file_mau(ld_mau),
+                file_name=f"Mau_{ld_mau.name}.xlsx", mime=ui.XLSX, on_click="ignore",
+                icon=":material/download:", width="stretch", key=f"mau_{ld_mau.name}",
+                help="Tiêu đề cột đúng như app, cột cam là bắt buộc, có ô chọn sẵn và sheet "
+                     "HuongDan giải thích từng cột.")
+        up = st.file_uploader("File Excel đã điền", type=["xlsx", "csv"])
         if up is not None:
             try:
                 sheets = pd.ExcelFile(up).sheet_names if up.name.lower().endswith(".xlsx") else []

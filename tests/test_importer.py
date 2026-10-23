@@ -94,3 +94,34 @@ def test_fill_blanks(tmp_path):
     assert res == {"updated": 1, "cells": 1, "not_found": 1, "total": 2}
     got = st.get_item(NHAP_HOC.name, it["id"])
     assert got["Khoi"] == "7" and got["LopHoc"] == "7.1"  # không ghi đè ô đã có
+
+
+def test_file_mau_nhap_lai_duoc(tmp_path):
+    """File mẫu: điền vài dòng (ngày gõ dd/mm/yyyy hoặc ô ngày thật) -> nhập lên list được."""
+    import datetime
+    import io
+
+    from openpyxl import load_workbook
+
+    from tuyensinh import importer
+    from tuyensinh.schema import NHAP_HOC
+    from tuyensinh.storage.local import LocalStorage
+
+    wb = load_workbook(io.BytesIO(importer.file_mau(NHAP_HOC)))
+    assert wb.sheetnames[0] == NHAP_HOC.name and "HuongDan" in wb.sheetnames
+    ws = wb[NHAP_HOC.name]
+    hdr = [c.value for c in ws[1]]
+    lab = {f.key: f.label for f in NHAP_HOC.fields}
+    assert lab["HoTen"] in hdr and "ID tuyển sinh" not in hdr
+    for r, (ten, ns) in enumerate((("Nguyễn Văn Mẫu", "01/05/2012"),
+                                   ("Trần Thị Thử", datetime.datetime(2013, 2, 3))), 2):
+        ws.cell(r, hdr.index(lab["HoTen"]) + 1, ten)
+        ws.cell(r, hdr.index(lab["NgaySinh"]) + 1, ns)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    df, skipped = importer.read_frame(buf, NHAP_HOC)
+    assert not skipped and df["NgaySinh"].tolist() == ["2012-05-01", "2013-02-03"]
+    st = LocalStorage(tmp_path / "m.sqlite3")
+    assert importer.import_rows(st, NHAP_HOC, df, "2026-2027", keep_all=False)["ok"] == 2
+    assert importer.import_rows(st, NHAP_HOC, df, "2026-2027", keep_all=False)["skipped"] == 2
