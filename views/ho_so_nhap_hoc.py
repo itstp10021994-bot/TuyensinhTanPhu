@@ -12,7 +12,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import bien_nhan, export_vemis, services, ui
+from tuyensinh import bien_nhan, config, export_vemis, services, ui
 from tuyensinh.schema import (G_CHUNG, G_DIACHI, G_GIADINH, G_GIAYTO, G_HOCPHI, G_HOCTAP,
                               G_KHANCAP, G_LIENLAC, G_MON, G_NGANHANG, GIAY_TO_NHAP_HOC, MON_HOC,
                               NHAP_HOC, TINH_TRANG_HS, TUYEN_SINH)
@@ -532,10 +532,69 @@ def render_right(item_id: str | None):
             st.rerun()
 
 
+@st.dialog("Lên lớp: chuyển học sinh cũ sang năm học mới", width="large")
+def len_lop_dialog():
+    years = [y for y in config.school_years() if y < nam_hoc]
+    if not years:
+        st.info("Không có năm học trước năm đang chọn.", icon=":material/info:")
+        return
+    c1, c2, c3 = st.columns([1.2, 1.2, 1.6], vertical_alignment="bottom")
+    nam_cu = c1.selectbox("Lấy học sinh của năm", years, index=len(years) - 1, key="ll_nam")
+    c2.text_input("Sang năm học", nam_hoc, disabled=True)
+    goi_y = c3.checkbox("Gợi ý lớp mới (6A1 → 7A1)", value=True, key="ll_goi_y",
+                        help="Bỏ chọn nếu xếp lớp lại từ đầu (để trống lớp, xếp sau).")
+    rows = services.ds_len_lop(ui.records(NHAP_HOC), nam_cu, nam_hoc, goi_y_lop=goi_y,
+                               rut_ids={str(x) for x in rut})
+    ok = [r for r in rows if not r["_ly_do"]]
+    loai = [r for r in rows if r["_ly_do"]]
+    st.caption(f"Năm {nam_cu}: **{len(rows)}** hồ sơ · **{len(ok)}** em sẽ lên lớp · "
+               f"{len(loai)} em không chuyển. Hồ sơ năm mới chép thông tin cá nhân, gia đình, "
+               "địa chỉ, giấy tờ đã nộp; khối tăng 1, lớp cũ ghi vào ô Lớp cũ, tình trạng "
+               "\"Học tiếp\". Không chép học phí, tiền giữ chỗ, ghi chú.")
+    if loai:
+        with st.expander(f"{len(loai)} em không chuyển (đã nghỉ, học xong khối 12, đã có hồ sơ…)"):
+            st.dataframe(pd.DataFrame([{"Họ tên": r.get("HoTen"), "Khối": r["_khoi_cu"],
+                                        "Lớp": r.get("LopCu"), "Lý do": r["_ly_do"]}
+                                       for r in loai]), hide_index=True, width="stretch",
+                         height=min(38 + 35 * len(loai), 300))
+    if not ok:
+        st.success(f"Không còn học sinh nào cần chuyển sang {nam_hoc}.",
+                   icon=":material/check_circle:")
+        return
+    bang = pd.DataFrame([{"Chọn": True, "Họ tên": r.get("HoTen"),
+                          "Ngày sinh": str(r.get("NgaySinh") or "")[:10],
+                          "Khối cũ": r["_khoi_cu"], "Lớp cũ": r.get("LopCu"),
+                          "Khối mới": r["Khoi"], "Lớp mới": r.get("LopHoc") or "",
+                          "N.trú, B.trú": r.get("NoiTruBanTru") or ""} for r in ok])
+    sua = st.data_editor(bang, hide_index=True, width="stretch", height=380,
+                         disabled=["Họ tên", "Ngày sinh", "Khối cũ", "Lớp cũ", "Khối mới",
+                                   "N.trú, B.trú"],
+                         column_config={"Chọn": st.column_config.CheckboxColumn(width="small"),
+                                        "Lớp mới": st.column_config.TextColumn(
+                                            help="Sửa được; để trống thì xếp lớp sau")},
+                         key=f"ll_ed_{nam_cu}_{goi_y}_{ui.data_version()}")
+    chon = [dict(r, LopHoc=str(lop or "").strip()) for r, c, lop in
+            zip(ok, sua["Chọn"], sua["Lớp mới"]) if c]
+    if st.button(f"Tạo {len(chon)} hồ sơ năm {nam_hoc}", type="primary",
+                 icon=":material/upgrade:", width="stretch", disabled=not chon):
+        bar = st.progress(0.0, text="Đang tạo hồ sơ…")
+        n = ui.mutate(services.tao_len_lop, storage, chon, nam_hoc,
+                      progress=lambda d, t: bar.progress(d / max(t, 1),
+                                                         text=f"Đã tạo {d}/{t} hồ sơ"),
+                      success=f"Đã chuyển {len(chon)} học sinh sang {nam_hoc}")
+        if n is not None:
+            st.rerun()
+
+
 def render_page():
     actions = ui.page_header("Hồ sơ nhập học", f"Năm học {nam_hoc}")
     view_all = nh
     export_slot = actions.container(width="content")
+    tk = S.get("tk")
+    if not tk or tk.get("VaiTro") in ("Quản trị", "Giáo vụ"):
+        if actions.button("Lên lớp từ năm trước", icon=":material/upgrade:",
+                          help="Chuyển học sinh đang học của năm trước sang năm học này"):
+            len_lop_dialog()
     actions.button("Thêm hồ sơ", icon=":material/add:", on_click=open_record, args=("new",),
                    help="Thêm học sinh nhập học không qua Data tuyển sinh")
 

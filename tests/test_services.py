@@ -255,3 +255,35 @@ def test_bien_nhan_html():
               "1 hồ sơ hợp lệ", "Giấy khai sinh", "(Bản sao)", "1 hồ sơ", "21/10/2026",
               "Lê Thiên An", "window.print()"):
         assert s in page, s
+
+
+def test_len_lop_sang_nam_moi(tmp_path):
+    from tuyensinh.schema import NHAP_HOC
+    from tuyensinh.storage.local import LocalStorage
+    st = LocalStorage(tmp_path / "ll.sqlite3")
+    cu, moi = "2025-2026", "2026-2027"
+    for d in ({"HoTen": "An", "NgaySinh": "2014-01-01", "Khoi": "6", "LopHoc": "6A1",
+               "TinhTrangHS": "Đang đóng phí", "TenMe": "Mẹ An", "SoTienThanhToan": 9000000,
+               "GhiChu": "ghi chú năm cũ", "TuyenSinhID": "5"},
+              {"HoTen": "Bình", "Khoi": "12", "LopHoc": "12A1", "TinhTrangHS": "Học tiếp"},
+              {"HoTen": "Chi", "Khoi": "8", "TinhTrangHS": "Không học tiếp"},
+              {"HoTen": "Dũng", "Khoi": "9", "LopHoc": "9A2", "TinhTrangHS": "Học tiếp",
+               "TuyenSinhID": "7"}):
+        st.create_item(NHAP_HOC.name, dict(d, NamHoc=cu))
+    rows = services.ds_len_lop(st.list_items(NHAP_HOC.name), cu, moi, goi_y_lop=True,
+                               rut_ids={"7"})
+    ly_do = {r["HoTen"]: r["_ly_do"] for r in rows}
+    assert ly_do == {"An": "", "Bình": "Học xong khối 12", "Chi": "Đã không học tiếp",
+                     "Dũng": "Đã rút hồ sơ"}
+    an = next(r for r in rows if r["HoTen"] == "An")
+    assert (an["Khoi"], an["LopHoc"], an["LopCu"], an["TinhTrangHS"]) == ("7", "7A1", "6A1",
+                                                                         "Học tiếp")
+    assert an["TenMe"] == "Mẹ An" and "SoTienThanhToan" not in an and "GhiChu" not in an
+    assert "TuyenSinhID" not in an
+    ok = [r for r in rows if not r["_ly_do"]]
+    assert services.tao_len_lop(st, ok, moi) == 1
+    assert services.tao_len_lop(st, ok, moi) == 0  # chạy lại: không tạo trùng
+    moi_rec = [r for r in st.list_items(NHAP_HOC.name) if r["NamHoc"] == moi]
+    assert len(moi_rec) == 1 and moi_rec[0]["Khoi"] == "7" and moi_rec[0]["NgaySinh"] == "2014-01-01"
+    again = services.ds_len_lop(st.list_items(NHAP_HOC.name), cu, moi)
+    assert next(r for r in again if r["HoTen"] == "An")["_ly_do"] == f"Đã có hồ sơ {moi}"

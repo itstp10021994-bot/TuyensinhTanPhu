@@ -218,6 +218,78 @@ def tao_ho_so_hang_loat(storage: Storage, ts_records: list[dict], workers: int =
     return done
 
 
+# ------------------------------------------------------------------ lên lớp (HS cũ sang năm mới)
+# Trường chỉ đúng cho một năm học: không chép sang hồ sơ năm mới
+KHONG_CHEP_LEN_LOP = {"id", "Created", "Modified", "TuyenSinhID", "NamHoc", "LopHoc", "Khoi",
+                      "TinhTrangHS", "LopCu", "NgayNhanHoSo", "SoTienXacNhan", "SoTienThanhToan",
+                      "SoTienConLai", "TongDaThu", "NgayDongPhi", "KeToanXacNhan",
+                      "NguoiNhanHoSo", "NguoiCapNhat", "GhiChu"}
+DA_NGHI = ("Rút hồ sơ", "Không học tiếp")
+
+
+def _khoa_hs(r: dict) -> tuple:
+    from .danh_muc import fold
+    return (fold(r.get("HoTen")), str(r.get("NgaySinh") or "")[:10])
+
+
+def lop_goi_y(lop_cu: str, khoi_moi: str) -> str:
+    """6A1 -> 7A1 (đổi số khối ở đầu tên lớp); lớp không theo dạng đó thì để trống."""
+    m = re.match(r"^(\d{1,2})(.*)$", str(lop_cu or "").strip())
+    return f"{khoi_moi}{m.group(2)}" if m and khoi_moi else ""
+
+
+def ds_len_lop(items: list[dict], nam_cu: str, nam_moi: str, khoi_cuoi: int = 12,
+               goi_y_lop: bool = False, rut_ids: set | None = None) -> list[dict]:
+    """Học sinh năm cũ sẽ lên lớp sang năm mới (đang học, chưa có hồ sơ năm mới, chưa học
+    khối cuối). Mỗi dòng: dữ liệu hồ sơ năm mới + "_ly_do" nếu bị loại."""
+    da_co = {_khoa_hs(r) for r in items if r.get("NamHoc") == nam_moi}
+    out = []
+    for r in items:
+        if r.get("NamHoc") != nam_cu:
+            continue
+        khoi = str(r.get("Khoi") or "").strip()
+        ly_do = ""
+        if str(r.get("TinhTrangHS") or "") in DA_NGHI:
+            ly_do = f"Đã {str(r.get('TinhTrangHS')).lower()}"
+        elif rut_ids and str(r.get("TuyenSinhID") or "") in rut_ids:
+            ly_do = "Đã rút hồ sơ"
+        elif not khoi.isdigit():
+            ly_do = "Chưa có khối"
+        elif int(khoi) >= khoi_cuoi:
+            ly_do = f"Học xong khối {khoi_cuoi}"
+        elif _khoa_hs(r) in da_co:
+            ly_do = f"Đã có hồ sơ {nam_moi}"
+        moi = {k: v for k, v in r.items() if k not in KHONG_CHEP_LEN_LOP and not _empty(v)}
+        khoi_moi = str(int(khoi) + 1) if khoi.isdigit() else ""
+        moi.update(NamHoc=nam_moi, Khoi=khoi_moi, LopCu=r.get("LopHoc") or "",
+                   TinhTrangHS="Học tiếp",
+                   LopHoc=lop_goi_y(r.get("LopHoc"), khoi_moi) if goi_y_lop else "")
+        moi["_ly_do"] = ly_do
+        moi["_khoi_cu"] = khoi
+        out.append(moi)
+    return out
+
+
+def tao_len_lop(storage: Storage, rows: list[dict], nam_moi: str, workers: int = 4,
+                progress=None) -> int:
+    """Tạo hồ sơ năm mới cho các học sinh lên lớp (bỏ qua em đã có hồ sơ năm mới — chạy lại an
+    toàn khi bị ngắt giữa chừng)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    da_co = {_khoa_hs(r) for r in storage.list_items(NHAP_HOC.name)
+             if r.get("NamHoc") == nam_moi}
+    todo = [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows
+            if _khoa_hs(r) not in da_co]
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        for _ in pool.map(lambda d: storage.create_item(NHAP_HOC.name, _clean(NHAP_HOC, d)),
+                          todo):
+            done += 1
+            if progress:
+                progress(done, len(todo))
+    return done
+
+
 def save_nhap_hoc(storage: Storage, data: dict, item_id: str | None = None) -> dict:
     errors = validate(NHAP_HOC, data)
     if errors:
