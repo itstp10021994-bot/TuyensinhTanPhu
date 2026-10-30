@@ -341,10 +341,81 @@ def render_bao_cao():
 MOI = "＋ Thêm phòng mới"
 
 
+def render_nhap_excel(tks: list[dict]):
+    """Nhập danh sách nội trú + phân phòng từ file Excel (vd sheet DSHS của Tổ quản nhiệm)."""
+    with st.expander("Nhập danh sách nội trú & phân phòng từ Excel", icon=":material/upload_file:",
+                     expanded=not phongs):
+        st.caption("File cần có các cột **Họ và tên**, **Lớp**, **Giới tính**, **Phòng NT**, "
+                   "**QN quản lý** (giáo viên). App ghép từng em với **Hồ sơ nhập học** năm "
+                   f"{nam_hoc} theo họ tên (trùng tên thì xét lớp, khối, giới tính), đánh dấu "
+                   "**Nội trú** và tạo phòng kèm giáo viên. Em chưa có hồ sơ năm này sẽ được liệt "
+                   "kê để xử lý (vd chạy *Lên lớp từ năm trước* ở Hồ sơ nhập học).")
+        up = st.file_uploader("File Excel danh sách nội trú", type=["xlsx"], key="nt_up")
+        if up is None:
+            return
+        try:
+            ds_sheet = NT.sheet_phong(up)
+        except Exception as e:
+            ui.error_state(e, compact=True)
+            return
+        if not ds_sheet:
+            st.error("Không thấy sheet nào có cột \"Họ và tên\" và cột \"Phòng\".",
+                     icon=":material/error:")
+            return
+        sheet = st.selectbox("Sheet", ds_sheet, key="nt_up_sheet",
+                             help="App tự chọn sheet có đủ cột nhất")
+        up.seek(0)
+        ds, _ = NT.doc_ds_phong(up, sheet)
+        g = NT.ghep_hs(ds, ui.records(NHAP_HOC), nam_hoc)
+        kh = NT.ke_hoach_phong(g, tks)
+        khop = g[g["Kết quả"] == NT.TT_KHOP]
+        doi = khop[~khop["Chế độ (app)"].str.startswith("Nội trú")]
+        k = st.columns(4)
+        ui.kpi(k[0], "Học sinh trong file", len(g), f"{len(kh)} phòng")
+        ui.kpi(k[1], "Ghép được", len(khop), f"{len(doi)} em sẽ đổi sang Nội trú")
+        ui.kpi(k[2], "Không tìm thấy", int((g["Kết quả"] == NT.TT_KHONG_THAY).sum()),
+               f"chưa có hồ sơ {nam_hoc}")
+        ui.kpi(k[3], "Trùng tên, chưa rõ", int((g["Kết quả"] == NT.TT_TRUNG).sum()))
+        bang_phong = pd.DataFrame([{
+            "Phòng": x["TenPhong"], "Giáo viên": x["GiaoVien"],
+            "Tài khoản": (x["TaiKhoan"] or {}).get("TenDangNhap") or "— chưa có, khớp theo tên",
+            "Số HS ghép được": len(x["HocSinhIDs"]),
+            "Ghi chú": ("File có nhiều GV: " + ", ".join(x["NhieuGV"])) if x["NhieuGV"] else ""}
+            for x in kh])
+        st.dataframe(bang_phong, hide_index=True, width="stretch",
+                     height=min(38 + 35 * len(bang_phong), 420))
+        loi = g[g["Kết quả"] != NT.TT_KHOP]
+        if len(loi):
+            with st.expander(f"{len(loi)} em chưa ghép được — xem và tải danh sách"):
+                st.dataframe(loi[["Họ tên", "Lớp", "Giới tính", "Phòng", "Kết quả"]],
+                             hide_index=True, width="stretch",
+                             height=min(38 + 35 * len(loi), 400))
+                ui.download_excel("Tải danh sách chưa ghép", loi.drop(columns=["HocSinhID"]),
+                                  f"NoiTru_ChuaGhep_{nam_hoc}.xlsx", key="nt_up_loi")
+        if any(x["NhieuGV"] for x in kh):
+            st.warning("Có phòng mà file ghi nhiều giáo viên — app lấy giáo viên xuất hiện nhiều "
+                       "nhất; sửa lại ở khung Thêm / sửa phòng nếu cần.", icon=":material/warning:")
+        st.caption("Khi áp dụng: phòng trùng tên trong năm được **cập nhật** (học sinh theo file), "
+                   "phòng mới được tạo; em có trong file sẽ được bỏ khỏi phòng khác. Giáo viên chưa "
+                   "có tài khoản vẫn được ghi tên; khi tạo tài khoản đúng họ tên, giáo viên đó tự "
+                   "nhập được đánh giá phòng mình.")
+        if st.button(f"Áp dụng: {len(kh)} phòng, {len(khop)} học sinh", type="primary",
+                     icon=":material/done_all:", disabled=khop.empty, key="nt_up_go"):
+            bar = st.progress(0.0, text="Đang ghi lên SharePoint…")
+            kq = ui.mutate(NT.ap_dung_phan_phong, storage, phongs_all, nam_hoc, g, kh,
+                           NHAP_HOC.name,
+                           progress=lambda d, t: bar.progress(d / max(t, 1),
+                                                              text=f"Đã ghi {d}/{t}"),
+                           success="Đã nhập danh sách nội trú và phân phòng")
+            if kq:
+                st.rerun()
+
+
 def render_phong():
     tks = [t for t in ui.records(TAI_KHOAN, optional=True)
            if str(t.get("HoatDong") or "Có") != "Không"]
     tks.sort(key=lambda t: (t.get("VaiTro") != "GV quản nhiệm", str(t.get("HoTen") or "")))
+    render_nhap_excel(tks)
     left, right = st.columns([1.4, 1.2], gap="medium")
     with left, ui.section("Danh sách phòng", f"{len(phongs)} phòng · năm học {nam_hoc}"):
         if phongs:

@@ -54,7 +54,12 @@ def duoc_nhap(phong: dict, tk: dict | None) -> bool:
     """Giáo viên quản nhiệm nhập phòng mình; Tổ trưởng quản nhiệm / Quản trị nhập mọi phòng."""
     if la_quan_ly(tk):
         return True
-    return bool(tk.get("id")) and str(phong.get("GiaoVienID") or "") == str(tk["id"])
+    if tk.get("id") and str(phong.get("GiaoVienID") or "") == str(tk["id"]):
+        return True
+    # phòng nhập từ Excel trước khi giáo viên có tài khoản: khớp theo họ tên
+    from .danh_muc import fold
+    return (not _s(phong.get("GiaoVienID")) and bool(_s(phong.get("GiaoVien")))
+            and fold(phong.get("GiaoVien")) == fold(tk.get("HoTen")))
 
 
 # ------------------------------------------------------------------ phòng
@@ -282,3 +287,203 @@ def phan_bo_muc(long: pd.DataFrame) -> pd.DataFrame:
         for m in MUC_DANH_GIA:
             rows.append({"Mục": col, "Mức": m, "Số lượt": int(vc.get(m, 0))})
     return pd.DataFrame(rows)
+
+
+# ------------------------------------------------------------------ nhập phân phòng từ Excel
+TT_KHOP, TT_KHONG_THAY, TT_TRUNG = "Khớp", "Không tìm thấy", "Trùng tên, chưa rõ em nào"
+
+
+def _chuan_lop(v) -> str:
+    """9.3 / "9,3" / "10A1ESL" / "10A1E" -> dạng so khớp: "9.3", "10A1" (bỏ đuôi E/ESL)."""
+    import re
+    if v is None or (isinstance(v, float) and v != v):
+        return ""
+    t = (f"{v:g}" if isinstance(v, float) else str(v)).strip().upper().replace(",", ".")
+    t = re.sub(r"\s+", "", t)
+    return re.sub(r"(ESL|E|IEP)$", "", t)
+
+
+def _khoi_lop(lop: str) -> str:
+    import re
+    m = re.match(r"^(\d{1,2})", lop or "")
+    return m.group(1) if m else ""
+
+
+def _tim_cot(nhan: list[str]) -> dict | None:
+    def tim(*dk):
+        for f in dk:
+            j = next((j for j, v in enumerate(nhan) if v and f(v)), None)
+            if j is not None:
+                return j
+        return None
+    c = {"ten": tim(lambda v: v in ("ho va ten", "ho ten", "ho ten hs")),
+         "phong": tim(lambda v: v.startswith("phong") and ("nt" in v.split() or "noi tru" in v),
+                      lambda v: v.startswith("phong") and "hoc" not in v),
+         "lop": tim(lambda v: v == "lop", lambda v: v == "lop moi"),
+         "gt": tim(lambda v: v.startswith("gioi tinh")),
+         "gv": tim(lambda v: v.startswith("qn") or "quan ly" in v or "quan nhiem" in v,
+                   lambda v: v.startswith("giao vien"))}
+    return c if c["ten"] is not None and c["phong"] is not None else None
+
+
+def sheet_phong(src) -> list[str]:
+    """Các sheet có cột Họ và tên + Phòng (nội trú), sheet đầy đủ cột nhất đứng trước."""
+    import openpyxl
+    from .danh_muc import fold
+
+    wb = openpyxl.load_workbook(src, data_only=True, read_only=True)
+    ds = []
+    for ws in wb.worksheets:
+        for r in ws.iter_rows(min_row=1, max_row=12, values_only=True):
+            c = _tim_cot([fold(v).replace("\n", " ") if v is not None else "" for v in r])
+            if c:
+                ds.append((-sum(v is not None for v in c.values()), len(ds), ws.title))
+                break
+    wb.close()
+    return [t for *_, t in sorted(ds)]
+
+
+def doc_ds_phong(src, sheet: str | None = None) -> tuple[pd.DataFrame, str]:
+    """Đọc danh sách nội trú: cột Họ và tên, Lớp, Giới tính, Phòng (NT), Giáo viên quản lý.
+
+    Trả về (bảng: Họ tên, Lớp, Giới tính, Phòng, Giáo viên; tên sheet đã đọc)."""
+    import openpyxl
+    from .danh_muc import fold
+
+    ds = sheet_phong(src)
+    if not ds:
+        raise ValueError("Không tìm thấy sheet có cột \"Họ và tên\" và cột \"Phòng\".")
+    sheet = sheet if sheet in ds else ds[0]
+    if hasattr(src, "seek"):
+        src.seek(0)
+    wb = openpyxl.load_workbook(src, data_only=True, read_only=True)
+    ws = wb[sheet]
+    c, tieu_de = None, 0
+    for i, r in enumerate(ws.iter_rows(min_row=1, max_row=12, values_only=True), 1):
+        c = _tim_cot([fold(v).replace("\n", " ") if v is not None else "" for v in r])
+        if c:
+            tieu_de = i
+            break
+    out = []
+    for r in ws.iter_rows(min_row=tieu_de + 1, values_only=True):
+        def lay(k):
+            j = c[k]
+            return r[j] if j is not None and j < len(r) else None
+        ten = _s(lay("ten"))
+        phong = lay("phong")
+        phong = f"{phong:g}" if isinstance(phong, float) else _s(phong)
+        if not ten or not phong:  # chỉ lấy học sinh có phòng nội trú
+            continue
+        out.append({"Họ tên": " ".join(ten.split()), "Lớp": _chuan_lop(lay("lop")),
+                    "Giới tính": _s(lay("gt")), "Phòng": phong,
+                    "Giáo viên": " ".join(_s(lay("gv")).split())})
+    wb.close()
+    return pd.DataFrame(out, columns=["Họ tên", "Lớp", "Giới tính", "Phòng", "Giáo viên"]), sheet
+
+
+def ghep_hs(ds: pd.DataFrame, nh: list[dict], nam_hoc: str) -> pd.DataFrame:
+    """Ghép từng dòng danh sách với hồ sơ nhập học của năm: theo họ tên, rồi khối / lớp /
+    giới tính khi trùng tên. Thêm cột Kết quả, HocSinhID, Lớp (app), Chế độ (app)."""
+    from .danh_muc import fold
+
+    ung = [r for r in nh if _s(r.get("NamHoc")) == nam_hoc
+           and _s(r.get("TinhTrangHS")) not in ("Rút hồ sơ", "Không học tiếp")]
+    theo_ten: dict[str, list[dict]] = {}
+    for r in ung:
+        theo_ten.setdefault(fold(r.get("HoTen")), []).append(r)
+    kq = []
+    for _, d in ds.iterrows():
+        cands = theo_ten.get(fold(d["Họ tên"]), [])
+        lop, khoi = d["Lớp"], _khoi_lop(d["Lớp"])
+        for loc in (
+                lambda c: _chuan_lop(c.get("LopHoc")) == lop and lop,
+                lambda c: (_s(c.get("Khoi")) == khoi or _khoi_lop(_chuan_lop(c.get("LopHoc")))
+                           == khoi) and khoi,
+                lambda c: fold(c.get("GioiTinh")) == fold(d["Giới tính"]) and d["Giới tính"]):
+            if len(cands) > 1:
+                hep = [c for c in cands if loc(c)]
+                cands = hep or cands
+        if len(cands) == 1:
+            c = cands[0]
+            kq.append((TT_KHOP, str(c["id"]), _s(c.get("LopHoc")) or _s(c.get("Khoi")),
+                       _s(c.get("NoiTruBanTru"))))
+        else:
+            kq.append((TT_TRUNG if cands else TT_KHONG_THAY, "", "", ""))
+    out = ds.copy()
+    out["Kết quả"] = [k[0] for k in kq]
+    out["HocSinhID"] = [k[1] for k in kq]
+    out["Lớp (app)"] = [k[2] for k in kq]
+    out["Chế độ (app)"] = [k[3] for k in kq]
+    # một hồ sơ bị ghép cho 2 dòng -> không chắc, bỏ ghép
+    trung_id = out["HocSinhID"][out["HocSinhID"] != ""].duplicated(keep=False)
+    for i in trung_id[trung_id].index:
+        out.loc[i, ["Kết quả", "HocSinhID"]] = [TT_TRUNG, ""]
+    return out
+
+
+def ke_hoach_phong(ghep: pd.DataFrame, tks: list[dict]) -> list[dict]:
+    """Mỗi phòng: tên, giáo viên (nhiều tên thì lấy tên xuất hiện nhiều nhất), tài khoản khớp
+    theo họ tên, danh sách HocSinhID đã ghép."""
+    from .danh_muc import fold
+
+    theo_ten = {fold(t.get("HoTen")): t for t in tks if _s(t.get("HoTen"))}
+    out = []
+    for phong, g in ghep.groupby("Phòng", sort=False):
+        if not _s(phong):
+            continue
+        gv_ds = g["Giáo viên"][g["Giáo viên"] != ""]
+        gv = gv_ds.value_counts().index[0] if len(gv_ds) else ""
+        out.append({"TenPhong": _s(phong), "GiaoVien": gv, "TaiKhoan": theo_ten.get(fold(gv)),
+                    "NhieuGV": sorted(set(gv_ds)) if gv_ds.nunique() > 1 else [],
+                    "HocSinhIDs": [i for i in g["HocSinhID"] if i]})
+    return sorted(out, key=lambda x: _so_tu_nhien(x["TenPhong"]))
+
+
+def ap_dung_phan_phong(storage: Storage, phongs_all: list[dict], nam_hoc: str,
+                       ghep: pd.DataFrame, ke_hoach: list[dict], nh_name: str,
+                       progress=None) -> dict:
+    """Ghi lên SharePoint: hồ sơ ghép được -> "Nội trú"; tạo / cập nhật phòng theo file (học
+    sinh của phòng = theo file); em có trong file bị bỏ khỏi phòng khác của năm."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    doi_che_do = ghep[(ghep["HocSinhID"] != "")
+                      & ~ghep["Chế độ (app)"].str.startswith("Nội trú")]["HocSinhID"].tolist()
+    cung_nam = [p for p in phongs_all if _s(p.get("NamHoc")) == nam_hoc]
+    theo_ten = {_s(p.get("TenPhong")).lower(): p for p in cung_nam}
+    trong_file = {i for k in ke_hoach for i in k["HocSinhIDs"]}
+    viec = [("nh", i) for i in doi_che_do]
+    phong_file = set()
+    for k in ke_hoach:
+        cu = theo_ten.get(k["TenPhong"].lower())
+        phong_file.add(k["TenPhong"].lower())
+        tk = k["TaiKhoan"] or {}
+        data = {"NamHoc": nam_hoc, "TenPhong": k["TenPhong"],
+                "GiaoVienID": _s(tk.get("id")), "GiaoVien": _s(tk.get("HoTen")) or k["GiaoVien"],
+                "HocSinhIDs": ";".join(dict.fromkeys(k["HocSinhIDs"]))}
+        if cu:
+            data["Khu"] = _s(cu.get("Khu"))
+        viec.append(("phong", (cu.get("id") if cu else None, data)))
+    for p in cung_nam:  # bỏ học sinh có trong file khỏi các phòng khác
+        if _s(p.get("TenPhong")).lower() in phong_file:
+            continue
+        con = [i for i in hs_ids(p) if i not in trong_file]
+        if len(con) != len(hs_ids(p)):
+            viec.append(("phong", (p["id"], {"HocSinhIDs": ";".join(con)})))
+
+    def lam(v):
+        loai, x = v
+        if loai == "nh":
+            return storage.update_item(nh_name, x, {"NoiTruBanTru": "Nội trú"})
+        item_id, data = x
+        if item_id:
+            return storage.update_item(NOI_TRU_PHONG.name, item_id, data)
+        return storage.create_item(NOI_TRU_PHONG.name, data)
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for _ in pool.map(lam, viec):
+            done += 1
+            if progress:
+                progress(done, len(viec))
+    return {"doi_che_do": len(doi_che_do), "phong": len(ke_hoach),
+            "xep": len(trong_file), "viec": len(viec)}

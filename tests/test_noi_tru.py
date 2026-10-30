@@ -90,3 +90,54 @@ def test_doc_du_lieu_cu_hai_muc():
     row = NT.bang_dai([r], NAM).iloc[0]
     assert row["Nề nếp"] == "Khá" and row["Học tập"] == "Chưa tốt"
     assert row["Nhận xét nề nếp"] == "Ồn ào" and row["Sức khỏe - Tâm lý"] == ""
+
+
+def test_nhap_phan_phong_tu_excel(st_, tmp_path):
+    """File kiểu "DSHS" của Tổ quản nhiệm: ghép theo tên (+lớp/giới tính khi trùng tên),
+    đổi sang Nội trú, tạo phòng; chạy lại cập nhật phòng, không tạo trùng."""
+    from openpyxl import Workbook
+
+    from tuyensinh.schema import NHAP_HOC
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "DSHS"
+    ws.append(["TRƯỜNG …"])
+    ws.append(["DANH SÁCH HSNT"])
+    ws.append(["STT", "Họ và tên", "Lớp", "Giới tính", "Phòng \nNT", "QN\n quản lý"])
+    ws.append([1, "Trần  An", 6.2, "Nam", 508, "Cô Hoa"])
+    ws.append([2, "Lê Bình", "10A1ESL", "Nữ", 507, "Thầy Nam"])
+    ws.append([3, "Phạm Chi", "6,1ESL", "Nữ", 507, "Thầy Nam"])     # trùng tên: chọn theo lớp
+    ws.append([4, "Võ Dũng", 7.1, "Nam", 508, "Cô Hoa"])           # chưa có hồ sơ
+    ws.append([5, "Bùi Em", 9.1, "Nam", None, None])               # không có phòng: bỏ qua
+    f = tmp_path / "ds.xlsx"
+    wb.save(f)
+    for d in ({"HoTen": "Trần An", "Khoi": "6", "LopHoc": "6.2", "NoiTruBanTru": "Bán trú"},
+              {"HoTen": "Lê Bình", "Khoi": "10", "LopHoc": "10A1E", "NoiTruBanTru": "Nội trú"},
+              {"HoTen": "Phạm Chi", "Khoi": "6", "LopHoc": "6.1E", "GioiTinh": "Nữ"},
+              {"HoTen": "Phạm Chi", "Khoi": "8", "LopHoc": "8.2", "GioiTinh": "Nữ"}):
+        st_.create_item(NHAP_HOC.name, dict(d, NamHoc=NAM, TinhTrangHS="Học tiếp"))
+    assert NT.sheet_phong(f) == ["DSHS"]
+    ds, sheet = NT.doc_ds_phong(f)
+    assert len(ds) == 4 and ds.iloc[0]["Họ tên"] == "Trần An" and ds.iloc[2]["Lớp"] == "6.1"
+    nh = st_.list_items(NHAP_HOC.name)
+    g = NT.ghep_hs(ds, nh, NAM)
+    assert g["Kết quả"].tolist() == [NT.TT_KHOP, NT.TT_KHOP, NT.TT_KHOP, NT.TT_KHONG_THAY]
+    chi = next(r for r in nh if r["HoTen"] == "Phạm Chi" and r["Khoi"] == "6")
+    assert g.iloc[2]["HocSinhID"] == str(chi["id"])
+    kh = NT.ke_hoach_phong(g, [GV1])
+    assert [(k["TenPhong"], k["GiaoVien"], len(k["HocSinhIDs"])) for k in kh] == \
+        [("507", "Thầy Nam", 2), ("508", "Cô Hoa", 1)]
+    assert kh[1]["TaiKhoan"] == GV1 and kh[0]["TaiKhoan"] is None
+    kq = NT.ap_dung_phan_phong(st_, [], NAM, g, kh, NHAP_HOC.name)
+    assert kq["doi_che_do"] == 2  # Trần An (Bán trú) + Phạm Chi (trống)
+    nh = {r["HoTen"] + r["Khoi"]: r for r in st_.list_items(NHAP_HOC.name)}
+    assert nh["Trần An6"]["NoiTruBanTru"] == "Nội trú" and nh["Phạm Chi8"].get("NoiTruBanTru") in (None, "")
+    phongs = st_.list_items(NOI_TRU_PHONG.name)
+    assert sorted(p["TenPhong"] for p in phongs) == ["507", "508"]
+    p507 = next(p for p in phongs if p["TenPhong"] == "507")
+    # GV chưa có tài khoản: ghi tên, tự khớp khi đăng nhập bằng tài khoản cùng họ tên
+    assert p507["GiaoVienID"] == "" and NT.duoc_nhap(p507, {"id": "99", "HoTen": "thầy nam",
+                                                             "VaiTro": "GV quản nhiệm"})
+    NT.ap_dung_phan_phong(st_, phongs, NAM, g, kh, NHAP_HOC.name)  # chạy lại: không tạo trùng
+    assert len(st_.list_items(NOI_TRU_PHONG.name)) == 2
