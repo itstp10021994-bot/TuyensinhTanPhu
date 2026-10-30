@@ -106,6 +106,13 @@ CSS_TEMPLATE = """
   border-color: #DC2626; color: #fff;}
 [class*="st-key-cards_"] [class*="st-key-rut_"] button {color: #DC2626;}
 .tp-card {font-size: .86rem; line-height: 1.55; margin: 0;}
+.tp-pill {display: inline-block; padding: 0 8px; border-radius: 999px; font-size: .76rem;
+  font-weight: 600; line-height: 1.6;}
+[class*="st-key-ch_"] [data-testid="stPopover"] button {min-height: 28px; padding: 0 6px;}
+div[data-baseweb="popover"] hr {margin: .3rem 0 !important;}
+div[data-baseweb="popover"] [data-testid="stElementContainer"]:has(hr) {margin: 0 !important;}
+[class*="st-key-ch_"] [class*="st-key-name_"] button {justify-content: flex-start;
+  text-align: left;}
 .tp-card b {font-weight: 600;} .tp-card .k {opacity: .7;} .tp-card .red {color: #DC2626;}
 .tp-tag {font-size: .75rem; font-weight: 600; margin: 0; align-self: center;}
 /* thanh tiêu đề khung chi tiết */
@@ -177,6 +184,12 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
   -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid rgba(0,0,0,.08);}
 [data-testid="stTopNavLinkContainer"] a {border-radius: 8px;}
+/* menu nhóm: mục đầu (Tổng quan) -> "Tuyển sinh ▾" -> các mục còn lại */
+.rc-overflow:has([data-testid="stTopNavSection"]) > .rc-overflow-item {order: 2 !important;}
+.rc-overflow:has([data-testid="stTopNavSection"]) > .rc-overflow-item:first-child
+  {order: 0 !important;}
+.rc-overflow > .rc-overflow-item:has([data-testid="stTopNavSection"]) {order: 1 !important;}
+.rc-overflow > .rc-overflow-item-rest {order: 3 !important;}
 /* thẻ trắng bo góc, đổ bóng mềm */
 [class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #FFFFFF;
   border: 1px solid rgba(0,0,0,.06) !important; border-radius: 14px !important;
@@ -550,6 +563,20 @@ def card_list(view: pd.DataFrame, key: str, render_card, selected: str | None,
     nav.caption(f"Trang **{page}/{pages}** · {len(view)} học sinh")
     nav.button("", icon=":material/chevron_right:", key=f"{key}_next", disabled=page >= pages,
                on_click=lambda: S.update({f"{key}_page": page + 1}))
+
+
+def card_head(name: str, rid: str, on_open):
+    """Dòng đầu thẻ: tên (bấm để mở hồ sơ) + nút ⋯ gom các thao tác. Trả về popover để đặt nút."""
+    with st.container(horizontal=True, vertical_alignment="center", gap="small", wrap=False,
+                      horizontal_alignment="distribute", key=f"ch_{rid}"):
+        st.button(name, key=f"name_{rid}", on_click=on_open, args=(rid,))
+        return st.popover("", icon=":material/more_horiz:", type="tertiary", help="Thao tác")
+
+
+def pill(text: str, color: str) -> str:
+    """Nhãn trạng thái nhỏ có màu (dùng trong thẻ HTML)."""
+    return (f'<span class="tp-pill" style="color:{color};background:{color}1A">'
+            f'{escape(text)}</span>')
 
 
 def card_box(rid: str, selected: bool):

@@ -26,6 +26,8 @@ F = NHAP_HOC.get
 
 TT_COLOR = {"Đang nhập hồ sơ": "blue", "Đang đóng phí": "orange", "Đã đóng phí": "green",
             "Học tiếp": "violet", "Không học tiếp": "gray", "Rút hồ sơ": "red"}
+TT_HEX = {"Đang nhập hồ sơ": "#007AFF", "Đang đóng phí": "#FF9500", "Đã đóng phí": "#34C759",
+          "Học tiếp": "#AF52DE", "Không học tiếp": "#8E8E93", "Rút hồ sơ": "#FF3B30"}
 DANG_HOC = "Đang theo học"  # bộ lọc mặc định: bỏ HS đã rút / không học tiếp
 
 ts = ui.df(TUYEN_SINH, nam_hoc)
@@ -369,35 +371,37 @@ def card(r: dict, selected: bool):
     """Thẻ học sinh ở cột trái: thông tin + nút thao tác nhanh."""
     rid = r["id"]
     with ui.card_box(rid, selected):
-        st.button(r["HoTen"] or "(Chưa có tên)", key=f"name_{rid}", on_click=open_record,
-                  args=(rid,))
-        lop = r["LopHoc"] or '<span class="red">Chưa xếp lớp</span>'
+        menu = ui.card_head(r["HoTen"] or "(Chưa có tên)", rid, open_record)
+        lop = f'Lớp <b>{r["LopHoc"]}</b>' if r["LopHoc"] else '<span class="red">Chưa xếp lớp</span>'
         tt = r["TinhTrangHS"]
         can, _, thieu = services.tien_do_giay_to(r)
-        gt = (f' &nbsp;·&nbsp; <span class="k">Giấy tờ:</span> '
-              f'<b class="{"red" if thieu else ""}">{len(can) - len(thieu)}/{len(can)}</b>'
-              if can else "")
+        gt = (f' · Giấy tờ <b class="{"red" if thieu else ""}">{len(can) - len(thieu)}/'
+              f'{len(can)}</b>' if can else "")
+        xe = f' · 🚌 {r["DangKyXe"]}' if noi_tru(r) and r["DangKyXe"] else ""
         st.html(
-            f'<p class="tp-card"><span class="k">Khối:</span> <b>{r["KhoiPH"] or "—"}</b>'
-            f' &nbsp;·&nbsp; <span class="k">Chế độ:</span> <b>{r["NoiTruBanTru"] or "—"}</b>'
-            f' &nbsp;·&nbsp; <span class="k">Lớp:</span> <b>{lop}</b><br>'
-            f'<span class="k">SĐT:</span> <b>{r["DienThoaiSLL"] or "—"}</b>'
-            + (f' &nbsp;·&nbsp; <span class="k">Trạng thái:</span> {tt}' if tt else "") + gt
-            + "</p>")
-        act = st.container(horizontal=True, gap="small", vertical_alignment="center")
-        if tt != "Rút hồ sơ" and act.button("Rút HS", key=f"rut_{rid}"):
-            rut_dialog(r)
-        if act.button("Xếp lớp", key=f"lop_{rid}"):
-            xep_lop_dialog(r)
-        if noi_tru(r) and act.button("Đăng ký xe", key=f"xe_{rid}"):
-            xe_dialog(r)
-        khoi = int(r["Khoi"]) if str(r["Khoi"]).isdigit() else 0
-        if khoi >= 10 and act.button("Nhóm môn", key=f"mon_{rid}"):
-            mon_dialog(r)
-        if act.button("Xóa", key=f"xoa_{rid}"):
-            delete_dialog(r)
-        if noi_tru(r) and r["DangKyXe"]:
-            act.html(f'<p class="tp-tag">🚌 {r["DangKyXe"]}</p>')
+            f'<p class="tp-card">Khối <b>{r["KhoiPH"] or "—"}</b> · '
+            f'{r["NoiTruBanTru"] or "—"} · {lop}<br>'
+            + (ui.pill(tt, TT_HEX.get(tt, "#6B7280")) + " &nbsp;" if tt else "")
+            + f'<span class="k">{r["DienThoaiSLL"] or "—"}{gt}{xe}</span></p>')
+        with menu:
+            st.button("Mở hồ sơ", key=f"mo_{rid}", width="stretch", icon=":material/open_in_new:",
+                      on_click=open_record, args=(rid,))
+            if st.button("Xếp lớp", key=f"lop_{rid}", width="stretch", icon=":material/school:"):
+                xep_lop_dialog(r)
+            if noi_tru(r) and st.button("Đăng ký xe", key=f"xe_{rid}", width="stretch",
+                                        icon=":material/directions_bus:"):
+                xe_dialog(r)
+            khoi = int(r["Khoi"]) if str(r["Khoi"]).isdigit() else 0
+            if khoi >= 10 and st.button("Nhóm môn", key=f"mon_{rid}", width="stretch",
+                                        icon=":material/menu_book:"):
+                mon_dialog(r)
+            st.divider()
+            if tt != "Rút hồ sơ" and st.button("Rút hồ sơ…", key=f"rut_{rid}", width="stretch",
+                                                icon=":material/block:"):
+                rut_dialog(r)
+            if st.button("Xóa hồ sơ…", key=f"xoa_{rid}", width="stretch",
+                         icon=":material/delete:"):
+                delete_dialog(r)
 
 
 def filters() -> pd.DataFrame:
@@ -589,14 +593,16 @@ def len_lop_dialog():
 def render_page():
     actions = ui.page_header("Hồ sơ nhập học", f"Năm học {nam_hoc}")
     view_all = nh
-    export_slot = actions.container(width="content")
+    # Việc ít dùng gom vào "Công cụ"; nút chính để riêng
+    cong_cu = actions.popover("Công cụ", icon=":material/construction:")
+    export_slot = cong_cu.container()
     tk = S.get("tk")
     if not tk or tk.get("VaiTro") in ("Quản trị", "Giáo vụ"):
-        if actions.button("Lên lớp từ năm trước", icon=":material/upgrade:",
+        if cong_cu.button("Lên lớp từ năm trước", icon=":material/upgrade:", width="stretch",
                           help="Chuyển học sinh đang học của năm trước sang năm học này"):
             len_lop_dialog()
     actions.button("Thêm hồ sơ", icon=":material/add:", on_click=open_record, args=("new",),
-                   help="Thêm học sinh nhập học không qua Data tuyển sinh")
+                   type="primary", help="Thêm học sinh nhập học không qua Data tuyển sinh")
 
     chua_co = ts[(ts["TrangThai"] == "Nhập học") & ~ts["id"].isin(nh["TuyenSinhID"])]
     if len(chua_co):
@@ -630,7 +636,7 @@ def render_page():
     export_slot.download_button(
         f"Xuất VEMIS ({len(view)})", lambda: export_vemis.to_bytes(export),
         file_name=f"DanhSachHocSinh_{nam_hoc}.xlsx", mime=ui.XLSX,
-        icon=":material/download:", on_click="ignore", disabled=view.empty,
+        icon=":material/download:", on_click="ignore", disabled=view.empty, width="stretch",
         help="Tải file Excel đúng biểu mẫu Danh sách học sinh (VEMIS) theo bộ lọc hiện tại")
 
 

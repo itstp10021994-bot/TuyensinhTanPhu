@@ -119,6 +119,7 @@ if not _has_auth() and not S.get("tk"):
                 _tk = tai_khoan.dang_nhap(_tks, _u, _p)
                 if _tk:
                     S["tk"] = _tk
+                    S["_vua_dang_nhap"] = True
                     S.pop("_da_dang_xuat", None)
                     _t = next(t for t in _items if str(t.get("id")) == _tk["id"])
                     # không tích ghi nhớ -> xóa mã cũ (nếu có) trên máy này
@@ -161,8 +162,8 @@ def _dang_xuat():
     S["_xoa_ghi_nho"] = True  # xóa mã ghi nhớ trên máy này
 
 
-# Thanh menu ngang như app cũ: Tổng quan · Data tuyển sinh · Hồ sơ nhập học · Kế toán · Báo cáo
-# Phân quyền: tài khoản của app chỉ thấy các trang được phép (Quản trị: tất cả)
+# Thanh menu theo bộ phận: Tổng quan · Tuyển sinh ▾ (Data tuyển sinh, Hồ sơ nhập học) · Kế toán ·
+# Nội trú · Báo cáo · Cài đặt & đồng bộ. Phân quyền: chỉ thấy các trang được phép.
 _pages = [P["home"], P["ts"], P["nh"], P["kt"], P["nt"], P["bc"], P["cd"]]
 if S.get("tk"):
     _pages = [p for p in _pages if p.title in S["tk"]["Quyen"]] or [P["home"]]
@@ -172,7 +173,19 @@ _FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc",
          "kt": "ke_toan", "nt": "noi_tru", "bc": "bao_cao", "tl": "tro_ly", "cd": "cai_dat"}
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
-pg = st.navigation(_pages, position="top")
+_nhom_ts = [p for p in (P["ts"], P["nh"]) if p in _pages]
+_nav = ({"": [p for p in _pages if p not in _nhom_ts], "Tuyển sinh": _nhom_ts}
+        if len(_nhom_ts) == 2 else _pages)
+pg = st.navigation(_nav, position="top")
+# Vừa đăng nhập: mở trang chính của vai trò (vd Kế toán -> Kế toán, GV quản nhiệm -> Nội trú)
+_TRANG_VAI_TRO = {"Tuyển sinh": "ts", "Kế toán": "kt", "Giáo vụ": "nh", "GV quản nhiệm": "nt",
+                  "Tổ trưởng quản nhiệm": "nt", "Chỉ xem báo cáo": "bc"}
+# (chờ trình duyệt lưu xong mã ghi nhớ: lần chạy do lưu mã luôn quay về trang đầu)
+if "_ghi_nho" not in S and S.pop("_vua_dang_nhap", False) and pg is P["home"] \
+        and not (S.get("_trang_dich") or ("",))[0]:  # không mở link trang cụ thể
+    _k = _TRANG_VAI_TRO.get((S.get("tk") or {}).get("VaiTro"))
+    if _k and P[_k] in _pages:
+        st.switch_page(P[_k])
 _dich = S.pop("_trang_dich", None) if S.get("tk") else None
 if _dich and _dich[0] and getattr(pg, "url_path", "") != _dich[0]:
     _p = next((x for x in _pages if getattr(x, "url_path", "") == _dich[0]), None)

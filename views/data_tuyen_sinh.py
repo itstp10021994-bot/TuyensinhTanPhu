@@ -148,27 +148,28 @@ def card(r: dict, selected: bool):
     rid = r["id"]
     step = r["TrangThai"] or "Tư vấn"
     with ui.card_box(rid, selected):
-        st.button(r["HoTenHS"] or "(Chưa có tên)", key=f"name_{rid}", on_click=open_record,
-                  args=(rid,))
+        menu = ui.card_head(r["HoTenHS"] or "(Chưa có tên)", rid, open_record)
         color = STEP_COLOR.get(step, "#6B7280")
         giu = r["GiuCho"] or "Chưa giữ chỗ"
+        khoi = (r["Khoi"] or "—") + (f'-{r["PhanHe"]}' if r["PhanHe"] else "")
         st.html(
-            f'<p class="tp-card"><span class="k">Khối:</span> <b>{r["Khoi"] or "—"}</b>'
-            + (f'-{r["PhanHe"]}' if r["PhanHe"] else "")
-            + f' &nbsp;·&nbsp; <span class="k">Chế độ:</span> <b>{r["CheDo"] or "—"}</b>'
-            f' &nbsp;·&nbsp; <span class="k">SĐT:</span> <b>{r["SDT"] or "—"}</b><br>'
-            f'<span class="k">Bước:</span> <b style="color:{color}">{step}</b>'
-            f' &nbsp;·&nbsp; <span class="k">Liên hệ:</span> {ui.fmt_date(r["NgayLienHe"])}'
-            f' &nbsp;·&nbsp; <span class="k">{giu}</span></p>')
-        act = st.container(horizontal=True, gap="small")
-        nxt = ui.next_step(step)
-        if nxt and act.button(f"→ {nxt}", key=f"nxt_{rid}",
-                              help="Xác nhận nhập học" if nxt == "Nhập học" else None):
-            set_step(rid, nxt)
-        if step != "Rút hồ sơ" and act.button("Rút HS", key=f"rut_{rid}"):
-            withdraw_dialog(r)
-        if act.button("Xóa", key=f"xoa_{rid}"):
-            delete_dialog(r)
+            f'<p class="tp-card">Khối <b>{khoi}</b> · {r["CheDo"] or "—"} · '
+            f'{r["SDT"] or "—"}<br>{ui.pill(step, color)} &nbsp;'
+            f'<span class="k">Liên hệ {ui.fmt_date(r["NgayLienHe"])} · {giu}</span></p>')
+        with menu:
+            nxt = ui.next_step(step)
+            if nxt and st.button(f"Chuyển sang {nxt}", key=f"nxt_{rid}", width="stretch",
+                                 icon=ui.STATUS[nxt]["icon"]):
+                set_step(rid, nxt)
+            st.button("Mở hồ sơ", key=f"mo_{rid}", width="stretch", icon=":material/open_in_new:",
+                      on_click=open_record, args=(rid,))
+            st.divider()
+            if step != "Rút hồ sơ" and st.button("Rút hồ sơ…", key=f"rut_{rid}",
+                                                  width="stretch", icon=":material/block:"):
+                withdraw_dialog(r)
+            if st.button("Xóa liên hệ…", key=f"xoa_{rid}", width="stretch",
+                         icon=":material/delete:"):
+                delete_dialog(r)
 
 
 # ================================================================== chi tiết (phải)
