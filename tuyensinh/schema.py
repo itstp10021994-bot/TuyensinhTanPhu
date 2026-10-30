@@ -295,7 +295,7 @@ GIAY_TO = ListDef(
 )
 
 # ---------------------------------------------------------------- Nội trú
-# Đánh giá hằng ngày của giáo viên quản nhiệm phòng: nề nếp và học bài tối
+# Đánh giá hằng ngày của giáo viên quản nhiệm phòng (6 mục, xem tuyensinh/noi_tru.py)
 MUC_DANH_GIA = ("Tốt", "Khá", "Trung bình", "Chưa tốt")
 NOI_TRU_PHONG = ListDef(
     name="NoiTru_Phong",
@@ -313,7 +313,7 @@ NOI_TRU_PHONG = ListDef(
 # Mỗi bản ghi = một phòng trong một ngày; đánh giá từng học sinh lưu dạng JSON (ghi 1 lần/phòng)
 NOI_TRU_DANH_GIA = ListDef(
     name="NoiTru_DanhGia",
-    title="Đánh giá nội trú theo ngày (nề nếp, học bài tối)",
+    title="Đánh giá nội trú theo ngày (nề nếp, học tập, sức khỏe - tâm lý, nhận xét)",
     fields=(
         Field("NamHoc", "Năm học", required=True),
         Field("Ngay", "Ngày", DATE, required=True),

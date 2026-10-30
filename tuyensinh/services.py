@@ -57,11 +57,11 @@ def to_df(ld: ListDef, items: list[dict]) -> pd.DataFrame:
         if f.type == NUMBER:  # để trống = NaN (khác 0)
             df[f.key] = pd.to_numeric(df[f.key], errors="coerce")
         elif f.type == BOOL:
-            df[f.key] = df[f.key].fillna(False).astype(bool)
+            df[f.key] = df[f.key].astype(object).fillna(False).astype(bool)
         elif f.type == DATE:
             df[f.key] = pd.to_datetime(df[f.key], errors="coerce").dt.date
         else:
-            df[f.key] = df[f.key].fillna("").astype(str)
+            df[f.key] = df[f.key].astype(object).fillna("").astype(str)
     return df
 
 

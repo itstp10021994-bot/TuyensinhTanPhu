@@ -273,7 +273,7 @@ def ts_chedo(c: Ctx) -> Result:
                    PhanHe=_blank(df["PhanHe"], "Thường"))
     t = pd.crosstab(df["Khoi"], [df["CheDo"]])
     t2 = pd.crosstab(df["Khoi"], df["PhanHe"])
-    t = t.join(t2, rsuffix=" (phân hệ)")
+    t = t.join(t2.rename(columns=lambda c: f"{c} (phân hệ)" if c in t.columns else c))
     t["Tổng"] = df.groupby("Khoi").size() if len(df) else 0
     t = t.reindex(_khoi_order(t.index)).rename_axis("Khối").reset_index()
     t.columns.name = None

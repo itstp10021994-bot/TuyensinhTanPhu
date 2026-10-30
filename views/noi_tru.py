@@ -26,7 +26,8 @@ THU = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
 MAU = {"Tốt": "#34C759", "Khá": "#007AFF", "Trung bình": "#FF9500", "Chưa tốt": "#FF3B30"}
 NGAN = {"Tốt": "T", "Khá": "K", "Trung bình": "TB", "Chưa tốt": "CT"}
 
-actions = ui.page_header("Nội trú", f"Nề nếp và học bài tối · năm học {nam_hoc}")
+actions = ui.page_header("Nội trú", f"Đánh giá hằng ngày: nề nếp, học tập, sức khỏe - tâm lý "
+                                    f"và nhận xét · năm học {nam_hoc}")
 
 # ------------------------------------------------------------------ dữ liệu
 phongs_all = ui.records(NOI_TRU_PHONG, optional=True)
@@ -89,7 +90,7 @@ ui.kpi(k[0], "Phòng nội trú", len(phongs))
 ui.kpi(k[1], "Học sinh nội trú", len(HS), f"{len(set(o_phong) & set(HS))} em đã xếp phòng")
 ui.kpi(k[2], "Phòng đã đánh giá hôm nay", f"{hn['PhongID'].nunique()}/{len(phongs)}")
 ui.kpi(k[3], "Lượt TB / Chưa tốt hôm nay",
-       int(hn["Nề nếp"].isin(NT.CAN_CHU_Y).sum() + hn["Học bài tối"].isin(NT.CAN_CHU_Y).sum()))
+       int(sum(hn[c].isin(NT.CAN_CHU_Y).sum() for c in NT.COT_MUC)))
 
 phong_cua_toi = [p for p in phongs if NT.duoc_nhap(p, tk)]  # GV: phòng mình; quản lý: mọi phòng
 ten_tab = []
@@ -138,37 +139,48 @@ def render_nhap():
     else:
         st.info(f"Chưa nhập ngày {ngay:%d/%m/%Y}. Mọi em đang để **Tốt** — chỉ cần đổi các em "
                 "có vấn đề rồi bấm **Lưu**.", icon=":material/info:")
+    st.caption("Nề nếp, Học tập, Sức khỏe - Tâm lý: chọn mức (mặc định Tốt) và ghi nhận xét nếu "
+               "cần. Ba cột cuối viết lời khi có. Bấm đúp vào ô để sửa; kéo ngang để xem hết cột.")
     rows = []
     for i in ids:
         d = da.get(i, {})
         h = HS.get(i, {"ten": d.get("ten") or f"(HS {i})", "lop": d.get("lop", "")})
-        rows.append({"id": i, "Học sinh": h["ten"], "Lớp": h["lop"],
-                     "Nề nếp": d.get("NeNep") or "Tốt",
-                     "Học bài tối": d.get("HocBaiToi") or "Tốt",
-                     "Ghi chú": d.get("GhiChu") or ""})
+        r = {"id": i, "Học sinh": h["ten"], "Lớp": h["lop"]}
+        for m in NT.MUC:
+            r[NT.TEN_MUC[m]] = d.get(m) or d.get(NT.CU.get(m, "")) or "Tốt"
+        for m in NT.MUC:
+            r[NT.TEN_NX[m]] = d.get(NT.NX[m]) or (d.get("GhiChu", "") if m == "NeNep" else "")
+        for kk in NT.LOI:
+            r[NT.TEN_LOI[kk]] = d.get(kk, "")
+        rows.append(r)
     bang = pd.DataFrame(rows)
+    cfg = {"id": None,
+           "Học sinh": st.column_config.TextColumn(width="medium", pinned=True),
+           "Lớp": st.column_config.TextColumn(width="small")}
+    for m in NT.MUC:
+        cfg[NT.TEN_MUC[m]] = st.column_config.SelectboxColumn(
+            options=list(MUC_DANH_GIA), required=True, width=130)
+    for c in NT.COT_LOI:
+        cfg[c] = st.column_config.TextColumn(width=230, max_chars=NT.MAX_LOI)
     sua = st.data_editor(
         bang, hide_index=True, width="stretch", disabled=["Học sinh", "Lớp"],
-        height=min(38 + 35 * len(bang), 720),
-        key=f"nt_ed_{phong['id']}_{ngay}_{ui.data_version()}",
-        column_config={
-            "id": None,
-            "Học sinh": st.column_config.TextColumn(width="medium"),
-            "Lớp": st.column_config.TextColumn(width="small"),
-            "Nề nếp": st.column_config.SelectboxColumn(options=list(MUC_DANH_GIA),
-                                                       required=True, width="small"),
-            "Học bài tối": st.column_config.SelectboxColumn(options=list(MUC_DANH_GIA),
-                                                            required=True, width="small"),
-            "Ghi chú": st.column_config.TextColumn(width="large", max_chars=200),
-        })
-    can = int(sua["Nề nếp"].isin(NT.CAN_CHU_Y).sum() + sua["Học bài tối"].isin(NT.CAN_CHU_Y).sum())
-    b1, b2 = st.columns([3, 1], vertical_alignment="center")
-    b2.caption(f"{len(sua)} học sinh · {can} lượt TB/Chưa tốt")
+        height=min(38 + 35 * len(bang), 720), column_config=cfg,
+        key=f"nt_ed_{phong['id']}_{ngay}_{ui.data_version()}")
+    can = int(sum(sua[c].isin(NT.CAN_CHU_Y).sum() for c in NT.COT_MUC))
+    co_loi = int(sua[NT.COT_LOI].fillna("").ne("").any(axis=1).sum())
+    b1, b2 = st.columns([3, 1.2], vertical_alignment="center")
+    b2.caption(f"{len(sua)} học sinh · {can} lượt TB/Chưa tốt · {co_loi} em có nhận xét")
     if b1.button(f"Lưu đánh giá phòng {phong['TenPhong']} ngày {ngay:%d/%m/%Y}", type="primary",
                  icon=":material/save:", width="stretch"):
-        dong = [{"id": r["id"], "ten": r["Học sinh"], "lop": r["Lớp"], "NeNep": r["Nề nếp"],
-                 "HocBaiToi": r["Học bài tối"], "GhiChu": r["Ghi chú"]}
-                for r in sua.to_dict("records")]
+        dong = []
+        for r in sua.fillna("").to_dict("records"):
+            x = {"id": r["id"], "ten": r["Học sinh"], "lop": r["Lớp"]}
+            for m in NT.MUC:
+                x[m] = r[NT.TEN_MUC[m]]
+                x[NT.NX[m]] = r[NT.TEN_NX[m]]
+            for kk in NT.LOI:
+                x[kk] = r[NT.TEN_LOI[kk]]
+            dong.append(x)
         if ui.mutate(NT.luu_danh_gia, storage, dg_all, nam_hoc, ngay, phong, dong,
                      ui.current_user(), success=f"Đã lưu đánh giá phòng {phong['TenPhong']}"):
             st.rerun()
@@ -201,11 +213,11 @@ def render_xem():
         ui.empty_state("event_busy", "Chưa có đánh giá",
                        f"Không có đánh giá nào từ {tu:%d/%m} đến {den:%d/%m/%Y} theo bộ lọc.")
         return
-    kieu = st.segmented_control("Hiển thị", ["Bảng theo ngày", "Danh sách chi tiết"],
+    kieu = st.segmented_control("Hiển thị", ["Bảng theo ngày", "Nhận xét", "Danh sách chi tiết"],
                                 default="Bảng theo ngày", required=True, key="nt_xem_kieu",
                                 label_visibility="collapsed")
     if kieu == "Bảng theo ngày":
-        muc = st.segmented_control("Mục", ["Nề nếp", "Học bài tối"], default="Nề nếp",
+        muc = st.segmented_control("Mục", NT.COT_MUC, default=NT.COT_MUC[0],
                                    required=True, key="nt_xem_muc")
         p = x.assign(_v=x[muc].map(NGAN).fillna(""), _c=x["Ngày"].map(lambda d: f"{d:%d/%m}")) \
             .pivot_table(index=["Phòng", "Học sinh", "Lớp"], columns="_c", values="_v",
@@ -215,11 +227,23 @@ def render_xem():
                                                   if c not in ("Phòng", "Học sinh", "Lớp")]),
                      hide_index=True, width="stretch", height=min(38 + 35 * len(p), 640))
         st.caption("T = Tốt · K = Khá · TB = Trung bình · CT = Chưa tốt · ô trống = chưa đánh giá")
+    elif kieu == "Nhận xét":
+        d = NT.nhan_xet(x).sort_values(["Ngày", "Phòng", "Học sinh"],
+                                       ascending=[False, True, True])
+        if d.empty:
+            ui.empty_state("notes", "Chưa có lời nhận xét",
+                           "Các em trong khoảng đã chọn chỉ được chấm mức, chưa có lời nhận xét.")
+        else:
+            st.dataframe(d, hide_index=True, width="stretch",
+                         height=min(38 + 35 * len(d), 640), column_config={
+                             "Ngày": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                             **{c: st.column_config.TextColumn(width="medium")
+                                for c in NT.COT_LOI}})
+            st.caption(f"{len(d)} lượt có nhận xét · bấm vào ô để đọc đầy đủ")
     else:
         d = x.sort_values(["Ngày", "Phòng", "Học sinh"], ascending=[False, True, True])
-        d = d[["Ngày", "Phòng", "Học sinh", "Lớp", "Nề nếp", "Học bài tối", "Ghi chú",
-               "Người đánh giá"]]
-        st.dataframe(d.style.map(_to_mau, subset=["Nề nếp", "Học bài tối"]), hide_index=True,
+        d = d.drop(columns=["PhongID", "HocSinhID"])
+        st.dataframe(d.style.map(_to_mau, subset=NT.COT_MUC), hide_index=True,
                      width="stretch", height=min(38 + 35 * len(d), 640),
                      column_config={"Ngày": st.column_config.DateColumn(format="DD/MM/YYYY")})
     ui.download_excel("Tải Excel", x.drop(columns=["PhongID", "HocSinhID"]),
@@ -238,13 +262,13 @@ def render_bao_cao():
     x = long[(long["Ngày"] >= tu) & (long["Ngày"] <= den)]
     th = NT.tong_hop_phong(x, phongs, ngays)
     cc = NT.hoc_sinh_can_chu_y(x, nguong)
-    k = ui.kpi_row(4, key="nt_bc_kpis")
-    for col, ten in ((k[0], "Nề nếp"), (k[1], "Học bài tối")):
+    k = ui.kpi_row(5, key="nt_bc_kpis")
+    for col, ten in zip(k, NT.COT_MUC):
         v = NT._ty_le_tot(x[ten])
         ui.kpi(col, f"{ten} Tốt", "—" if v is None else f"{v}%")
-    ui.kpi(k[2], "Phòng còn thiếu ngày", int((th["Ngày chưa nhập"] > 0).sum()) if len(th) else 0,
+    ui.kpi(k[3], "Phòng còn thiếu ngày", int((th["Ngày chưa nhập"] > 0).sum()) if len(th) else 0,
            f"trên {len(ngays)} ngày cần đánh giá")
-    ui.kpi(k[3], "Học sinh cần chú ý", len(cc), f"từ {nguong} lượt TB/Chưa tốt")
+    ui.kpi(k[4], "Học sinh cần chú ý", len(cc), f"từ {nguong} lượt TB/Chưa tốt")
 
     with ui.section("Tổng hợp theo phòng",
                     f"Từ {tu:%d/%m} đến {den:%d/%m/%Y} · tỷ lệ Tốt và số ngày đã nhập"):
@@ -255,9 +279,9 @@ def render_bao_cao():
                          height=min(38 + 35 * len(th), 520), column_config={
                              c: st.column_config.ProgressColumn(format="%.1f%%", min_value=0,
                                                                 max_value=100)
-                             for c in ("Nề nếp Tốt (%)", "Học bài Tốt (%)")})
+                             for c in (f"{m} Tốt (%)" for m in NT.COT_MUC)})
     with ui.section("Học sinh cần chú ý",
-                    f"Có từ {nguong} lượt Trung bình / Chưa tốt (cộng cả 2 mục)"):
+                    f"Có từ {nguong} lượt Trung bình / Chưa tốt (cộng 3 mục chấm mức)"):
         if cc.empty:
             ui.empty_state("sentiment_satisfied", "Không có học sinh cần chú ý")
         else:
@@ -272,7 +296,7 @@ def render_bao_cao():
             base = alt.Chart(td).encode(
                 x=alt.X("Ngày:T", title=None, axis=alt.Axis(format="%d/%m")),
                 y=alt.Y("Tỷ lệ Tốt (%):Q", title=None, scale=alt.Scale(domain=[0, 100])),
-                color=alt.Color("Mục:N", scale=alt.Scale(range=["#007AFF", "#34C759"]),
+                color=alt.Color("Mục:N", scale=alt.Scale(range=["#007AFF", "#34C759", "#AF52DE"]),
                                 legend=alt.Legend(orient="top", title=None)),
                 tooltip=[alt.Tooltip("Ngày:T", format="%d/%m/%Y"), "Mục:N",
                          "Tỷ lệ Tốt (%):Q"])
@@ -293,7 +317,7 @@ def render_bao_cao():
                 order=alt.Order("_o:Q"),
                 tooltip=["Mục:N", "Mức:N", "Số lượt:Q"]).transform_calculate(
                 _o="indexof(['Tốt','Khá','Trung bình','Chưa tốt'], datum['Mức'])")
-                .properties(height=150), width="stretch")
+                .properties(height=190), width="stretch")
     with ui.section("Tình hình nhập đánh giá",
                     "✓ đã nhập · ✗ chưa nhập — để nhắc giáo viên quản nhiệm"):
         ng = ngays[-31:]
