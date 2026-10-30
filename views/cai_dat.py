@@ -1,4 +1,4 @@
-"""Cài đặt & đồng bộ: kiểm tra kết nối Power Automate/SharePoint, tạo list, nhập dữ liệu Excel."""
+"""Cài đặt & đồng bộ: tài khoản, nhập / xuất dữ liệu, danh mục, kết nối SharePoint."""
 import hmac
 
 import pandas as pd
@@ -9,8 +9,8 @@ from tuyensinh.schema import (ALL_LISTS, GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, QU
                               TAI_KHOAN, TRANG, TUYEN_SINH, VAI_TRO)
 
 S = st.session_state
-ui.page_header("Cài đặt & đồng bộ", "Kết nối SharePoint qua Power Automate, tạo list và "
-               "đưa dữ liệu cũ lên")
+ui.page_header("Cài đặt & đồng bộ", "Tài khoản · nhập / xuất dữ liệu · danh mục · kết nối "
+               "SharePoint")
 
 # Bảo vệ trang bằng mật khẩu quản trị (ADMIN_PASSWORD trong Secrets), nếu có đặt
 pw = config.get("ADMIN_PASSWORD")
@@ -222,107 +222,41 @@ def render_giay_to():
         if err:
             st.caption("Chưa lưu được vì chưa có list trên SharePoint.")
 
-tab_tk, tab_dm, tab_sync = st.tabs([":material/manage_accounts: Tài khoản & phân quyền",
-                                   ":material/checklist: Danh mục giấy tờ",
-                                   ":material/sync: Kết nối & đồng bộ"])
+# ------------------------------------------------------------------ tình trạng chung
+_tks = tai_khoan.dang_hoat_dong(ui.records(TAI_KHOAN, optional=True))
+_k = ui.kpi_row(4, key="cd_kpis")
+ui.kpi(_k[0], "Nơi lưu dữ liệu", "SharePoint" if backend != "local" else "Máy thử",
+       "qua Power Automate" if backend == "powerautomate" else
+       ("dữ liệu sẽ mất khi khởi động lại" if backend == "local" else backend))
+ui.kpi(_k[1], "Tài khoản đang hoạt động", len(_tks))
+ui.kpi(_k[2], "Dữ liệu tải lúc", f"{ui.loaded_at():%H:%M}", f"{ui.loaded_at():%d/%m/%Y}")
+with _k[3]:
+    st.button("Tải lại dữ liệu", icon=":material/refresh:", on_click=ui.refresh,
+              width="stretch", help="Đọc lại toàn bộ list từ SharePoint")
+    st.caption("Sửa thẳng trên SharePoint sẽ hiện lên app sau tối đa 10 phút, hoặc bấm nút này.")
+
+tab_tk, tab_dl, tab_dm, tab_kn = st.tabs([":material/manage_accounts: Tài khoản & phân quyền",
+                                         ":material/swap_vert: Nhập / xuất dữ liệu",
+                                         ":material/checklist: Danh mục",
+                                         ":material/cloud_sync: Kết nối SharePoint"],
+                                        key="cd_tab", on_change="rerun")
 
 # ------------------------------------------------------------------ tài khoản
 with tab_tk:
     render_tai_khoan()
 
-# ------------------------------------------------------------------ danh mục giấy tờ
+# ------------------------------------------------------------------ danh mục
 with tab_dm:
     render_giay_to()
 
-with tab_sync:
-    # ------------------------------------------------------------------ 1. kết nối
-    with ui.section("1. Kết nối", "App ghi/đọc SharePoint thông qua một flow Power Automate "
-                    "(xem hướng dẫn tạo flow ở cuối trang)."):
-        names = {"powerautomate": "Power Automate → SharePoint", "sharepoint": "Microsoft Graph → SharePoint",
-                 "local": "Máy cục bộ (thử nghiệm) — dữ liệu KHÔNG lên SharePoint"}
-        url = str(config.get("PA_FLOW_URL") or config.section("powerautomate").get("flow_url") or "")
-        ui.kv([("Cách lưu dữ liệu", names.get(backend, backend)),
-               ("Flow URL", (url[:48] + "…" + url[-8:]) if len(url) > 60 else (url or "—")),
-               ("Các list SharePoint", ", ".join(config.list_name(ld.name)
-                                                 for ld in ALL_LISTS))])
-        if backend == "local":
-            st.warning("Đang lưu trên máy chủ app, sẽ **mất khi app khởi động lại**. Làm theo hướng dẫn "
-                       "bên dưới để chuyển sang SharePoint.", icon=":material/warning:")
-
-        if st.button("Kiểm tra kết nối", icon=":material/lan:", disabled=backend == "local"):
-            with st.spinner("Đang gọi flow…"):
-                S["_check"] = importer.check_lists(storage)
-        for row in S.get("_check", []):
-            ld = row["list"]
-            if row["loi"]:
-                ui.error_state(RuntimeError(row["loi"]), compact=True)
-                continue
-            if not row["co_list"]:
-                site = row.get("site") or "site đang cấu hình trong flow"
-                msg = f"**{row['ten']}**: chưa có list trên **{site}**."
-                others = row.get("lists_on_site")
-                if others is not None:
-                    msg += (" Các list đang có trên site này: " + (", ".join(others) or "(không có)")
-                            + ". Nếu list của bạn nằm ở site khác, sửa **Site Address** trong bước "
-                              "*Send an HTTP request to SharePoint* của flow; nếu tên list khác, sửa "
-                              f"`SP_LIST_{ld.name}` trong Secrets. Chưa có thì bấm *Tạo list / thêm "
-                              "cột* ở bước 2.")
-                else:
-                    msg += " Bấm *Tạo list / thêm cột* ở bước 2."
-                st.warning(msg, icon=":material/playlist_add:")
-            elif row["thieu"]:
-                st.warning(f"**{row['ten']}**: kết nối được, khớp {len(row['khop'])} cột, thiếu "
-                           f"{len(row['thieu'])} cột: "
-                           + ", ".join(ld.get(k).sp_title for k in row["thieu"]),
-                           icon=":material/rule:")
-            else:
-                st.success(f"**{row['ten']}**: kết nối được, đủ {len(row['khop'])} cột.",
-                           icon=":material/check_circle:")
-
-    # ------------------------------------------------------------------ 2. tạo list
-    with ui.section("2. Tạo list / thêm cột còn thiếu",
-                    f"Tạo / cập nhật toàn bộ {len(ALL_LISTS)} list SharePoint của app (list chưa có "
-                    "thì tạo mới, list đã có thì thêm cột còn thiếu). Không xóa hay đổi cột đã có. "
-                    "Tài khoản chạy flow cần quyền Owner trên site."):
-        tinh_trang = {r["list"].name: r for r in S.get("_check", [])}
-
-        def _tt(ld) -> str:
-            r = tinh_trang.get(ld.name)
-            if r is None:
-                return "Chưa kiểm tra"
-            if r["loi"]:
-                return "Lỗi kết nối"
-            if not r["co_list"]:
-                return "Chưa có list"
-            return f"Thiếu {len(r['thieu'])} cột" if r["thieu"] else "Đủ cột"
-
-        st.dataframe(pd.DataFrame([{
-            "List trên SharePoint": config.list_name(ld.name), "Dùng cho": ld.title,
-            "Số cột": len(ld.fields), "Tình trạng": _tt(ld)} for ld in ALL_LISTS]),
-            hide_index=True, width="stretch", column_config={
-                "Dùng cho": st.column_config.TextColumn(width="large")})
-        b1, b2 = st.columns(2)
-        if b1.button("Tạo list / thêm cột (tất cả)", type="primary",
-                     icon=":material/playlist_add:", disabled=backend == "local",
-                     width="stretch"):
-            try:
-                with st.status("Đang thiết lập…", expanded=True) as stt:
-                    importer.setup_lists(storage, log=stt.write, lists=ALL_LISTS)
-                    stt.update(label="Đã thiết lập xong — đang kiểm tra lại…", state="running")
-                    S["_check"] = importer.check_lists(storage)
-                    stt.update(label="Đã thiết lập xong", state="complete")
-                ui.refresh()
-                st.rerun()
-            except Exception as e:
-                ui.error_state(e, compact=True)
-        if b2.button("Kiểm tra tình trạng các list", icon=":material/fact_check:",
-                     disabled=backend == "local", width="stretch"):
-            with st.spinner("Đang kiểm tra…"):
-                S["_check"] = importer.check_lists(storage)
-            st.rerun()
-
+# ------------------------------------------------------------------ nhập / xuất
+with tab_dl:
+    with ui.section("Việc dữ liệu ở các trang khác"):
+        st.markdown("- **Chuyển học sinh cũ sang năm mới**: Hồ sơ nhập học → *Công cụ* → "
+                    "*Lên lớp từ năm trước*.\n"
+                    "- **Danh sách nội trú & phân phòng từ Excel**: Nội trú → *Phòng & giáo viên*.")
     # ------------------------------------------------------------------ 3. nhập Excel
-    with ui.section("3. Nhập dữ liệu từ Excel",
+    with ui.section("Nhập dữ liệu từ Excel",
                     "Bước 1: tải file mẫu, điền mỗi học sinh một dòng. Bước 2: tải file lên ở dưới, "
                     "xem trước rồi bấm Nhập. Nhận cả file Export to Excel từ list và file VEMIS. "
                     "Chạy lại an toàn: dòng đã có trên list sẽ được bỏ qua."):
@@ -410,7 +344,7 @@ with tab_sync:
                         st.caption("Sửa lỗi rồi bấm nhập lại — các dòng đã ghi sẽ được bỏ qua.")
 
     # ------------------------------------------------------------------ 4. liên kết
-    with ui.section("4. Liên kết hồ sơ nhập học với Data tuyển sinh",
+    with ui.section("Liên kết hồ sơ nhập học với Data tuyển sinh",
                     "Dùng khi đưa Data_NhapHoc lên SharePoint bằng tay (tạo list từ Excel): gán "
                     "TuyenSinhID theo họ tên + SĐT / ngày sinh để nút Tạo hồ sơ không tạo trùng."):
         if st.button("Liên kết hồ sơ", icon=":material/link:", disabled=backend == "local"):
@@ -427,6 +361,111 @@ with tab_sync:
                 st.success(f"{res['total']} hồ sơ · {res['chua_lien_ket']} hồ sơ chưa liên kết · "
                            f"liên kết được **{res['lien_ket']}**", icon=":material/check_circle:")
 
-# ------------------------------------------------------------------ hướng dẫn
-with st.expander("Hướng dẫn tạo flow Power Automate và khai báo Secrets", icon=":material/help:"):
-    st.markdown(open("docs/power_automate.md", encoding="utf-8").read())
+    with ui.section("Sao lưu dữ liệu",
+                    "Tải toàn bộ dữ liệu (mọi năm học) ra một file Excel, mỗi list một sheet — "
+                    "nên tải định kỳ để lưu trữ."):
+        def _sao_luu():
+            from tuyensinh.schema import NOI_TRU_DANH_GIA, NOI_TRU_PHONG
+            frames = {}
+            for ld in (TUYEN_SINH, NHAP_HOC, NOI_TRU_PHONG, NOI_TRU_DANH_GIA, GIAY_TO):
+                try:
+                    frames[ld.name[:31]] = ui.df(ld)
+                except Exception:
+                    continue
+            return ui.excel_bytes(frames)
+        st.download_button("Tải bản sao lưu (Excel)", _sao_luu, icon=":material/backup:",
+                           file_name=f"SaoLuu_TuyenSinh_{pd.Timestamp.now():%Y%m%d}.xlsx",
+                           mime=ui.XLSX, on_click="ignore", type="primary")
+        st.caption("Không gồm list tài khoản (có mật khẩu đã mã hóa).")
+
+# ------------------------------------------------------------------ kết nối SharePoint
+with tab_kn:
+    # ------------------------------------------------------------------ 1. kết nối
+    with ui.section("1. Kết nối", "App ghi/đọc SharePoint thông qua một flow Power Automate "
+                    "(xem hướng dẫn tạo flow ở cuối trang)."):
+        names = {"powerautomate": "Power Automate → SharePoint", "sharepoint": "Microsoft Graph → SharePoint",
+                 "local": "Máy cục bộ (thử nghiệm) — dữ liệu KHÔNG lên SharePoint"}
+        url = str(config.get("PA_FLOW_URL") or config.section("powerautomate").get("flow_url") or "")
+        ui.kv([("Cách lưu dữ liệu", names.get(backend, backend)),
+               ("Flow URL", (url[:48] + "…" + url[-8:]) if len(url) > 60 else (url or "—")),
+               ("Các list SharePoint", ", ".join(config.list_name(ld.name)
+                                                 for ld in ALL_LISTS))])
+        if backend == "local":
+            st.warning("Đang lưu trên máy chủ app, sẽ **mất khi app khởi động lại**. Làm theo hướng dẫn "
+                       "bên dưới để chuyển sang SharePoint.", icon=":material/warning:")
+
+        if st.button("Kiểm tra kết nối", icon=":material/lan:", disabled=backend == "local"):
+            with st.spinner("Đang gọi flow…"):
+                S["_check"] = importer.check_lists(storage)
+        for row in S.get("_check", []):
+            ld = row["list"]
+            if row["loi"]:
+                ui.error_state(RuntimeError(row["loi"]), compact=True)
+                continue
+            if not row["co_list"]:
+                site = row.get("site") or "site đang cấu hình trong flow"
+                msg = f"**{row['ten']}**: chưa có list trên **{site}**."
+                others = row.get("lists_on_site")
+                if others is not None:
+                    msg += (" Các list đang có trên site này: " + (", ".join(others) or "(không có)")
+                            + ". Nếu list của bạn nằm ở site khác, sửa **Site Address** trong bước "
+                              "*Send an HTTP request to SharePoint* của flow; nếu tên list khác, sửa "
+                              f"`SP_LIST_{ld.name}` trong Secrets. Chưa có thì bấm *Tạo list / thêm "
+                              "cột* ở bước 2.")
+                else:
+                    msg += " Bấm *Tạo list / thêm cột* ở bước 2."
+                st.warning(msg, icon=":material/playlist_add:")
+            elif row["thieu"]:
+                st.warning(f"**{row['ten']}**: kết nối được, khớp {len(row['khop'])} cột, thiếu "
+                           f"{len(row['thieu'])} cột: "
+                           + ", ".join(ld.get(k).sp_title for k in row["thieu"]),
+                           icon=":material/rule:")
+            else:
+                st.success(f"**{row['ten']}**: kết nối được, đủ {len(row['khop'])} cột.",
+                           icon=":material/check_circle:")
+
+    # ------------------------------------------------------------------ 2. tạo list
+    with ui.section("2. Tạo list / thêm cột còn thiếu",
+                    f"Tạo / cập nhật toàn bộ {len(ALL_LISTS)} list SharePoint của app (list chưa có "
+                    "thì tạo mới, list đã có thì thêm cột còn thiếu). Không xóa hay đổi cột đã có. "
+                    "Tài khoản chạy flow cần quyền Owner trên site."):
+        tinh_trang = {r["list"].name: r for r in S.get("_check", [])}
+
+        def _tt(ld) -> str:
+            r = tinh_trang.get(ld.name)
+            if r is None:
+                return "Chưa kiểm tra"
+            if r["loi"]:
+                return "Lỗi kết nối"
+            if not r["co_list"]:
+                return "Chưa có list"
+            return f"Thiếu {len(r['thieu'])} cột" if r["thieu"] else "Đủ cột"
+
+        st.dataframe(pd.DataFrame([{
+            "List trên SharePoint": config.list_name(ld.name), "Dùng cho": ld.title,
+            "Số cột": len(ld.fields), "Tình trạng": _tt(ld)} for ld in ALL_LISTS]),
+            hide_index=True, width="stretch", column_config={
+                "Dùng cho": st.column_config.TextColumn(width="large")})
+        b1, b2 = st.columns(2)
+        if b1.button("Tạo list / thêm cột (tất cả)", type="primary",
+                     icon=":material/playlist_add:", disabled=backend == "local",
+                     width="stretch"):
+            try:
+                with st.status("Đang thiết lập…", expanded=True) as stt:
+                    importer.setup_lists(storage, log=stt.write, lists=ALL_LISTS)
+                    stt.update(label="Đã thiết lập xong — đang kiểm tra lại…", state="running")
+                    S["_check"] = importer.check_lists(storage)
+                    stt.update(label="Đã thiết lập xong", state="complete")
+                ui.refresh()
+                st.rerun()
+            except Exception as e:
+                ui.error_state(e, compact=True)
+        if b2.button("Kiểm tra tình trạng các list", icon=":material/fact_check:",
+                     disabled=backend == "local", width="stretch"):
+            with st.spinner("Đang kiểm tra…"):
+                S["_check"] = importer.check_lists(storage)
+            st.rerun()
+
+    # ------------------------------------------------------------------ hướng dẫn
+    with st.expander("Hướng dẫn tạo flow Power Automate và khai báo Secrets", icon=":material/help:"):
+        st.markdown(open("docs/power_automate.md", encoding="utf-8").read())

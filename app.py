@@ -11,7 +11,7 @@ from tuyensinh import config, ui
 
 ROOT = Path(__file__).parent
 st.set_page_config(page_title="Tuyển sinh · Tân Phú", page_icon=str(ROOT / "static/icon.svg"),
-                   layout="wide", initial_sidebar_state="collapsed")
+                   layout="wide", initial_sidebar_state="auto")  # máy tính: mở; điện thoại: thu gọn
 ui.inject_css()
 _logo = ROOT / "static/logo_truong.png"
 _logo = str(_logo if _logo.exists() else ROOT / "static/logo.svg")
@@ -173,10 +173,15 @@ _FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc",
          "kt": "ke_toan", "nt": "noi_tru", "bc": "bao_cao", "tl": "tro_ly", "cd": "cai_dat"}
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
-_nhom_ts = [p for p in (P["ts"], P["nh"]) if p in _pages]
-_nav = ({"": [p for p in _pages if p not in _nhom_ts], "Tuyển sinh": _nhom_ts}
-        if len(_nhom_ts) == 2 else _pages)
-pg = st.navigation(_nav, position="top")
+# Thanh bên trái, nhóm theo bộ phận (nhóm không có trang được phép thì ẩn)
+_NHOM = [("", ["home"]), ("Tuyển sinh", ["ts", "nh"]), ("Kế toán", ["kt"]),
+         ("Nội trú", ["nt"]), ("Báo cáo", ["bc", "tl"]), ("Hệ thống", ["cd"])]
+_nav = {}
+for _ten, _ks in _NHOM:
+    _ds = [P[k] for k in _ks if P[k] in _pages]
+    if _ds:
+        _nav[_ten] = _ds
+pg = st.navigation(_nav, position="sidebar", expanded=True)
 # Vừa đăng nhập: mở trang chính của vai trò (vd Kế toán -> Kế toán, GV quản nhiệm -> Nội trú)
 _TRANG_VAI_TRO = {"Tuyển sinh": "ts", "Kế toán": "kt", "Giáo vụ": "nh", "GV quản nhiệm": "nt",
                   "Tổ trưởng quản nhiệm": "nt", "Chỉ xem báo cáo": "bc"}

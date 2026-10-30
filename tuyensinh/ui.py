@@ -184,6 +184,14 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
   -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid rgba(0,0,0,.08);}
 [data-testid="stTopNavLinkContainer"] a {border-radius: 8px;}
+/* thanh bên trái: menu theo bộ phận */
+[data-testid="stSidebarNav"] li:has(a[href$="/tro-ly"]) {display: none;}
+[data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"] {font-size: .72rem;
+  font-weight: 600; letter-spacing: .06em; text-transform: uppercase; opacity: .6;
+  margin-top: .6rem;}
+[data-testid="stSidebarNav"] a {border-radius: 8px;}
+[data-testid="stSidebarNav"] a[aria-current="page"] {background: rgba(0,122,255,.10);}
+[data-testid="stSidebarNav"] a[aria-current="page"] span {color: #007AFF; font-weight: 600;}
 /* menu nhóm: mục đầu (Tổng quan) -> "Tuyển sinh ▾" -> các mục còn lại */
 .rc-overflow:has([data-testid="stTopNavSection"]) > .rc-overflow-item {order: 2 !important;}
 .rc-overflow:has([data-testid="stTopNavSection"]) > .rc-overflow-item:first-child
