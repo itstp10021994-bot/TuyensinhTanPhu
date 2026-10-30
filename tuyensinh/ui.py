@@ -87,6 +87,10 @@ CSS_TEMPLATE = """
 .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 140px;}
 /* màn hình vừa: bỏ dòng nguồn dữ liệu để không đè lên menu (đủ 6 trang) */
 [data-testid="stToolbarActions"] {display: none !important;}  /* Share, ★, GitHub của Cloud */
+/* Hộp thoại (cửa sổ hồ sơ): nền phía sau tối và mờ đi */
+[data-testid="stDialog"] {background: rgba(15, 23, 42, .38) !important;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);}
+[data-testid="stDialog"] div[role="dialog"] {box-shadow: 0 24px 64px rgba(0, 0, 0, .28);}
 @media (max-width: 1720px) { .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;} }
 @media (max-width: 1500px) { .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;}
   .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 118px; width: 118px !important;}
@@ -551,8 +555,39 @@ def mutate(fn, *args, success: str | None = None, **kwargs):
 
 
 # ---------------------------------------------------------------- danh sách thẻ + chi tiết
+def dialog(title: str, **kw):
+    """st.dialog có đánh dấu "đã mở hộp thoại trong lần chạy này" — Streamlit chỉ cho mở một
+    hộp thoại mỗi lần chạy, trang dùng dialog_da_mo() để không mở thêm cửa sổ hồ sơ."""
+    import functools
+
+    def deco(fn):
+        d = st.dialog(title, **kw)(fn)
+
+        @functools.wraps(fn)
+        def wrap(*a, **k):
+            st.session_state["_dlg_mo"] = True
+            return d(*a, **k)
+        return wrap
+    return deco
+
+
+def dialog_da_mo() -> bool:
+    return bool(st.session_state.get("_dlg_mo"))
+
+
+def mo_sau(fn, *args):
+    """Mở hộp thoại `fn` ở lần chạy sau (không mở hộp thoại lồng trong cửa sổ hồ sơ)."""
+    st.session_state["_mo_sau"] = (fn, args)
+
+
+def chay_mo_sau():
+    if "_mo_sau" in st.session_state and not dialog_da_mo():
+        fn, args = st.session_state.pop("_mo_sau")
+        fn(*args)
+
+
 def card_list(view: pd.DataFrame, key: str, render_card, selected: str | None,
-              filter_state=None, page_size: int = 20, height: int = 760):
+              filter_state=None, page_size: int = 21, height: int = 760, cols: int = 1):
     """Danh sách thẻ có phân trang (về trang 1 khi bộ lọc đổi)."""
     S = st.session_state
     pages = max(1, -(-len(view) // page_size))
@@ -563,8 +598,16 @@ def card_list(view: pd.DataFrame, key: str, render_card, selected: str | None,
     with st.container(height=height, border=True, key=f"cards_{key}"):
         if view.empty:
             empty_state("search_off", "Không có học sinh phù hợp", "Thử từ khóa hoặc bộ lọc khác.")
-        for _, r in view.iloc[(page - 1) * page_size: page * page_size].iterrows():
-            render_card(r.to_dict(), r["id"] == selected)
+        trang = view.iloc[(page - 1) * page_size: page * page_size]
+        if cols <= 1:
+            for _, r in trang.iterrows():
+                render_card(r.to_dict(), r["id"] == selected)
+        else:  # lưới nhiều cột (điện thoại tự xếp 1 cột)
+            dong = [r.to_dict() for _, r in trang.iterrows()]
+            for i in range(0, len(dong), cols):
+                for c, r in zip(st.columns(cols, gap="small"), dong[i:i + cols]):
+                    with c:
+                        render_card(r, r["id"] == selected)
     nav = st.container(horizontal=True, vertical_alignment="center")
     nav.button("", icon=":material/chevron_left:", key=f"{key}_prev", disabled=page <= 1,
                on_click=lambda: S.update({f"{key}_page": page - 1}))
@@ -606,6 +649,7 @@ def inject_css():
         st.html(CSS_TOI)
     st.session_state["_tp_card_n"] = 0  # đánh số thẻ (khóa CSS) lại từ đầu mỗi lần chạy
     st.session_state["_chi_doc"] = False  # chế độ chỉ xem luôn tắt khi bắt đầu một lần chạy
+    st.session_state["_dlg_mo"] = False  # chưa mở hộp thoại nào trong lần chạy này
 
 
 def page_header(title: str, subtitle: str | None = None, eyebrow: str | None = None):

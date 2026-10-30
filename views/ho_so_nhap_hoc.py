@@ -59,6 +59,13 @@ def back_to_list():
     S.nh_v += 1
 
 
+def mo_sau(fn, rec: dict):
+    """Hộp thoại không mở lồng trong cửa sổ hồ sơ: đóng cửa sổ rồi mở ở lần chạy sau."""
+    ui.mo_sau(fn, rec)
+    back_to_list()
+    st.rerun()
+
+
 def noi_tru(rec: dict) -> bool:
     """Chỉ học sinh nội trú mới đăng ký xe đưa đón (về nhà cuối tuần)."""
     return str(rec.get("NoiTruBanTru") or "").startswith("Nội trú")
@@ -71,7 +78,7 @@ def done(res):
 
 
 # ================================================================== hộp thoại thao tác
-@st.dialog("Xếp lớp")
+@ui.dialog("Xếp lớp")
 def xep_lop_dialog(rec: dict):
     st.markdown(f"**{rec.get('HoTen')}** · Khối {rec.get('KhoiPH') or rec.get('Khoi') or '—'}")
     khoi = str(rec.get("Khoi") or "")
@@ -87,7 +94,7 @@ def xep_lop_dialog(rec: dict):
                        success=f"Đã xếp {rec.get('HoTen')} vào lớp {lop}"))
 
 
-@st.dialog("Thu hồ sơ", width="large")
+@ui.dialog("Thu hồ sơ", width="large")
 def thu_ho_so_dialog(rec: dict):
     ngay, docs = services.doc_ho_so(rec.get("HoSoDaNop"))
     can = services.giay_to_can_nop(rec.get("Khoi"), rec.get("PhanHe"))
@@ -147,7 +154,7 @@ def thu_ho_so_dialog(rec: dict):
             done(res)
 
 
-@st.dialog("Bảng ký nhận hồ sơ học sinh", width="large")
+@ui.dialog("Bảng ký nhận hồ sơ học sinh", width="large")
 def bien_nhan_dialog(info: dict):
     import streamlit.components.v1 as components
 
@@ -178,7 +185,7 @@ def _num(v):
         return None
 
 
-@st.dialog("Thanh toán học phí")
+@ui.dialog("Thanh toán học phí")
 def hoc_phi_dialog(rec: dict):
     st.markdown(f"**{rec.get('HoTen')}**")
     giu_cho = _num(rec.get("SoTienXacNhan"))
@@ -205,7 +212,7 @@ def hoc_phi_dialog(rec: dict):
                        success=f"Đã lưu học phí của {rec.get('HoTen')}"))
 
 
-@st.dialog("Đăng ký xe đưa đón")
+@ui.dialog("Đăng ký xe đưa đón")
 def xe_dialog(rec: dict):
     st.markdown(f"**{rec.get('HoTen')}**")
     tuyen = sorted({x for x in ui.df(NHAP_HOC)["DangKyXe"] if x})
@@ -226,7 +233,7 @@ def xe_dialog(rec: dict):
                        {"DangKyXe": "", "DiemDonTra": ""}, success="Đã hủy đăng ký xe"))
 
 
-@st.dialog("Rút hồ sơ")
+@ui.dialog("Rút hồ sơ")
 def rut_dialog(rec: dict):
     st.markdown(f"Rút hồ sơ của **{rec.get('HoTen')}**?")
     st.caption("Hồ sơ được giữ lại với tình trạng *Rút hồ sơ*; Data tuyển sinh cũng chuyển sang "
@@ -240,7 +247,7 @@ def rut_dialog(rec: dict):
         st.rerun()
 
 
-@st.dialog("Xóa hồ sơ nhập học")
+@ui.dialog("Xóa hồ sơ nhập học")
 def delete_dialog(rec: dict):
     st.write(f"Xóa vĩnh viễn hồ sơ của **{rec.get('HoTen')}**?")
     st.caption("Không thể hoàn tác.")
@@ -356,7 +363,7 @@ def render_tab(name: str, groups: tuple, rec: dict, prefix: str) -> dict:
     return v
 
 
-@st.dialog("Nhóm môn (tổ hợp môn lựa chọn)")
+@ui.dialog("Nhóm môn (tổ hợp môn lựa chọn)")
 def mon_dialog(rec: dict):
     st.markdown(f"**{rec.get('HoTen')}** · Khối {rec.get('KhoiPH') or '—'}")
     vals = ui.record_form([F(k) for k in ("LuaChon1", "LuaChon2", "LuaChon3")], rec,
@@ -441,7 +448,7 @@ def filters() -> pd.DataFrame:
 
 
 def render_left(view: pd.DataFrame, selected: str | None):
-    ui.card_list(view, "nh", card, selected, filter_state=S.get("_nh_filter"))
+    ui.card_list(view, "nh", card, selected, filter_state=S.get("_nh_filter"), cols=3)
 
 
 def load_record(item_id: str) -> tuple[dict | None, pd.DataFrame]:
@@ -502,7 +509,7 @@ def render_right(item_id: str | None):
                                    file_name=f"VEMIS_{rec.get('HoTen')}.xlsx", mime=ui.XLSX,
                                    on_click="ignore", icon=":material/download:", width="stretch")
                 if st.button("In bảng ký nhận hồ sơ", icon=":material/print:", width="stretch"):
-                    in_bien_nhan(rec)
+                    mo_sau(in_bien_nhan, rec)
             pct = 1 - len(missing) / len(services.NHAP_HOC_CAN_CO)
             st.progress(pct, text=f"Hoàn thiện {pct:.0%}" + (
                 " · còn thiếu: " + ", ".join(services.NHAP_HOC_NHAN_NGAN[k] for k in missing)
@@ -519,9 +526,9 @@ def render_right(item_id: str | None):
     bar = st.columns(3, gap="small")
     if not new:
         if bar[0].button("Thu hồ sơ", icon=":material/folder_open:", width="stretch"):
-            thu_ho_so_dialog(rec)
+            mo_sau(thu_ho_so_dialog, rec)
         if bar[1].button("Thanh toán học phí", icon=":material/payments:", width="stretch"):
-            hoc_phi_dialog(rec)
+            mo_sau(hoc_phi_dialog, rec)
     save_bottom = bar[2].button("Lưu hồ sơ", type="primary", icon=":material/save:",
                                 key="save_bot", width="stretch")
 
@@ -536,7 +543,7 @@ def render_right(item_id: str | None):
             st.rerun()
 
 
-@st.dialog("Lên lớp: chuyển học sinh cũ sang năm học mới", width="large")
+@ui.dialog("Lên lớp: chuyển học sinh cũ sang năm học mới", width="large")
 def len_lop_dialog():
     years = [y for y in config.school_years() if y < nam_hoc]
     if not years:
@@ -619,18 +626,13 @@ def render_page():
             if n is not None:
                 st.rerun()
 
-    selected = qp.get("id")
-    left, right = st.columns([1, 1.45], gap="medium")
-    with left:
-        if view_all.empty:
-            ui.empty_state("assignment_ind", "Chưa có hồ sơ nhập học",
-                           "Hồ sơ được tạo tự động khi xác nhận Nhập học ở Data tuyển sinh.")
-            view = view_all
-        else:
-            view = filters()
-            render_left(view, selected)
-    with right:
-        render_right(selected)
+    if view_all.empty:
+        ui.empty_state("assignment_ind", "Chưa có hồ sơ nhập học",
+                       "Hồ sơ được tạo tự động khi xác nhận Nhập học ở Data tuyển sinh.")
+        view = view_all
+    else:
+        view = filters()
+        render_left(view, qp.get("id"))
 
     export = view.drop(columns=["HoanThien", "KhoiPH"], errors="ignore")
     export_slot.download_button(
@@ -640,6 +642,19 @@ def render_page():
         help="Tải file Excel đúng biểu mẫu Danh sách học sinh (VEMIS) theo bộ lọc hiện tại")
 
 
+# ================================================================== cửa sổ hồ sơ
+def _dong_ho_so():
+    qp.clear()
+
+
+@ui.dialog("Hồ sơ nhập học", width="large", on_dismiss=_dong_ho_so)
+def ho_so_dialog(item_id: str):
+    render_right(item_id)
+
+
 render_page()
 if S.get("_in_bien_nhan"):  # vừa lưu "Thu hồ sơ" -> mở bảng ký nhận để in
     bien_nhan_dialog(S.pop("_in_bien_nhan"))
+ui.chay_mo_sau()
+if qp.get("id") and not ui.dialog_da_mo():  # bấm tên học sinh -> mở hồ sơ, nền phía sau mờ đi
+    ho_so_dialog(qp.get("id"))

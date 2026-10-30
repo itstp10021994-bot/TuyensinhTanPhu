@@ -41,7 +41,7 @@ TRUONG_LABELS = {"TruongCu_Tinh": "Tỉnh/Thành phố", "TruongCu_PhuongXa": "P
                  "TruongCu": "Tên trường"}
 
 
-@st.dialog("Thêm liên hệ mới", width="large", on_dismiss="rerun")
+@ui.dialog("Thêm liên hệ mới", width="large", on_dismiss="rerun")
 def new_contact_dialog():
     S.setdefault("new_v", 0)
     prefix = f"new_{S.new_v}"
@@ -98,7 +98,7 @@ def new_contact_dialog():
     st.rerun(scope="fragment")  # "Lưu và thêm tiếp": giữ hộp thoại, form trống
 
 
-@st.dialog("Rút hồ sơ")
+@ui.dialog("Rút hồ sơ")
 def withdraw_dialog(rec: dict):
     st.write(f"Chuyển **{rec['HoTenHS']}** sang trạng thái **Rút hồ sơ**.")
     ly_do = st.text_area("Lý do rút hồ sơ *", placeholder="Ví dụ: chuyển sang trường khác gần nhà",
@@ -116,7 +116,7 @@ def withdraw_dialog(rec: dict):
         st.rerun()
 
 
-@st.dialog("Xóa liên hệ")
+@ui.dialog("Xóa liên hệ")
 def delete_dialog(rec: dict):
     st.write(f"Xóa vĩnh viễn **{rec['HoTenHS']}** ({rec['SDT']}) khỏi Data tuyển sinh?")
     st.caption("Không thể hoàn tác. Nếu học sinh chỉ không theo học nữa, hãy dùng **Rút hồ sơ**.")
@@ -239,11 +239,16 @@ def render_right(item_id: str | None):
                 if st.button(s, icon=ui.STATUS[s]["icon"], width="stretch", key=f"set_{s}"):
                     set_step(item_id, s)
             st.divider()
+            # hộp thoại không mở lồng trong cửa sổ hồ sơ: đóng cửa sổ rồi mở ở lần chạy sau
             if step != "Rút hồ sơ" and st.button("Rút hồ sơ…", icon=":material/block:",
                                                   width="stretch"):
-                withdraw_dialog(rec)
+                ui.mo_sau(withdraw_dialog, rec)
+                back_to_list()
+                st.rerun()
             if st.button("Xóa liên hệ…", icon=":material/delete:", width="stretch"):
-                delete_dialog(rec)
+                ui.mo_sau(delete_dialog, rec)
+                back_to_list()
+                st.rerun()
         ui.stepper(step)
         nxt = ui.next_step(step)
         if nxt:
@@ -381,22 +386,29 @@ def render_page():
         format_func=lambda s: f"{s}  {len(ts) if s == 'Tất cả' else int(counts.get(s, 0))}",
         label_visibility="collapsed")
 
-    left, right = st.columns([1, 1.45], gap="medium")
-    with left:
-        if ts.empty:
-            ui.empty_state("person_search", "Chưa có liên hệ nào",
-                           f"Năm học {nam_hoc} chưa có dữ liệu. Bấm **Thêm liên hệ** hoặc chọn "
-                           "năm học khác ở thanh trên.")
-            view = ts
-        else:
-            view, fstate = filters(step)
-            ui.card_list(view, "ts", card, qp.get("id"), filter_state=fstate)
-    with right:
-        render_right(qp.get("id"))
+    if ts.empty:
+        ui.empty_state("person_search", "Chưa có liên hệ nào",
+                       f"Năm học {nam_hoc} chưa có dữ liệu. Bấm **Thêm liên hệ** hoặc chọn "
+                       "năm học khác ở thanh trên.")
+        view = ts
+    else:
+        view, fstate = filters(step)
+        ui.card_list(view, "ts", card, qp.get("id"), filter_state=fstate, cols=3)
 
     cols = {f.key: f.label for f in TUYEN_SINH.fields}
     ui.download_excel("Xuất Excel", view[list(cols)].rename(columns=cols),
                       f"DataTuyenSinh_{nam_hoc}.xlsx", container=export_slot, key="ts_export")
+
+
+# ================================================================== cửa sổ hồ sơ
+def _dong_ho_so():
+    qp.clear()
+    S.ts_sua_id = None
+
+
+@ui.dialog("Hồ sơ tuyển sinh", width="large", on_dismiss=_dong_ho_so)
+def ho_so_dialog(item_id: str):
+    render_right(item_id)
 
 
 # ================================================================== điều hướng
@@ -404,3 +416,6 @@ if qp.get("new"):
     del qp["new"]
     new_contact_dialog()
 render_page()
+ui.chay_mo_sau()
+if qp.get("id") and not ui.dialog_da_mo():  # bấm tên học sinh -> mở hồ sơ, nền phía sau mờ đi
+    ho_so_dialog(qp.get("id"))
