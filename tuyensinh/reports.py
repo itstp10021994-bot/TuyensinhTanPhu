@@ -617,6 +617,37 @@ def _bien_dong_so(t: pd.DataFrame, nams: list[str], toi_thieu: int = 5) -> pd.Se
     return (100 * (b[ok] - a[ok]) / a[ok]).round(1)
 
 
+def _kpi_bien_dong(t: pd.DataFrame, nams: list[str], ten: str = "") -> list:
+    """Chỉ số "tăng / giảm mạnh nhất" giữa 2 năm cuối — chỉ nêu khi thật sự có tăng (> 0) /
+    giảm (< 0); năm mới nhất chưa có số liệu thì báo, không ghi -100% cho mọi nơi."""
+    if len(nams) < 2:
+        return []
+    if t[nams[-1]].sum() == 0:
+        return [(f"So sánh {nams[-2]} → {nams[-1]}", f"Năm {nams[-1]} chưa có số liệu")]
+    bd = _bien_dong_so(t, nams)
+    kq = []
+    if len(bd) and bd.max() > 0:
+        kq.append((f"{ten}tăng mạnh nhất".capitalize(),
+                   f"{str(bd.idxmax()).split(' · ')[0]} ({bd.max():+}%)"))
+    if len(bd) and bd.min() < 0:
+        kq.append((f"{ten}giảm mạnh nhất".capitalize(),
+                   f"{str(bd.idxmin()).split(' · ')[0]} ({bd.min():+}%)"))
+    return kq
+
+
+def _kpi_dia_ban_nam(t: pd.DataFrame, nams: list[str], cap: str) -> list:
+    """Địa bàn qua các năm: năm mới nhất phần lớn chưa rõ (vd hồ sơ chỉ có phường/xã mới, không
+    suy ra quận/huyện cũ) thì báo thay vì so sánh sai (-100%)."""
+    if len(nams) < 2 or nams[-1] not in t:
+        return []
+    chua = t.index.astype(str).str.startswith(DB.CHUA_RO)
+    tong = t[nams[-1]].sum()
+    if tong and t.loc[chua, nams[-1]].sum() / tong > .5:
+        return [(f"Chưa rõ {cap.split(' (')[0].lower()} năm {nams[-1]}",
+                 f"{t.loc[chua, nams[-1]].sum() / tong:.0%} — xem theo Phường/Xã (mới)")]
+    return _kpi_bien_dong(t[~chua], nams)
+
+
 def _pivot_nam(df: pd.DataFrame, by: str, nams: list[str], label: str,
                chi_nhap_hoc: bool = False) -> pd.DataFrame:
     d = df[df["TrangThai"] == "Nhập học"] if chi_nhap_hoc else df
@@ -665,11 +696,7 @@ def xh_khoi(c: Ctx) -> Result:
     order = _khoi_order(lh["Khối"]) + (["Chưa rõ"] if "Chưa rõ" in set(lh["Khối"]) else [])
     nh = nh.set_index("Khối").reindex(order, fill_value=0).reset_index()
     lh = lh.set_index("Khối").reindex(order, fill_value=0).reset_index()
-    kpis = []
-    bd = _bien_dong_so(nh.set_index("Khối"), nams)
-    if len(bd):
-        kpis = [("Khối tăng mạnh nhất", f"{bd.idxmax()} ({bd.max():+}%)"),
-                ("Khối giảm mạnh nhất", f"{bd.idxmin()} ({bd.min():+}%)")]
+    kpis = _kpi_bien_dong(nh.set_index("Khối"), nams, "khối ")
     t = _bien_dong(_total_row(nh, "Khối"), nams)
     return Result(t, kpis,
                   {"kind": "group", "data": nh.melt("Khối", nams, var_name="Năm học",
@@ -736,11 +763,7 @@ def xh_diaban(c: Ctx) -> Result:
                       .drop(columns="_s").rename_axis(cap).reset_index(), cap)
     data = lh.reset_index().assign(_s=lh["Tổng"].values).sort_values("_s", ascending=False) \
         .head(12).melt(cap, nams, var_name="Năm học", value_name="Số HS")
-    kpis = []
-    bd = _bien_dong_so(lh[~lh.index.str.startswith(DB.CHUA_RO)], nams)
-    if len(bd):
-        kpis = [(f"Tăng mạnh nhất ({bd.max():+}%)", bd.idxmax().split(" · ")[0]),
-                (f"Giảm mạnh nhất ({bd.min():+}%)", bd.idxmin().split(" · ")[0])]
+    kpis = _kpi_dia_ban_nam(lh, nams, cap)
     return Result(t, kpis,
                   {"kind": "group", "data": data, "x": cap, "y": "Số HS", "color": "Năm học",
                    "horizontal": True},
@@ -954,11 +977,7 @@ def xnh_khoi(c: Ctx) -> Result:
     lop = _xnh_pivot(hoc.assign(LopHoc=_blank(hoc["LopHoc"], "Chưa xếp lớp")), "LopHoc", nams,
                      "Lớp")
     lop = lop.sort_values("Lớp", key=lambda s: s.map(_lop_key))
-    kpis = []
-    bd = _bien_dong_so(t[t["Khối"] != "Tổng cộng"].set_index("Khối"), nams)
-    if len(bd):
-        kpis = [("Khối tăng mạnh nhất", f"{bd.idxmax()} ({bd.max():+}%)"),
-                ("Khối giảm mạnh nhất", f"{bd.idxmin()} ({bd.min():+}%)")]
+    kpis = _kpi_bien_dong(t[t["Khối"] != "Tổng cộng"].set_index("Khối"), nams, "khối ")
     return Result(t, kpis,
                   {"kind": "group", "data": t[t["Khối"] != "Tổng cộng"].melt(
                       "Khối", nams, var_name="Năm học", value_name="Số HS"),
@@ -1001,11 +1020,7 @@ def xnh_diaban(c: Ctx) -> Result:
         return Result(pd.DataFrame(columns=[cap]))
     t = _chua_ro_cuoi(_xnh_pivot(hoc.assign(_n=DB.nhan(g, cap)), "_n", nams, cap)
                       .sort_values("Tổng", ascending=False), cap).reset_index(drop=True)
-    kpis = []
-    bd = _bien_dong_so(t[~t[cap].str.startswith(DB.CHUA_RO)].set_index(cap), nams)
-    if len(bd):
-        kpis = [(f"Tăng mạnh nhất ({bd.max():+}%)", bd.idxmax().split(" · ")[0]),
-                (f"Giảm mạnh nhất ({bd.min():+}%)", bd.idxmin().split(" · ")[0])]
+    kpis = _kpi_dia_ban_nam(t.set_index(cap), nams, cap)
     chua = t[t[cap].str.startswith(DB.CHUA_RO)]
     if len(chua):
         kpis.append(("Chưa rõ địa bàn (các năm)", int(chua["Tổng"].sum())))

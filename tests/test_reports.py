@@ -133,3 +133,22 @@ def test_tuyen_moi_cung_ky():
     assert t.loc["6", "Nhập học 2025-2026"] == 1 and t.loc["6", "Nhập học 2026-2027"] == 1
     assert t.loc["10", "Liên hệ 2026-2027"] == 1 and t.loc["10", "Nhập học 2026-2027"] == 0
     assert t.loc["Tổng cộng", "Liên hệ 2026-2027"] == 2
+
+
+def test_kpi_bien_dong_khong_bao_sai():
+    import pandas as pd
+    from tuyensinh import reports as R
+    from tuyensinh import dia_ban as DB
+    nams = ["2025-2026", "2026-2027"]
+    # chỉ một nơi, năm mới 0 vì chưa rõ quận: không ghi "tăng mạnh nhất -100%"
+    t = pd.DataFrame({"2025-2026": [40, 2], "2026-2027": [0, 60]},
+                     index=["Quận Tân Phú · TP. Hồ Chí Minh", DB.CHUA_RO + " · TP. Hồ Chí Minh"])
+    k = R._kpi_dia_ban_nam(t, nams, "Quận/Huyện (cũ)")
+    assert len(k) == 1 and "Chưa rõ quận/huyện" in k[0][0] and "Phường/Xã" in k[0][1]
+    # năm mới chưa có số liệu
+    assert "chưa có số liệu" in R._kpi_bien_dong(t.assign(**{"2026-2027": 0}), nams)[0][1]
+    # chỉ có tăng: không có dòng "giảm mạnh nhất"; tăng / giảm khác nơi
+    t2 = pd.DataFrame({"2025-2026": [10, 10, 10], "2026-2027": [15, 5, 10]}, index=["A", "B", "C"])
+    assert R._kpi_bien_dong(t2, nams) == [("Tăng mạnh nhất", "A (+50.0%)"),
+                                         ("Giảm mạnh nhất", "B (-50.0%)")]
+    assert [k for k, _ in R._kpi_bien_dong(t2.iloc[[0]], nams)] == ["Tăng mạnh nhất"]
