@@ -522,16 +522,25 @@ def doi_chieu_hien_huu(nh: list[dict], ds: pd.DataFrame, nam_hoc: str
     return bang, thua
 
 
-COT_CAP_NHAT = {"LopHoc": "Lớp", "MaHocSinh": "Mã học sinh", "MaVEMIS": "Mã VEMIS",
-                "MaMOET": "Mã MOET", "SoDangBo": "Sổ đăng bộ"}
+# Cột của biểu mẫu VEMIS được cập nhật theo file (Ghi chú là ghi chú nội bộ của app: giữ nguyên)
+COT_CAP_NHAT = {k: (f"{g} - {l}" if g else l) for g, l, k in COLUMNS if k and k != "GhiChu"}
 
 
-def thay_doi_tu_file(bang: pd.DataFrame, ds: pd.DataFrame, nh: list[dict]) -> list[dict]:
-    """Lớp và các mã trong file khác với hồ sơ đã khớp (bảng của doi_chieu_hien_huu).
+def _gia_tri(f, v):
+    """Giá trị đã chuẩn hóa của trường `f` (để so sánh và để ghi)."""
+    if _blank(v):
+        return False if f.type == BOOL else ""
+    if f.type == BOOL:
+        return v if isinstance(v, bool) else str(v).strip().lower() in ("true", "x", "1", "có")
+    if f.type == DATE:
+        return str(v)[:10]
+    return " ".join(str(v).split())
 
-    Lớp chỉ coi là khác khi khác số lớp (6.1E và 6.1 là cùng lớp, giữ cách ghi trong app);
-    ô trống trong file không xóa dữ liệu đang có."""
-    from .noi_tru import _chuan_lop
+
+def thay_doi_tu_file(bang: pd.DataFrame, ds: pd.DataFrame, nh: list[dict],
+                     xoa_o_trong: bool = False) -> list[dict]:
+    """Các ô của hồ sơ đã khớp (bảng của doi_chieu_hien_huu) khác với file VEMIS: mọi cột của
+    biểu mẫu theo file. Ô trống trong file chỉ xóa ô trong app khi `xoa_o_trong`."""
     con = ds.reset_index(drop=True)
     theo_id = {str(r.get("id")): r for r in nh}
     out = []
@@ -539,9 +548,11 @@ def thay_doi_tu_file(bang: pd.DataFrame, ds: pd.DataFrame, nh: list[dict]) -> li
         rec, f = theo_id[b["id"]], con.loc[b["_dong"]]
         upd = {}
         for k in COT_CAP_NHAT:
-            moi = "" if _blank(f.get(k)) else str(f.get(k)).strip()
-            cu = "" if _blank(rec.get(k)) else str(rec.get(k)).strip()
-            if not moi or moi == cu or (k == "LopHoc" and _chuan_lop(moi) == _chuan_lop(cu)):
+            if k not in f.index:
+                continue
+            fd = NHAP_HOC.get(k)
+            moi, cu = _gia_tri(fd, f.get(k)), _gia_tri(fd, rec.get(k))
+            if moi == cu or (moi in ("", False) and not xoa_o_trong):
                 continue
             upd[k] = (cu, moi)
         if upd:

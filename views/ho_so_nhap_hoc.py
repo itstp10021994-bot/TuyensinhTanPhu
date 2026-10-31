@@ -597,47 +597,46 @@ def len_lop_dialog():
             st.rerun()
 
 
-def render_cap_nhat(thay: list[dict], file_id: str):
-    """Cập nhật lớp và các mã (mã học sinh, VEMIS, MOET, sổ đăng bộ) từ file cho hồ sơ đã khớp."""
-    st.markdown("##### 1. Cập nhật lớp và mã từ file")
+def render_cap_nhat(bang_kq: pd.DataFrame, ds: pd.DataFrame, file_id: str):
+    """Cập nhật hồ sơ đã khớp theo file: mọi cột của biểu mẫu VEMIS (lớp, các mã, địa chỉ…)."""
+    st.markdown("##### 1. Cập nhật hồ sơ theo file")
+    xoa = st.checkbox("Ô trống trong file thì xóa ô tương ứng trong app", key="dc_cn_xoa",
+                      help="Mặc định ô trống trong file không xóa dữ liệu đang có trong app.")
+    thay = importer.thay_doi_tu_file(bang_kq, ds, ui.records(NHAP_HOC), xoa_o_trong=xoa)
     if not thay:
-        st.success("Lớp và mã của các hồ sơ đã khớp đều giống file.",
-                   icon=":material/check_circle:")
+        st.success("Các hồ sơ đã khớp đều giống file.", icon=":material/check_circle:")
         return
     dem = {k: sum(k in t["thay"] for t in thay) for k in importer.COT_CAP_NHAT}
-    st.caption(f"**{len(thay)} hồ sơ** có lớp / mã khác file: " + ", ".join(
-        f"{ten} {dem[k]}" for k, ten in importer.COT_CAP_NHAT.items() if dem[k]) +
-        ". Ô trống trong file không xóa dữ liệu đang có; em chỉ trùng họ tên mặc định không chọn.")
+    st.caption(f"**{len(thay)} hồ sơ** khác file: " + ", ".join(
+        f"{importer.COT_CAP_NHAT[k]} {n}" for k, n in sorted(dem.items(), key=lambda x: -x[1])
+        if n) + ". Mọi cột của biểu mẫu VEMIS theo file (trừ Ghi chú của app).")
 
-    def o(t, k):
-        if k not in t["thay"]:
-            return ""
-        cu, moi = t["thay"][k]
-        return f"{cu or '(trống)'} → {moi}"
-    n_ten = sum(t["Kết quả"] == importer.KQ_TEN for t in thay)
-    ca_ten = n_ten > 0 and st.checkbox(f"Chọn cả {n_ten} em chỉ trùng họ tên", key="dc_cn_ten",
-                                       help="Đã xem lại danh sách em chỉ trùng họ tên ở trên")
-    bang = pd.DataFrame([{"Chọn": ca_ten or t["Kết quả"] != importer.KQ_TEN, "id": t["id"],
-                          "Họ tên": t["Họ tên"],
-                          **{ten: o(t, k) for k, ten in importer.COT_CAP_NHAT.items()},
-                          "Khớp theo": t["Kết quả"].removeprefix("Có (").rstrip(")")}
-                         for t in thay])
-    bang = bang[[c for c in bang.columns
-                 if c in ("Chọn", "id", "Họ tên", "Khớp theo") or bang[c].ne("").any()]]
+    def hien(v):
+        return "x" if v is True else (v or "(trống)")
+    bang = pd.DataFrame([{
+        "Chọn": True, "id": t["id"], "Họ tên": t["Họ tên"], "Số ô đổi": len(t["thay"]),
+        "Thay đổi": " · ".join(f"{importer.COT_CAP_NHAT[k]}: {hien(cu)} → {hien(moi)}"
+                               for k, (cu, moi) in t["thay"].items()),
+        "Khớp theo": t["Kết quả"].removeprefix("Có (").rstrip(")")} for t in thay])
     sua = st.data_editor(bang, hide_index=True, width="stretch",
                          height=min(38 + 35 * len(bang), 380),
                          disabled=[c for c in bang.columns if c != "Chọn"],
                          column_config={"id": None,
-                                        "Chọn": st.column_config.CheckboxColumn(width="small")},
-                         key=f"dc_cn_{file_id}_{ca_ten}_{ui.data_version()}")
+                                        "Chọn": st.column_config.CheckboxColumn(width="small"),
+                                        "Số ô đổi": st.column_config.NumberColumn(width="small"),
+                                        "Thay đổi": st.column_config.TextColumn(width="large")},
+                         key=f"dc_cn_{file_id}_{xoa}_{ui.data_version()}")
     ids = set(sua.loc[sua["Chọn"], "id"])
     chon = [t for t in thay if t["id"] in ids]
-    if st.button(f"Cập nhật {len(chon)} hồ sơ", type="primary", icon=":material/sync:",
+    if any(t["Kết quả"] == importer.KQ_TEN for t in chon):
+        st.caption(":material/info: Có em chỉ khớp theo họ tên (cột *Khớp theo*) — kiểm tra lại, "
+                   "bỏ chọn nếu không đúng em.")
+    if st.button(f"Cập nhật {len(chon)} hồ sơ theo file", type="primary", icon=":material/sync:",
                  width="stretch", disabled=not chon, key="dc_cn_go"):
         bar = st.progress(0.0, text="Đang ghi lên SharePoint…")
         n = ui.mutate(importer.cap_nhat_tu_file, storage, chon,
                       progress=lambda d, t: bar.progress(d / max(t, 1), text=f"Đã cập nhật {d}/{t}"),
-                      success=f"Đã cập nhật lớp / mã cho {len(chon)} hồ sơ")
+                      success=f"Đã cập nhật {len(chon)} hồ sơ theo file")
         if n is not None:
             st.rerun(scope="fragment")
 
@@ -646,8 +645,8 @@ def render_cap_nhat(thay: list[dict], file_id: str):
 def doi_chieu_dialog():
     st.caption(f"Tải file **Danh sách học sinh** xuất từ VEMIS (học sinh đang học toàn trường). "
                f"App so với hồ sơ nhập học năm **{nam_hoc}** theo mã VEMIS / mã học sinh, rồi họ "
-               "tên + ngày sinh: (1) cập nhật lớp và các mã từ file cho em đã khớp, (2) liệt kê em "
-               "có hồ sơ mà **không có trong file** để xóa.")
+               "tên + ngày sinh: (1) cập nhật hồ sơ đã khớp theo file (lớp, các mã, địa chỉ…), "
+               "(2) liệt kê em có hồ sơ mà **không có trong file** để xóa.")
     up = st.file_uploader("File VEMIS (.xls, .xlsx)", type=["xls", "xlsx"], key="dc_up")
     if up is None:
         return
@@ -679,7 +678,7 @@ def doi_chieu_dialog():
             st.dataframe(thua, hide_index=True, width="stretch",
                          height=min(38 + 35 * len(thua), 300))
             ui.download_excel("Tải danh sách", thua, f"ChuaCoHoSo_{nam_hoc}.xlsx", key="dc_thua")
-    render_cap_nhat(importer.thay_doi_tu_file(bang, ds, ui.records(NHAP_HOC)), up.file_id)
+    render_cap_nhat(bang, ds, up.file_id)
     st.markdown("##### 2. Hồ sơ không còn trong danh sách")
     if khong.empty:
         st.success("Mọi hồ sơ nhập học đều có trong danh sách hiện hữu.",

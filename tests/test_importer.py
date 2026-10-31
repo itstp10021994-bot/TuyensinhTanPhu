@@ -248,13 +248,38 @@ def test_cap_nhat_lop_va_ma_tu_file(tmp_path):
     nh = st.list_items(NHAP_HOC.name)
     bang, _ = importer.doi_chieu_hien_huu(nh, ds, "N")
     thay = importer.thay_doi_tu_file(bang, ds, nh)
-    # 6.1E và 6.1 cùng lớp: không đổi; ô trống trong file không xóa mã MOET đang có
+    # mọi cột theo file (lớp ghi đúng như file); ô trống trong file không xóa mã MOET đang có
     assert {t["Họ tên"]: t["thay"] for t in thay} == {
-        "Nguyễn An": {"MaHocSinh": ("", "2601012246"), "MaVEMIS": ("", "0226001605")},
+        "Nguyễn An": {"LopHoc": ("6.1E", "6.1"), "MaHocSinh": ("", "2601012246"),
+                      "MaVEMIS": ("", "0226001605")},
         "Trần Bình": {"LopHoc": ("6.2", "7.1")}}
+    assert "MaMOET" in importer.thay_doi_tu_file(bang, ds, nh, xoa_o_trong=True)[1]["thay"]
     assert importer.cap_nhat_tu_file(st, thay) == 2
     ga, gb = st.get_item(NHAP_HOC.name, a["id"]), st.get_item(NHAP_HOC.name, b["id"])
-    assert ga["MaVEMIS"] == "0226001605" and ga["LopHoc"] == "6.1E"
+    assert ga["MaVEMIS"] == "0226001605" and ga["LopHoc"] == "6.1"
     assert gb["LopHoc"] == "7.1" and gb["MaMOET"] == "79123"
+    nh = st.list_items(NHAP_HOC.name)
+    assert importer.thay_doi_tu_file(importer.doi_chieu_hien_huu(nh, ds, "N")[0], ds, nh) == []
+
+
+def test_cap_nhat_moi_cot_vemis(tmp_path):
+    """File VEMIS đầy đủ cột: ngày, ô đánh dấu x, địa chỉ… theo file; đọc lại không còn khác."""
+    import io
+
+    from tuyensinh import export_vemis
+    from tuyensinh.schema import NHAP_HOC
+    st = LocalStorage(tmp_path / "d.sqlite3")
+    st.create_item(NHAP_HOC.name, {"HoTen": "Nguyễn An", "NgaySinh": "2015-01-02", "NamHoc": "N",
+                                   "ChoO_SoNha": "12 Lê Lợi", "DoanVien": False, "GhiChu": "app"})
+    file = pd.DataFrame([{"HoTen": "Nguyễn An", "NgaySinh": "2015-01-02", "LopHoc": "6.1",
+                          "NgayVaoTruong": "2026-06-27", "ChoO_SoNha": "51/34  Trần Thị Trọng",
+                          "DoanVien": True, "GhiChu": "file"}])
+    ds = importer.read_vemis(io.BytesIO(export_vemis.to_bytes(file)))
+    nh = st.list_items(NHAP_HOC.name)
+    thay = importer.thay_doi_tu_file(importer.doi_chieu_hien_huu(nh, ds, "N")[0], ds, nh)
+    assert set(thay[0]["thay"]) == {"LopHoc", "NgayVaoTruong", "ChoO_SoNha", "DoanVien"}
+    importer.cap_nhat_tu_file(st, thay)
+    r = st.list_items(NHAP_HOC.name)[0]
+    assert r["NgayVaoTruong"] == "2026-06-27" and r["DoanVien"] is True and r["GhiChu"] == "app"
     nh = st.list_items(NHAP_HOC.name)
     assert importer.thay_doi_tu_file(importer.doi_chieu_hien_huu(nh, ds, "N")[0], ds, nh) == []
