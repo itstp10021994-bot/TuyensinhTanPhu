@@ -4,23 +4,17 @@ Tính toán nằm ở tuyensinh/reports.py; trang này chỉ chọn mẫu, lọc
 """
 from datetime import date
 
-import altair as alt
 import pandas as pd
 import streamlit as st
 
+from tuyensinh import bieu_do as BD
 from tuyensinh import dia_ban, reports, ui
-from tuyensinh.schema import KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
+from tuyensinh.schema import KHOI, NHAP_HOC, TUYEN_SINH
 
 S = st.session_state
 nam_hoc = ui.nam_hoc()
 SCHOOL = "Trường TH, THCS và THPT Tân Phú"
 
-# Bảng màu phân loại (thứ tự cố định, đã kiểm tra mù màu) — bước tuyển sinh dùng màu trạng thái
-CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
-ONE = CAT[0]
-STATUS_SCALE = alt.Scale(domain=list(TRANG_THAI), range=[ui.STATUS[s]["hex"] for s in TRANG_THAI])
-AXIS = {"labelFontSize": 12, "titleFontSize": 12, "titleFontWeight": 500, "gridOpacity": .35,
-        "domainOpacity": .4, "tickOpacity": .4}
 MONEY_WORDS = ("tiền", "thanh toán", "còn lại", "đã thu")
 
 ts_all = ui.df(TUYEN_SINH)
@@ -30,94 +24,9 @@ ts_year = ts_all[ts_all["NamHoc"] == nam_hoc].reset_index(drop=True)
 
 
 # ------------------------------------------------------------------ biểu đồ
-def _cfg(c: alt.Chart, height: int) -> alt.Chart:
-    return (c.properties(height=height).configure_axis(**AXIS).configure_view(strokeWidth=0)
-            .configure_legend(orient="top", title=None, labelFontSize=12, symbolType="circle"))
-
-
-def draw(spec: dict):
-    data = spec["data"]
-    if data is None or len(data) == 0:
-        return
-    kind, x, y = spec["kind"], spec["x"], spec["y"]
-    color = spec.get("color")
-    horiz = spec.get("horizontal") or kind == "hbar"
-    yfmt = ",.0f"
-    tip = [alt.Tooltip(f"{x}:N", title=x)] + ([alt.Tooltip(f"{color}:N", title=color)]
-                                                if color else []) + \
-        [alt.Tooltip(f"{y}:Q", title=y, format=yfmt)]
-    n = data[x].nunique()
-    if kind == "line":
-        fmt = "%m/%Y" if spec.get("fmt") == "%m/%Y" else "%d/%m"
-        base = alt.Chart(data).encode(
-            x=alt.X(f"{x}:T", title=None, axis=alt.Axis(format=fmt, labelAngle=0)),
-            y=alt.Y(f"{y}:Q", title=None),
-            color=alt.Color(f"{color}:N", scale=alt.Scale(range=[CAT[0], CAT[2]])),
-            tooltip=[alt.Tooltip(f"{x}:T", title="Kỳ", format=spec.get("fmt", "%d/%m/%Y")),
-                     alt.Tooltip(f"{color}:N", title="Chỉ số"), alt.Tooltip(f"{y}:Q", title="Số HS")])
-        c = base.mark_line(strokeWidth=2) + base.mark_point(size=60, filled=True, stroke="white",
-                                                            strokeWidth=1.5)
-        st.altair_chart(_cfg(c, 300), width="stretch")
-        return
-    if kind == "line_cat":  # trục danh mục có thứ tự (tháng trong chu kỳ) × nhiều năm
-        doms = list(dict.fromkeys(data[color]))
-        base = alt.Chart(data).encode(
-            x=alt.X(f"{x}:N", title=None, sort=list(dict.fromkeys(data[x])),
-                    axis=alt.Axis(labelAngle=0 if n <= 14 else -40)),
-            y=alt.Y(f"{y}:Q", title=None, axis=alt.Axis(format="d")),
-            color=alt.Color(f"{color}:N", scale=alt.Scale(domain=doms, range=CAT[:len(doms)])),
-            tooltip=tip)
-        c = base.mark_line(strokeWidth=2) + base.mark_point(size=60, filled=True, stroke="white",
-                                                            strokeWidth=1.5)
-        st.altair_chart(_cfg(c, 320), width="stretch")
-        return
-    cat_axis = alt.Axis(labelLimit=260, labelAngle=0) if horiz else \
-        alt.Axis(labelAngle=0 if n <= 12 else -40, labelLimit=140)
-    # thanh ngang: xếp giảm dần; cột đứng: giữ thứ tự của bảng (khối, lớp, năm học…)
-    sort = alt.EncodingSortField(y, "sum", "descending") if horiz else list(
-        dict.fromkeys(data[x]))
-    cat = alt.Y(f"{x}:N", title=None, sort=sort, axis=cat_axis) if horiz else \
-        alt.X(f"{x}:N", title=None, sort=sort, axis=cat_axis)
-    money = spec.get("money")
-    vax = alt.Axis(labelExpr="format(datum.value / 1e6, ',.0f') + ' tr'") if money else \
-        alt.Axis(format="d")
-    val = alt.X(f"{y}:Q", title=None, axis=vax) if horiz else alt.Y(f"{y}:Q", title=None, axis=vax)
-    if money:  # nhãn "89,8 tr" (triệu đồng)
-        data = data.assign(_lbl=[f"{v / 1e6:,.1f} tr".replace(",", "#").replace(".", ",")
-                                 .replace("#", ".") for v in data[y]])
-    enc = {"x": val, "y": cat} if horiz else {"x": cat, "y": val}
-    mark = alt.Chart(data).mark_bar(cornerRadiusEnd=4, stroke="white", strokeWidth=2,
-                                    **({"height": {"band": .7}} if horiz else
-                                       {"width": {"band": .7}}))
-    if kind == "stack":
-        enc["color"] = alt.Color(f"{color}:N", scale=STATUS_SCALE, sort=list(TRANG_THAI))
-        enc["order"] = alt.Order("_o:Q")
-        data = data.assign(_o=data[color].map({s: i for i, s in enumerate(TRANG_THAI)}))
-        mark = alt.Chart(data).mark_bar(stroke="white", strokeWidth=2)
-    elif kind in ("stack_cat", "group"):
-        doms = list(dict.fromkeys(data[color]))
-        enc["color"] = alt.Color(f"{color}:N", scale=alt.Scale(
-            domain=doms, range=[CAT[0], CAT[2]] if kind == "group" and len(doms) == 2
-            else CAT[:len(doms)]))
-        if kind == "group":
-            if horiz:
-                enc["yOffset"] = alt.YOffset(f"{color}:N")
-            else:
-                enc["xOffset"] = alt.XOffset(f"{color}:N")
-        else:
-            mark = alt.Chart(data).mark_bar(stroke="white", strokeWidth=2)
-    else:
-        mark = mark.encode(color=alt.value(ONE))
-    h = max(240, min(700, 30 * n * (2 if kind == "group" else 1))) if horiz else 300
-    labels = None
-    if kind in ("hbar", "bar") and n <= 25:  # nhãn giá trị ở đầu thanh
-        labels = alt.Chart(data).mark_text(
-            align="left" if horiz else "center", baseline="middle" if horiz else "bottom",
-            dx=4 if horiz else 0, dy=0 if horiz else -4, fontSize=11, color="#64748B").encode(
-            **({"x": val, "y": cat} if horiz else {"x": cat, "y": val}),
-            text=alt.Text("_lbl:N") if money else alt.Text(f"{y}:Q", format=",.0f"))
-    c = mark.encode(**enc, tooltip=tip)
-    st.altair_chart(_cfg(c + labels if labels is not None else c, h), width="stretch")
+def draw(spec: dict, height: int | None = None):
+    """Biểu đồ của mẫu báo cáo — kiểu chung ở tuyensinh/bieu_do.py."""
+    BD.ve(spec, height=height, key=f"bc_chart_{rid}")
 
 
 def fmt_kpi(label: str, v) -> str:
@@ -227,7 +136,7 @@ with main:
                       params, nh_all=nh_all)
 
     # ---- nội dung báo cáo
-    with st.container(border=True):
+    with st.container(border=True, key="bc_noi_dung"):
         h1, h2 = st.columns([3, 1.2], vertical_alignment="center")
         h1.markdown(f"#### {rep.title}")
         h1.caption(rep.desc + (f" · Khối {', '.join(sel_khoi)}" if sel_khoi else ""))
@@ -247,9 +156,19 @@ with main:
                 ui.kpi(col, label, fmt_kpi(label, v))
         if res.table.empty:
             ui.empty_state("inbox", "Không có dữ liệu", "Không có học sinh phù hợp với bộ lọc.")
+        elif res.chart:  # màn hình rộng: biểu đồ và bảng cạnh nhau
+            ngang = res.chart.get("kind") in ("hbar",) or res.chart.get("horizontal")
+            n = res.chart["data"][res.chart["x"]].nunique()
+            if n > 14 or len(res.table.columns) > 7:  # biểu đồ dài / bảng nhiều cột: xếp dọc
+                draw(res.chart, height=None if ngang else 270)
+                table(res.table)
+            else:
+                g1, g2 = st.columns([1.35, 1], gap="medium")
+                with g1:
+                    draw(res.chart, height=max(300, 30 * n + 40) if ngang else 340)
+                with g2:
+                    table(res.table)
         else:
-            if res.chart:
-                draw(res.chart)
             table(res.table)
         if res.note:
             st.caption(f":material/info: {res.note}")

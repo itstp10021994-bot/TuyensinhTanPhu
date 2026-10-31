@@ -7,10 +7,10 @@
 """
 from datetime import date, timedelta
 
-import altair as alt
 import pandas as pd
 import streamlit as st
 
+from tuyensinh import bieu_do as BD
 from tuyensinh import importer, ui
 from tuyensinh.ui_noi_tru import nhap_phan_phong
 from tuyensinh import noi_tru as NT
@@ -24,7 +24,7 @@ tk = S.get("tk")
 quan_ly = NT.la_quan_ly(tk)
 hom_nay = date.today()
 THU = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
-MAU = {"Tốt": "#34C759", "Khá": "#007AFF", "Trung bình": "#FF9500", "Chưa tốt": "#FF3B30"}
+MAU = BD.MUC_MAU
 NGAN = {"Tốt": "T", "Khá": "K", "Trung bình": "TB", "Chưa tốt": "CT"}
 
 actions = ui.page_header("Nội trú", f"Đánh giá hằng ngày: nề nếp, học tập, sức khỏe - tâm lý "
@@ -301,31 +301,18 @@ def render_bao_cao():
         if td.empty:
             ui.empty_state("show_chart", "Chưa có dữ liệu")
         else:
-            base = alt.Chart(td).encode(
-                x=alt.X("Ngày:T", title=None, axis=alt.Axis(format="%d/%m")),
-                y=alt.Y("Tỷ lệ Tốt (%):Q", title=None, scale=alt.Scale(domain=[0, 100])),
-                color=alt.Color("Mục:N", scale=alt.Scale(range=["#007AFF", "#34C759", "#AF52DE"]),
-                                legend=alt.Legend(orient="top", title=None)),
-                tooltip=[alt.Tooltip("Ngày:T", format="%d/%m/%Y"), "Mục:N",
-                         "Tỷ lệ Tốt (%):Q"])
-            st.altair_chart((base.mark_line(strokeWidth=2) + base.mark_point(filled=True))
-                            .properties(height=260), width="stretch")
+            BD.ve({"kind": "line", "data": td, "x": "Ngày", "y": "Tỷ lệ Tốt (%)",
+                   "color": "Mục", "fmt": "%d/%m", "pct": True}, height=260, key="nt_bc_td")
     with right, ui.section("Phân bố mức đánh giá"):
         pb = NT.phan_bo_muc(x)
         if pb["Số lượt"].sum() == 0:
             ui.empty_state("bar_chart", "Chưa có dữ liệu")
         else:
-            st.altair_chart(alt.Chart(pb).mark_bar(cornerRadiusEnd=4).encode(
-                x=alt.X("Số lượt:Q", title=None, stack="normalize",
-                        axis=alt.Axis(format="%")),
-                y=alt.Y("Mục:N", title=None),
-                color=alt.Color("Mức:N", sort=list(MUC_DANH_GIA), scale=alt.Scale(
-                    domain=list(MUC_DANH_GIA), range=[MAU[m] for m in MUC_DANH_GIA]),
-                    legend=alt.Legend(orient="top", title=None)),
-                order=alt.Order("_o:Q"),
-                tooltip=["Mục:N", "Mức:N", "Số lượt:Q"]).transform_calculate(
-                _o="indexof(['Tốt','Khá','Trung bình','Chưa tốt'], datum['Mức'])")
-                .properties(height=190), width="stretch")
+            pb = pb.assign(**{"Tỷ lệ (%)": pb["Số lượt"] / pb.groupby("Mục")["Số lượt"]
+                              .transform("sum").clip(lower=1) * 100})
+            BD.ve({"kind": "stack_cat", "horizontal": True, "data": pb, "x": "Mục",
+                   "y": "Tỷ lệ (%)", "color": "Mức", "pct": True}, height=190,
+                  key="nt_bc_pb")
     with ui.section("Tình hình nhập đánh giá",
                     "✓ đã nhập · ✗ chưa nhập — để nhắc giáo viên quản nhiệm"):
         ng = ngays[-31:]

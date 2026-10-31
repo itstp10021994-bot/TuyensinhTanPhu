@@ -207,6 +207,35 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
   border: 1px solid rgba(0,0,0,.06) !important; border-radius: 14px !important;
   box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);}
 [class*="st-key-tp_card_"] {padding: 1rem 1.15rem;}
+/* thanh phân đoạn (một tổng chia nhiều phần) */
+.tp-seg-bar {display: flex; gap: 2px; height: var(--seg-h); border-radius: 6px; overflow: hidden;}
+.tp-seg-bar span:first-child {border-radius: 6px 0 0 6px;}
+.tp-seg-bar span:last-child {border-radius: 0 6px 6px 0;}
+.tp-seg-ds {display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin-top: .55rem;
+  font-size: .8rem; color: #52514e;}
+.tp-seg-i {display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap;}
+.tp-seg-i i {width: 9px; height: 9px; border-radius: 50%; display: inline-block;}
+.tp-seg-i b {color: #1D1D1F; font-weight: 600;}
+.tp-seg-i em {font-style: normal; color: #898781;}
+/* Tổng quan: gọn trong một màn hình */
+.st-key-tq [class*="st-key-tp_card_"] {padding: .7rem .9rem .5rem;}
+.st-key-tq [class*="st-key-tp_card_"] h4 {font-size: .92rem; margin: 0 0 .1rem;}
+.st-key-tq [class*="st-key-tp_card_"] [data-testid="stCaptionContainer"] p {font-size: .74rem;
+  margin: 0;}
+.st-key-tq [data-testid="stMetric"], .st-key-bc_noi_dung [data-testid="stMetric"] {
+  padding: .5rem .8rem;}
+.st-key-bc_noi_dung [data-testid="stMetricValue"] {font-size: 1.4rem;}
+.st-key-tq [data-testid="stMetricDelta"] > div, .st-key-tq [data-testid="stMetricDelta"] {
+  white-space: normal; overflow: visible; text-overflow: clip; max-width: none;}
+.st-key-tq [data-testid="stHeaderActionElements"] {display: none;}
+.st-key-tq [data-testid="stMetricDelta"] {font-size: .78rem;}
+.st-key-tq [data-testid="stMetricValue"] {font-size: 1.45rem;}
+.st-key-tq [data-testid="stVerticalBlock"] {gap: .55rem;}
+.tq-todo {display: flex; align-items: center; gap: .6rem; padding: .42rem .1rem;
+  border-bottom: .5px solid rgba(0,0,0,.07); font-size: .84rem;}
+.tq-todo:last-child {border-bottom: 0;}
+.tq-todo .n {min-width: 2.1rem; text-align: center; font-weight: 600; border-radius: 7px;
+  padding: .1rem .35rem; background: rgba(235,104,52,.12); color: #b4461d;}
 [data-testid="stMetricValue"] {letter-spacing: -0.02em;}
 /* nút bo tròn mềm, nút chính xanh Apple */
 .stApp button[kind="primary"], .stApp [data-testid="stBaseButton-primary"] {
@@ -272,6 +301,9 @@ header[data-testid="stHeader"] {background: rgba(28,28,30,.72) !important;
   border-bottom-color: rgba(255,255,255,.08);}
 [class*="st-key-the_noi"] {background: #1C1C1E;
   box-shadow: 0 4px 18px rgba(0,0,0,.45), 0 0 0 .5px rgba(255,255,255,.08);}
+.tp-seg-ds {color: #c3c2b7;} .tp-seg-i b {color: #f0efec;}
+.tq-todo {border-bottom-color: rgba(255,255,255,.08);}
+.tq-todo .n {background: rgba(217,89,38,.22); color: #ffb08f;}
 [class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #2C2C2E;
   border-color: rgba(255,255,255,.07) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3);}
 .stApp [data-testid="stBaseButton-secondary"] {background: #3A3A3C;}
