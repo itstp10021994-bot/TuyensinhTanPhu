@@ -194,3 +194,14 @@ def test_mau_phan_phong_doc_duoc():
     ds, sheet = NT.doc_ds_phong(buf)
     assert sheet == NOI_TRU_PHONG.name
     assert ds.iloc[0].tolist() == ["Trần An", "6.2", "Nam", "508", "Cô Hoa"]
+
+
+def test_them_vao_phong(st_):
+    p = NT.luu_phong(st_, [], NAM, "P1", "Nam", GV1, ["1"])
+    NT.them_vao_phong(st_, st_.list_items(NOI_TRU_PHONG.name), NAM, p, "", ["2", "1"])
+    p = st_.list_items(NOI_TRU_PHONG.name)[0]
+    assert NT.hs_ids(p) == ["1", "2"] and p["GiaoVienID"] == "11" and p["Khu"] == "Nam"
+    with pytest.raises(ValueError, match="phòng khác"):
+        NT.them_vao_phong(st_, [p], NAM, None, "P2", ["2"])
+    NT.them_vao_phong(st_, [p], NAM, None, "P2", ["3"])
+    assert len(st_.list_items(NOI_TRU_PHONG.name)) == 2

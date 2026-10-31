@@ -74,7 +74,8 @@ nh = ui.df(NHAP_HOC, nam_hoc)
 nt = nh[nh["NoiTruBanTru"].str.startswith("Nội trú")
         & ~nh["TinhTrangHS"].isin(["Rút hồ sơ", "Không học tiếp"])]
 HS = {str(r["id"]): {"ten": r["HoTen"] or "(Chưa có tên)",
-                     "lop": r["LopHoc"] or (f"Khối {r['Khoi']}" if r["Khoi"] else "")}
+                     "lop": r["LopHoc"] or (f"Khối {r['Khoi']}" if r["Khoi"] else ""),
+                     "khoi": r["Khoi"], "gt": r["GioiTinh"]}
       for _, r in nt.iterrows()}
 o_phong = NT.phong_cua_hs(phongs)
 
@@ -360,11 +361,60 @@ def render_nhap_excel(tks: list[dict]):
         nhap_phan_phong(up, storage, nam_hoc, phongs_all, ui.records(NHAP_HOC), tks, "nt_up")
 
 
+def render_chua_xep():
+    """Học sinh nội trú (hồ sơ nhập học) chưa ở phòng nào: tick chọn rồi xếp vào phòng."""
+    chua = [i for i in HS if i not in o_phong]
+    if not chua:
+        return
+    with ui.section(f"{len(chua)} học sinh nội trú chưa xếp phòng",
+                    "Hồ sơ nhập học có N.trú, B.trú = Nội trú nhưng chưa ở phòng nào. Tick chọn "
+                    "các em, chọn phòng rồi bấm Xếp phòng."):
+        c1, c2, c3 = st.columns([2, 1, 1])
+        tim = c1.text_input("Tìm", key="nt_cx_tim", placeholder="Tên học sinh / lớp",
+                            label_visibility="collapsed")
+        khois = sorted({str(HS[i]["khoi"]) for i in chua if HS[i]["khoi"]},
+                       key=lambda x: (len(x), x))
+        khoi = c2.selectbox("Khối", ["Tất cả khối", *khois], key="nt_cx_khoi",
+                            label_visibility="collapsed")
+        gts = sorted({HS[i]["gt"] for i in chua if HS[i]["gt"]})
+        gt = c3.selectbox("Giới tính", ["Nam và nữ", *gts], key="nt_cx_gt",
+                          label_visibility="collapsed")
+        from tuyensinh.danh_muc import fold
+        ds = [i for i in chua
+              if (not tim or fold(tim) in fold(f"{HS[i]['ten']} {HS[i]['lop']}"))
+              and (khoi == "Tất cả khối" or str(HS[i]["khoi"]) == khoi)
+              and (gt == "Nam và nữ" or HS[i]["gt"] == gt)]
+        bang = pd.DataFrame([{"Chọn": False, "id": i, "Họ tên": HS[i]["ten"],
+                              "Lớp": HS[i]["lop"], "Giới tính": HS[i]["gt"]} for i in ds],
+                            columns=["Chọn", "id", "Họ tên", "Lớp", "Giới tính"])
+        sua = st.data_editor(bang, hide_index=True, width="stretch",
+                             height=min(38 + 35 * max(len(bang), 1), 360),
+                             disabled=["Họ tên", "Lớp", "Giới tính"],
+                             column_config={"id": None,
+                                            "Chọn": st.column_config.CheckboxColumn(width="small")},
+                             key=f"nt_cx_ed_{tim}_{khoi}_{gt}_{ui.data_version()}")
+        chon = sua.loc[sua["Chọn"], "id"].tolist()
+        theo_ten = {f"{p['TenPhong']} · {p.get('GiaoVien') or 'chưa có GV'} · "
+                    f"{len(NT.hs_ids(p))} HS": p for p in phongs}
+        c1, c2, c3 = st.columns([2, 1.2, 1.2], vertical_alignment="bottom")
+        dich = c1.selectbox("Xếp vào phòng", [*theo_ten, MOI], key="nt_cx_phong")
+        ten_moi = c2.text_input("Tên phòng mới", key="nt_cx_moi", placeholder="vd P101",
+                                disabled=dich != MOI)
+        if c3.button(f"Xếp {len(chon)} em vào phòng", type="primary", width="stretch",
+                     icon=":material/meeting_room:", disabled=not chon, key="nt_cx_go"):
+            if ui.mutate(NT.them_vao_phong, storage, phongs_all, nam_hoc, theo_ten.get(dich),
+                         ten_moi, chon, success=f"Đã xếp {len(chon)} học sinh") is not None:
+                st.rerun()
+        st.caption("Em không có trong danh sách: mở hồ sơ ở **Hồ sơ nhập học**, đặt **N.trú, "
+                   "B.trú = Nội trú** (tab Giấy tờ & chính sách) và kiểm tra đúng năm học.")
+
+
 def render_phong():
     tks = [t for t in ui.records(TAI_KHOAN, optional=True)
            if str(t.get("HoatDong") or "Có") != "Không"]
     tks.sort(key=lambda t: (t.get("VaiTro") != "GV quản nhiệm", str(t.get("HoTen") or "")))
     render_nhap_excel(tks)
+    render_chua_xep()
     left, right = st.columns([1.4, 1.2], gap="medium")
     with left, ui.section("Danh sách phòng", f"{len(phongs)} phòng · năm học {nam_hoc}"):
         if phongs:
@@ -375,10 +425,6 @@ def render_phong():
                 width="stretch", height=min(38 + 35 * len(phongs), 520))
         else:
             ui.empty_state("meeting_room", "Chưa có phòng", "Thêm phòng ở khung bên phải.")
-        chua = [i for i in HS if i not in o_phong]
-        if chua:
-            with st.expander(f"{len(chua)} học sinh nội trú chưa xếp phòng"):
-                st.write(", ".join(ten_hs(i) for i in chua))
     with right, ui.section("Thêm / sửa phòng"):
         theo_ten = {p["TenPhong"]: p for p in phongs}
         chon = st.selectbox("Phòng", [MOI, *theo_ten], key="nt_p_chon")

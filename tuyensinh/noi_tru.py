@@ -110,6 +110,19 @@ def luu_phong(storage: Storage, phongs: list[dict], nam_hoc: str, ten: str, khu:
     return storage.create_item(NOI_TRU_PHONG.name, data)
 
 
+def them_vao_phong(storage: Storage, phongs: list[dict], nam_hoc: str, phong: dict | None,
+                   ten_moi: str, hoc_sinh: list[str]) -> dict:
+    """Xếp thêm học sinh vào phòng có sẵn (giữ giáo viên, học sinh cũ) hoặc phòng mới."""
+    if not hoc_sinh:
+        raise ValueError("Chưa chọn học sinh nào.")
+    if not phong:
+        return luu_phong(storage, phongs, nam_hoc, ten_moi, "", None, hoc_sinh)
+    gv = {"id": _s(phong.get("GiaoVienID")), "HoTen": _s(phong.get("GiaoVien"))}
+    return luu_phong(storage, phongs, nam_hoc, _s(phong.get("TenPhong")), _s(phong.get("Khu")),
+                     gv, hs_ids(phong) + [i for i in hoc_sinh if i not in hs_ids(phong)],
+                     _s(phong.get("GhiChu")), phong.get("id"))
+
+
 # ------------------------------------------------------------------ đánh giá
 def _ngay(v) -> date | None:
     d = pd.to_datetime(v, errors="coerce")
