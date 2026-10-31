@@ -507,6 +507,10 @@ def doi_chieu_hien_huu(nh: list[dict], ds: pd.DataFrame, nam_hoc: str
                         lambda x: khoi and _khoi_lop(_chuan_lop(con.at[x, "LopHoc"])) == khoi):
                 if len(ung) > 1:
                     ung = [x for x in ung if loc(x)] or ung
+            # chỉ trùng họ tên mà khác khối: coi là em khác (không khớp nhầm)
+            if khoi:
+                ung = [x for x in ung
+                       if _khoi_lop(_chuan_lop(con.at[x, "LopHoc"])) in ("", khoi)]
             if len(ung) == 1:
                 kq, j = KQ_TEN, ung[0]
         if j is not None:
@@ -527,6 +531,10 @@ def doi_chieu_hien_huu(nh: list[dict], ds: pd.DataFrame, nam_hoc: str
 
 # Cột của biểu mẫu VEMIS được cập nhật theo file (Ghi chú là ghi chú nội bộ của app: giữ nguyên)
 COT_CAP_NHAT = {k: (f"{g} - {l}" if g else l) for g, l, k in COLUMNS if k and k != "GhiChu"}
+COT_CAP_NHAT["Khoi"] = "Khối"  # không có trong file: suy ra từ lớp (10A1 -> 10)
+
+
+KHOI_HOP_LE = {str(i) for i in range(1, 13)}
 
 
 def _gia_tri(f, v):
@@ -558,6 +566,10 @@ def thay_doi_tu_file(bang: pd.DataFrame, ds: pd.DataFrame, nh: list[dict],
             if moi == cu or (moi in ("", False) and not xoa_o_trong):
                 continue
             upd[k] = (cu, moi)
+        from .noi_tru import _chuan_lop, _khoi_lop
+        khoi = _khoi_lop(_chuan_lop(f.get("LopHoc")))
+        if khoi in KHOI_HOP_LE and khoi != str(rec.get("Khoi") or "").strip():
+            upd["Khoi"] = (str(rec.get("Khoi") or ""), khoi)
         if upd:
             out.append({"id": b["id"], "Họ tên": b["Họ tên"], "Kết quả": b["Kết quả"],
                         "thay": upd})

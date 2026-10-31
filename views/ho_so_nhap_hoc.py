@@ -615,11 +615,22 @@ def render_cap_nhat(bang_kq: pd.DataFrame, ds: pd.DataFrame, file_id: str):
 
     def hien(v):
         return "x" if v is True else (v or "(trống)")
+
+    def lech(t):
+        """Khối đổi hơn 1 (vd 6 → 10): có thể khớp nhầm em trùng tên — mặc định không chọn."""
+        cu, moi = t["thay"].get("Khoi", ("", ""))
+        return cu.isdigit() and moi.isdigit() and abs(int(moi) - int(cu)) > 1
     bang = pd.DataFrame([{
-        "Chọn": True, "id": t["id"], "Họ tên": t["Họ tên"], "Số ô đổi": len(t["thay"]),
+        "Chọn": not lech(t), "id": t["id"], "Họ tên": t["Họ tên"], "Số ô đổi": len(t["thay"]),
         "Thay đổi": " · ".join(f"{importer.COT_CAP_NHAT[k]}: {hien(cu)} → {hien(moi)}"
                                for k, (cu, moi) in t["thay"].items()),
-        "Khớp theo": t["Kết quả"].removeprefix("Có (").rstrip(")")} for t in thay])
+        "Khớp theo": t["Kết quả"].removeprefix("Có (").rstrip(")")
+        + (" ⚠ khối lệch, kiểm tra" if lech(t) else "")} for t in thay])
+    n_lech = sum(lech(t) for t in thay)
+    if n_lech:
+        st.warning(f"**{n_lech} hồ sơ** có khối đổi hơn 1 bậc (vd 6 → 10) — có thể là em trùng tên "
+                   "bị khớp nhầm, hoặc khối trong app đang sai. Mặc định không chọn: mở hồ sơ kiểm "
+                   "tra rồi tick nếu đúng.", icon=":material/warning:")
     sua = st.data_editor(bang, hide_index=True, width="stretch",
                          height=min(38 + 35 * len(bang), 380),
                          disabled=[c for c in bang.columns if c != "Chọn"],

@@ -251,8 +251,8 @@ def test_cap_nhat_lop_va_ma_tu_file(tmp_path):
     # mọi cột theo file (lớp ghi đúng như file); ô trống trong file không xóa mã MOET đang có
     assert {t["Họ tên"]: t["thay"] for t in thay} == {
         "Nguyễn An": {"LopHoc": ("6.1E", "6.1"), "MaHocSinh": ("", "2601012246"),
-                      "MaVEMIS": ("", "0226001605")},
-        "Trần Bình": {"LopHoc": ("6.2", "7.1")}}
+                      "MaVEMIS": ("", "0226001605"), "Khoi": ("", "6")},
+        "Trần Bình": {"LopHoc": ("6.2", "7.1"), "Khoi": ("", "7")}}
     assert "MaMOET" in importer.thay_doi_tu_file(bang, ds, nh, xoa_o_trong=True)[1]["thay"]
     assert importer.cap_nhat_tu_file(st, thay) == 2
     ga, gb = st.get_item(NHAP_HOC.name, a["id"]), st.get_item(NHAP_HOC.name, b["id"])
@@ -277,7 +277,7 @@ def test_cap_nhat_moi_cot_vemis(tmp_path):
     ds = importer.read_vemis(io.BytesIO(export_vemis.to_bytes(file)))
     nh = st.list_items(NHAP_HOC.name)
     thay = importer.thay_doi_tu_file(importer.doi_chieu_hien_huu(nh, ds, "N")[0], ds, nh)
-    assert set(thay[0]["thay"]) == {"LopHoc", "NgayVaoTruong", "ChoO_SoNha", "DoanVien"}
+    assert set(thay[0]["thay"]) == {"LopHoc", "Khoi", "NgayVaoTruong", "ChoO_SoNha", "DoanVien"}
     importer.cap_nhat_tu_file(st, thay)
     r = st.list_items(NHAP_HOC.name)[0]
     assert r["NgayVaoTruong"] == "2026-06-27" and r["DoanVien"] is True and r["GhiChu"] == "app"
@@ -301,3 +301,19 @@ def test_cap_nhat_doi_che_do_bo_khoi_phong(tmp_path):
     importer.cap_nhat_tu_file(st, thay, st.list_items(NOI_TRU_PHONG.name))
     assert st.get_item(NHAP_HOC.name, a["id"])["NoiTruBanTru"] == "Bán trú"
     assert st.get_item(NOI_TRU_PHONG.name, p["id"])["HocSinhIDs"] == str(b["id"])
+
+
+def test_cap_nhat_khoi_theo_lop_va_khong_khop_nham_khac_khoi():
+    ds = pd.DataFrame([{"HoTen": "Lê Huy", "NgaySinh": "2010-01-01", "LopHoc": "10A1",
+                        "MaVEMIS": None, "MaHocSinh": None},
+                       {"HoTen": "Phạm Nam", "NgaySinh": None, "LopHoc": "10A2",
+                        "MaVEMIS": None, "MaHocSinh": None}])
+    nh = [{"id": 1, "HoTen": "Lê Huy", "NgaySinh": "2010-01-01", "Khoi": "6", "LopHoc": "6.1",
+           "NamHoc": "N"},
+          {"id": 2, "HoTen": "Phạm Nam", "Khoi": "6", "LopHoc": "6.2", "NamHoc": "N"}]
+    bang, thua = importer.doi_chieu_hien_huu(nh, ds, "N")
+    # cùng họ tên + ngày sinh: cùng em, khối trong app sai -> sửa theo lớp; chỉ trùng tên, khác khối
+    # -> không khớp
+    assert bang["Kết quả"].tolist() == [importer.KQ_TEN_NS, importer.KQ_KHONG]
+    thay = importer.thay_doi_tu_file(bang, ds, nh)
+    assert thay[0]["thay"]["Khoi"] == ("6", "10") and thay[0]["thay"]["LopHoc"] == ("6.1", "10A1")
