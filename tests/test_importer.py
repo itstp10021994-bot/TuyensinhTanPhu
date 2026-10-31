@@ -231,3 +231,30 @@ def test_doi_chieu_trung_ten_xet_lop():
     bang, thua = importer.doi_chieu_hien_huu(nh, ds, "N")
     assert bang["Kết quả"].tolist() == [importer.KQ_TEN, importer.KQ_TEN, importer.KQ_KHONG]
     assert bang["Lớp (file)"].tolist() == ["8.1", "7.3", ""] and thua.empty
+
+
+def test_cap_nhat_lop_va_ma_tu_file(tmp_path):
+    from tuyensinh.schema import NHAP_HOC
+    st = LocalStorage(tmp_path / "c.sqlite3")
+    a = st.create_item(NHAP_HOC.name, {"HoTen": "Nguyễn An", "NgaySinh": "2015-01-02",
+                                       "LopHoc": "6.1E", "MaHocSinh": "", "NamHoc": "N"})
+    b = st.create_item(NHAP_HOC.name, {"HoTen": "Trần Bình", "NgaySinh": "2014-03-04",
+                                       "LopHoc": "6.2", "MaMOET": "79123", "NamHoc": "N"})
+    ds = pd.DataFrame([
+        {"HoTen": "Nguyễn An", "NgaySinh": "2015-01-02", "LopHoc": "6.1",
+         "MaHocSinh": "2601012246", "MaVEMIS": "0226001605", "MaMOET": None, "SoDangBo": None},
+        {"HoTen": "Trần Bình", "NgaySinh": "2014-03-04", "LopHoc": "7.1",
+         "MaHocSinh": None, "MaVEMIS": None, "MaMOET": None, "SoDangBo": None}])
+    nh = st.list_items(NHAP_HOC.name)
+    bang, _ = importer.doi_chieu_hien_huu(nh, ds, "N")
+    thay = importer.thay_doi_tu_file(bang, ds, nh)
+    # 6.1E và 6.1 cùng lớp: không đổi; ô trống trong file không xóa mã MOET đang có
+    assert {t["Họ tên"]: t["thay"] for t in thay} == {
+        "Nguyễn An": {"MaHocSinh": ("", "2601012246"), "MaVEMIS": ("", "0226001605")},
+        "Trần Bình": {"LopHoc": ("6.2", "7.1")}}
+    assert importer.cap_nhat_tu_file(st, thay) == 2
+    ga, gb = st.get_item(NHAP_HOC.name, a["id"]), st.get_item(NHAP_HOC.name, b["id"])
+    assert ga["MaVEMIS"] == "0226001605" and ga["LopHoc"] == "6.1E"
+    assert gb["LopHoc"] == "7.1" and gb["MaMOET"] == "79123"
+    nh = st.list_items(NHAP_HOC.name)
+    assert importer.thay_doi_tu_file(importer.doi_chieu_hien_huu(nh, ds, "N")[0], ds, nh) == []

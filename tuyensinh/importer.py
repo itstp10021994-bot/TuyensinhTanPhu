@@ -513,13 +513,53 @@ def doi_chieu_hien_huu(nh: list[dict], ds: pd.DataFrame, nam_hoc: str
                      "Lớp (app)": rec.get("LopHoc") or "",
                      "Tình trạng": rec.get("TinhTrangHS") or "",
                      "Lớp (file)": "" if j is None else str(con.at[j, "LopHoc"] or ""),
-                     "Kết quả": kq})
+                     "Kết quả": kq, "_dong": -1 if j is None else int(j)})
     bang = pd.DataFrame(rows, columns=["id", "Họ tên", "Ngày sinh", "Khối", "Lớp (app)",
-                                       "Tình trạng", "Lớp (file)", "Kết quả"])
+                                       "Tình trạng", "Lớp (file)", "Kết quả", "_dong"])
     thua = con.loc[[i for i in con.index if i not in dung]]
     thua = pd.DataFrame({"Họ tên": thua["HoTen"], "Ngày sinh": thua["NgaySinh"].map(d),
                          "Lớp": thua["LopHoc"]})
     return bang, thua
+
+
+COT_CAP_NHAT = {"LopHoc": "Lớp", "MaHocSinh": "Mã học sinh", "MaVEMIS": "Mã VEMIS",
+                "MaMOET": "Mã MOET", "SoDangBo": "Sổ đăng bộ"}
+
+
+def thay_doi_tu_file(bang: pd.DataFrame, ds: pd.DataFrame, nh: list[dict]) -> list[dict]:
+    """Lớp và các mã trong file khác với hồ sơ đã khớp (bảng của doi_chieu_hien_huu).
+
+    Lớp chỉ coi là khác khi khác số lớp (6.1E và 6.1 là cùng lớp, giữ cách ghi trong app);
+    ô trống trong file không xóa dữ liệu đang có."""
+    from .noi_tru import _chuan_lop
+    con = ds.reset_index(drop=True)
+    theo_id = {str(r.get("id")): r for r in nh}
+    out = []
+    for _, b in bang[bang["_dong"] >= 0].iterrows():
+        rec, f = theo_id[b["id"]], con.loc[b["_dong"]]
+        upd = {}
+        for k in COT_CAP_NHAT:
+            moi = "" if _blank(f.get(k)) else str(f.get(k)).strip()
+            cu = "" if _blank(rec.get(k)) else str(rec.get(k)).strip()
+            if not moi or moi == cu or (k == "LopHoc" and _chuan_lop(moi) == _chuan_lop(cu)):
+                continue
+            upd[k] = (cu, moi)
+        if upd:
+            out.append({"id": b["id"], "Họ tên": b["Họ tên"], "Kết quả": b["Kết quả"],
+                        "thay": upd})
+    return out
+
+
+def cap_nhat_tu_file(storage: Storage, thay: list[dict], workers: int = 4,
+                     progress: Callable[[int, int], None] | None = None) -> int:
+    viec = [(t["id"], {k: v[1] for k, v in t["thay"].items()}) for t in thay]
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        for _ in pool.map(lambda v: storage.update_item(NHAP_HOC.name, *v), viec):
+            done += 1
+            if progress:
+                progress(done, len(viec))
+    return len(viec)
 
 
 def xoa_ho_so(storage: Storage, ids: list[str], ngung: bool, phongs: list[dict],
