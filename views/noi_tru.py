@@ -68,9 +68,9 @@ if loi:
     st.stop()
 
 phongs = NT.phong_nam(phongs_all, nam_hoc)
-long = NT.bang_dai(dg_all, nam_hoc)
-
 nh = ui.df(NHAP_HOC, nam_hoc)
+# tên, lớp theo hồ sơ hiện tại; học sinh đã xóa hồ sơ không còn hiện trong đánh giá / báo cáo
+long = NT.theo_ho_so(NT.bang_dai(dg_all, nam_hoc), ui.records(NHAP_HOC))
 nt = nh[nh["NoiTruBanTru"].str.startswith("Nội trú")
         & ~nh["TinhTrangHS"].isin(["Rút hồ sơ", "Không học tiếp"])]
 HS = {str(r["id"]): {"ten": r["HoTen"] or "(Chưa có tên)",
@@ -127,7 +127,11 @@ def render_nhap():
                          + (f" · {p['Khu']}" if p.get("Khu") else "")
                          + f" · {len(NT.hs_ids(p))} học sinh"
                          + (f" · GV {p['GiaoVien']}" if quan_ly and p.get("GiaoVien") else ""))
-    ids = NT.hs_ids(phong)
+    ids = [i for i in NT.hs_ids(phong) if i in HS]  # bỏ em đã xóa hồ sơ / không còn nội trú
+    if len(ids) < len(NT.hs_ids(phong)):
+        st.caption(f":material/info: {len(NT.hs_ids(phong)) - len(ids)} em trong phòng không còn "
+                   "là học sinh nội trú (hồ sơ đã xóa hoặc đổi chế độ) nên không hiện — Tổ trưởng "
+                   "bỏ các em khỏi phòng ở tab Phòng & giáo viên.")
     if not ids:
         ui.empty_state("group_off", "Phòng chưa có học sinh",
                        "Tổ trưởng quản nhiệm xếp học sinh vào phòng ở tab Phòng & giáo viên.")

@@ -224,3 +224,18 @@ def test_ghep_trung_ten_cung_lop_chon_em_noi_tru():
            "NoiTruBanTru": "Nội trú", "NamHoc": NAM}]
     g = NT.ghep_hs(ds, nh, NAM)
     assert g.iloc[0]["Kết quả"] == NT.TT_KHOP and g.iloc[0]["HocSinhID"] == "2"
+
+
+def test_theo_ho_so_ten_lop_hien_tai_bo_hs_da_xoa(st_):
+    from tuyensinh.schema import NHAP_HOC
+    a = st_.create_item(NHAP_HOC.name, {"HoTen": "An", "Khoi": "6", "NamHoc": NAM})
+    b = st_.create_item(NHAP_HOC.name, {"HoTen": "Bình", "Khoi": "9", "NamHoc": NAM})
+    p = NT.luu_phong(st_, [], NAM, "308", "", GV1, [str(a["id"]), str(b["id"])])
+    NT.luu_danh_gia(st_, [], NAM, date(2026, 10, 30), p,
+                    [{"id": str(a["id"]), "ten": "An", "lop": "Khối 6"},
+                     {"id": str(b["id"]), "ten": "Bình", "lop": "Khối 9"}], "x")
+    st_.update_item(NHAP_HOC.name, a["id"], {"LopHoc": "6.2"})
+    st_.delete_item(NHAP_HOC.name, b["id"])
+    long = NT.theo_ho_so(NT.bang_dai(st_.list_items(NOI_TRU_DANH_GIA.name), NAM),
+                         st_.list_items(NHAP_HOC.name))
+    assert long[["Học sinh", "Lớp"]].values.tolist() == [["An", "6.2"]]

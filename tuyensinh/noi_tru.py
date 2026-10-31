@@ -287,6 +287,20 @@ def bang_dai(danh_gia: list[dict], nam_hoc: str | None = None) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=COT_BANG)
 
 
+def theo_ho_so(long: pd.DataFrame, nh: list[dict]) -> pd.DataFrame:
+    """Tên và lớp lấy theo hồ sơ nhập học hiện tại (đánh giá lưu tên / lớp lúc đánh giá); bỏ
+    đánh giá của học sinh đã bị xóa hồ sơ."""
+    hs = {str(r.get("id")): r for r in nh}
+    out = long[long["HocSinhID"].isin(hs)].copy()
+    if len(out):
+        out["Học sinh"] = [_s(hs[i].get("HoTen")) or t for i, t in
+                           zip(out["HocSinhID"], out["Học sinh"])]
+        out["Lớp"] = [_s(hs[i].get("LopHoc")) or (f"Khối {_s(hs[i].get('Khoi'))}"
+                                                 if _s(hs[i].get("Khoi")) else l)
+                     for i, l in zip(out["HocSinhID"], out["Lớp"])]
+    return out
+
+
 # ------------------------------------------------------------------ báo cáo
 def ngay_trong_khoang(tu: date, den: date, thu: list[int]) -> list[date]:
     """Các ngày trong khoảng thuộc những thứ được chọn (0 = Thứ Hai … 6 = Chủ nhật)."""
