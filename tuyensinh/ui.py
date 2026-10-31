@@ -166,7 +166,7 @@ h1, h2, h3 {letter-spacing: -0.01em;}
   .st-key-tp_toolbar {position: static; justify-content: flex-start !important;
     flex-wrap: nowrap !important;}
   .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 110px; flex: 1;}
-  .st-key-tp_toolbar [data-testid="stCaptionContainer"], .st-key-tp_refresh {display: none;}
+  .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;}
   /* KPI: 2 thẻ mỗi hàng thay vì xếp dọc từng thẻ */
   [class*="st-key-kpis"] [data-testid="stHorizontalBlock"] {flex-wrap: wrap; gap: .5rem;}
   [class*="st-key-kpis"] [data-testid="stColumn"] {flex: 1 1 calc(50% - .5rem) !important;
@@ -401,6 +401,7 @@ def refresh():
     with store["lock"]:
         store["lists"].clear()
     invalidate()
+    st.toast("Đã tải lại dữ liệu mới nhất từ SharePoint", icon=":material/refresh:")
 
 
 def loaded_at() -> datetime:
