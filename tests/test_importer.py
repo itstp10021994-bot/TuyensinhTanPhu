@@ -125,3 +125,58 @@ def test_file_mau_nhap_lai_duoc(tmp_path):
     st = LocalStorage(tmp_path / "m.sqlite3")
     assert importer.import_rows(st, NHAP_HOC, df, "2026-2027", keep_all=False)["ok"] == 2
     assert importer.import_rows(st, NHAP_HOC, df, "2026-2027", keep_all=False)["skipped"] == 2
+
+
+def _dien(ld, rows):
+    """Điền file mẫu của `ld` theo nhãn cột rồi đọc lại như khi tải lên."""
+    import io
+
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(importer.file_mau(ld)))
+    assert wb.sheetnames[0] == ld.name and "HuongDan" in wb.sheetnames
+    ws = wb[ld.name]
+    hdr = [c.value for c in ws[1]]
+    for r, row in enumerate(rows, 2):
+        for k, v in row.items():
+            ws.cell(r, hdr.index(k) + 1, v)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    buf.name = "mau.xlsx"
+    return buf, hdr
+
+
+def test_mau_du_cho_moi_list():
+    from tuyensinh.schema import ALL_LISTS
+    for ld in ALL_LISTS:
+        buf, hdr = _dien(ld, [])
+        assert importer.guess_list([ld.name]) is ld
+        # không có cột app tự quản lý
+        assert not {"ID tuyển sinh", "Mật khẩu (đã mã hóa)", "Đánh giá từng học sinh (JSON)",
+                    "ID phòng", "Học sinh trong phòng (ID hồ sơ nhập học)"} & set(hdr)
+
+
+def test_nhap_giay_to_va_tai_khoan(tmp_path):
+    from tuyensinh import tai_khoan
+    from tuyensinh.schema import GIAY_TO, TAI_KHOAN
+    st = LocalStorage(tmp_path / "g.sqlite3")
+    buf, _ = _dien(GIAY_TO, [{"Khối (vd 10-IEP, 7)": "6", "Tên giấy tờ": "Khai sinh", "Thứ tự": 1},
+                             {"Khối (vd 10-IEP, 7)": "6", "Tên giấy tờ": "Học bạ", "Thứ tự": 2}])
+    df, skipped = importer.read_frame(buf, GIAY_TO)
+    assert not skipped
+    assert importer.import_rows(st, GIAY_TO, df, "2026-2027")["ok"] == 2
+    assert importer.import_rows(st, GIAY_TO, df, "2026-2027")["skipped"] == 2
+
+    buf, _ = _dien(TAI_KHOAN, [
+        {"Họ tên": "Cô Hoa", "Tên đăng nhập": "Hoa", "Mật khẩu": "abc123",
+         "Vai trò": "GV quản nhiệm"},
+        {"Họ tên": "Thầy B", "Tên đăng nhập": "b", "Mật khẩu": "123", "Vai trò": "Kế toán"},
+        {"Họ tên": "X", "Tên đăng nhập": "x", "Mật khẩu": "abcdef", "Vai trò": "Bảo vệ"}])
+    df, skipped = importer.read_frame(buf, TAI_KHOAN)
+    assert not skipped
+    res = importer.nhap_tai_khoan(st, df, [])
+    assert res["ok"] == 1 and [e["Dòng"] for e in res["errors"]] == [3, 4]
+    items = st.list_items(TAI_KHOAN.name)
+    assert items[0]["MatKhau"] != "abc123" and tai_khoan.dang_nhap(items, "hoa", "abc123")
+    assert importer.nhap_tai_khoan(st, df.iloc[:1], items)["skipped"] == 1

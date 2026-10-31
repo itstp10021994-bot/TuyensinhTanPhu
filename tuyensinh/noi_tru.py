@@ -168,6 +168,76 @@ def luu_danh_gia(storage: Storage, danh_gia: list[dict], nam_hoc: str, ngay: dat
     return storage.create_item(NOI_TRU_DANH_GIA.name, data)
 
 
+def nhap_danh_gia(storage: Storage, df: pd.DataFrame, phongs_all: list[dict],
+                  danh_gia: list[dict], nam_hoc: str, nh: list[dict], nguoi: str,
+                  progress=None) -> dict:
+    """Nhập đánh giá từ file mẫu (mỗi dòng = 1 học sinh trong 1 ngày; cột theo key: Ngay,
+    Phong, HoTen, Lop, <mục>, <mục>_NX, DiemSang / TraoDoi / DinhHuong, NguoiDanhGia).
+
+    Học sinh tìm trong phòng của năm học theo họ tên (trùng tên thì xét lớp). Phòng + ngày đã
+    có bản ghi: em có trong file được cập nhật, em khác giữ nguyên."""
+    from .danh_muc import fold
+
+    phongs = {_s(p.get("TenPhong")).lower(): p for p in phong_nam(phongs_all, nam_hoc)}
+    hs = {str(r.get("id")): r for r in nh}
+    loi, nhom = [], {}
+    for i, row in df.iterrows():
+        d = {k: _s(v) for k, v in row.to_dict().items()}
+        dong = i + 2
+        ngay = _ngay(d.get("Ngay"))
+        p = phongs.get(d.get("Phong", "").lower().removeprefix("phòng ").strip())
+        if ngay is None:
+            loi.append({"Dòng": dong, "Lỗi": f"Ngày không hợp lệ: \"{d.get('Ngay', '')}\""})
+            continue
+        if p is None:
+            loi.append({"Dòng": dong, "Lỗi": f"Không có phòng \"{d.get('Phong', '')}\" trong "
+                                             f"năm học {nam_hoc}"})
+            continue
+        ung = [x for x in hs_ids(p) if fold((hs.get(x) or {}).get("HoTen")) == fold(d.get("HoTen"))]
+        if len(ung) > 1 and d.get("Lop"):
+            ung = [x for x in ung if _chuan_lop(hs[x].get("LopHoc")) == _chuan_lop(d["Lop"])] or ung
+        if len(ung) != 1:
+            loi.append({"Dòng": dong, "Lỗi": (f"Phòng {p.get('TenPhong')} có {len(ung)} em tên "
+                                              f"\"{d.get('HoTen')}\" — ghi thêm lớp") if ung else
+                        f"Không thấy \"{d.get('HoTen', '')}\" trong phòng {p.get('TenPhong')}"})
+            continue
+        sai = [d[m] for m in MUC if d.get(m) and d[m] not in MUC_DANH_GIA]
+        if sai:
+            loi.append({"Dòng": dong, "Lỗi": f"Mức không hợp lệ: {sai[0]} (chọn: "
+                                             f"{', '.join(MUC_DANH_GIA)})"})
+            continue
+        dai = [k for k in [NX[m] for m in MUC] + list(LOI) if len(d.get(k, "")) > MAX_LOI]
+        if dai:
+            loi.append({"Dòng": dong, "Lỗi": f"Nhận xét quá dài (tối đa {MAX_LOI} ký tự)"})
+            continue
+        r = hs[ung[0]]
+        x = {"id": ung[0], "ten": _s(r.get("HoTen")), "lop": _s(r.get("LopHoc"))}
+        x.update({k: d[k] for k in list(MUC) + [NX[m] for m in MUC] + list(LOI) if d.get(k)})
+        g = nhom.setdefault((str(p["id"]), ngay), {"phong": p, "dong": {}, "nguoi": "",
+                                                   "so_dong": []})
+        g["dong"][ung[0]] = x
+        g["nguoi"] = g["nguoi"] or d.get("NguoiDanhGia", "")
+        g["so_dong"].append(dong)
+    danh_gia = list(danh_gia)
+    ok, done = 0, 0
+    for (_, ngay), g in nhom.items():
+        cu = tim_ban_ghi(danh_gia, g["phong"]["id"], ngay)
+        gop = {str(x.get("id")): x for x in (doc_du_lieu(cu) if cu else [])}
+        for i, x in g["dong"].items():
+            gop[i] = {**gop.get(i, {}), **x}
+        try:
+            luu_danh_gia(storage, danh_gia, nam_hoc, ngay, g["phong"], list(gop.values()),
+                         g["nguoi"] or (cu or {}).get("NguoiDanhGia") or nguoi)
+            ok += len(g["dong"])
+        except Exception as e:
+            loi += [{"Dòng": n, "Lỗi": str(e)[:300]} for n in g["so_dong"]]
+        done += 1
+        if progress:
+            progress(done, len(nhom))
+    return {"ok": ok, "ban_ghi": len(nhom), "errors": sorted(loi, key=lambda e: e["Dòng"]),
+            "total": len(df)}
+
+
 def bang_dai(danh_gia: list[dict], nam_hoc: str | None = None) -> pd.DataFrame:
     """Mỗi dòng = một học sinh trong một ngày."""
     rows = []

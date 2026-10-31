@@ -5,8 +5,10 @@ import pandas as pd
 import streamlit as st
 
 from tuyensinh import config, importer, services, tai_khoan, ui
-from tuyensinh.schema import (ALL_LISTS, GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, QUYEN_MAC_DINH,
-                              TAI_KHOAN, TRANG, TUYEN_SINH, VAI_TRO)
+from tuyensinh import noi_tru as NT
+from tuyensinh.schema import (ALL_LISTS, GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, NOI_TRU_DANH_GIA,
+                              NOI_TRU_PHONG, QUYEN_MAC_DINH, TAI_KHOAN, TRANG, TUYEN_SINH, VAI_TRO)
+from tuyensinh.ui_noi_tru import nhap_phan_phong
 
 S = st.session_state
 ui.page_header("Cài đặt & đồng bộ", "Tài khoản · nhập / xuất dữ liệu · danh mục · kết nối "
@@ -241,6 +243,124 @@ tab_tk, tab_dl, tab_dm, tab_kn = st.tabs([":material/manage_accounts: Tài kho�
                                          ":material/cloud_sync: Kết nối SharePoint"],
                                         key="cd_tab", on_change="rerun")
 
+# ------------------------------------------------------------------ nhập Excel
+TEN_MAU = {TUYEN_SINH.name: "Data tuyển sinh", NHAP_HOC.name: "Hồ sơ nhập học",
+           GIAY_TO.name: "Danh mục giấy tờ", TAI_KHOAN.name: "Tài khoản đăng nhập",
+           NOI_TRU_PHONG.name: "Nội trú: phân phòng", NOI_TRU_DANH_GIA.name: "Nội trú: đánh giá"}
+
+
+def _bao_loi(errors: list[dict]):
+    if errors:
+        err = pd.DataFrame(errors)
+        st.dataframe(err, hide_index=True, width="stretch")
+        ui.download_excel("Tải danh sách lỗi", err, "LoiNhapDuLieu.xlsx", key="dl_err")
+        st.caption("Sửa lỗi rồi bấm nhập lại — các dòng đã ghi sẽ được bỏ qua.")
+
+
+def render_nhap(up):
+    """Bước 2: chọn list, xem trước, nhập."""
+    try:
+        sheets = pd.ExcelFile(up).sheet_names if up.name.lower().endswith(".xlsx") else []
+    except Exception:
+        sheets = []
+    c1, c2, c3 = st.columns(3)
+    guess = importer.guess_list(sheets)
+    ld = c1.selectbox("Nhập vào list", ALL_LISTS, index=ALL_LISTS.index(guess),
+                      format_func=lambda x: f"{TEN_MAU[x.name]} ({config.list_name(x.name)})")
+    ld = next(x for x in ALL_LISTS if x.name == ld.name)  # selectbox trả bản sao, không phải chính đối tượng
+    co_nam = ld not in (GIAY_TO, TAI_KHOAN)
+    nam = c3.selectbox("Năm học" + (" cho dòng để trống" if ld in (TUYEN_SINH, NHAP_HOC) else ""),
+                       config.school_years(), disabled=not co_nam,
+                       index=config.school_years().index(ui.nam_hoc())
+                       if ui.nam_hoc() in config.school_years() else 0)
+    if ld is NOI_TRU_PHONG:  # ghép học sinh với hồ sơ nhập học rồi tạo phòng
+        up.seek(0)
+        nhap_phan_phong(up, storage, nam, ui.records(NOI_TRU_PHONG, optional=True),
+                        ui.records(NHAP_HOC), ui.records(TAI_KHOAN, optional=True), "cd_nt")
+        return
+    default_sheet = ld.name if ld.name in sheets else (sheets[0] if sheets else None)
+    sheet = c2.selectbox("Sheet", sheets, index=sheets.index(default_sheet)) if sheets else None
+    du_lieu = ld in (TUYEN_SINH, NHAP_HOC)
+    vemis = du_lieu and st.checkbox(
+        "File theo biểu mẫu VEMIS (Danh sách học sinh, 2 dòng tiêu đề)", value=False,
+        disabled=ld is not NHAP_HOC)
+    bo_sung = keep_all = False
+    if du_lieu:
+        mode = st.radio("Cách nhập", ["Thêm dòng mới (bỏ qua dòng đã có)",
+                                      "Bổ sung ô còn trống cho dòng đã có"], horizontal=True,
+                        help="Bổ sung: điền các ô đang trống trên SharePoint (vd cột Khối bị "
+                             "mất khi tạo list từ Excel) — không thêm dòng, không ghi đè ô đã có.")
+        bo_sung = mode.startswith("Bổ sung")
+        keep_all = st.checkbox("Giữ nguyên dữ liệu cũ (ghi cả dòng thiếu trường bắt buộc)",
+                               value=True, disabled=bo_sung)
+    try:
+        up.seek(0)
+        df, skipped = importer.read_frame(up, ld, sheet, vemis and ld is NHAP_HOC)
+    except Exception as e:
+        ui.error_state(e, compact=True)
+        return
+    st.caption(f"**{len(df)}** dòng · {len(df.columns)} cột nhận được"
+               + (f" · bỏ qua cột: {', '.join(skipped)}" if skipped else ""))
+    xem = df.head(20)
+    if "MatKhau" in xem.columns:  # không hiện mật khẩu trên màn hình
+        xem = xem.assign(MatKhau="••••••")
+    st.dataframe(xem, hide_index=True, width="stretch", height=260)
+    if bo_sung:
+        if st.button(f"Bổ sung ô trống từ {len(df)} dòng", type="primary",
+                     icon=":material/format_color_fill:", disabled=df.empty):
+            bar = st.progress(0.0, text="Đang đọc dữ liệu trên SharePoint…")
+            try:
+                res = importer.fill_blanks(
+                    storage, ld, df, nam,
+                    progress=lambda d, t: bar.progress(d / max(t, 1),
+                                                       text=f"Đã cập nhật {d}/{t} dòng"))
+            except Exception as e:
+                ui.error_state(e, compact=True)
+            else:
+                ui.invalidate()
+                bar.progress(1.0, text="Hoàn tất")
+                st.success(f"Đã bổ sung **{res['cells']}** ô trên **{res['updated']}** dòng · "
+                           f"{res['not_found']} dòng trong file không tìm thấy trên list",
+                           icon=":material/check_circle:")
+        return
+    if not st.button(f"Nhập {len(df)} dòng lên {config.list_name(ld.name)}", type="primary",
+                     icon=":material/cloud_upload:", disabled=df.empty):
+        return
+    bar = st.progress(0.0, text="Đang chuẩn bị…")
+
+    def prog(done, total):
+        bar.progress(done / max(total, 1), text=f"Đã ghi {done}/{total}")
+
+    try:
+        if ld is TAI_KHOAN:
+            res = importer.nhap_tai_khoan(storage, df, ui.records(TAI_KHOAN, optional=True))
+            msg = (f"Đã tạo **{res['ok']}** tài khoản · bỏ qua **{res['skipped']}** tên đăng nhập "
+                   f"đã có · lỗi **{len(res['errors'])}**")
+        elif ld is NOI_TRU_DANH_GIA:
+            res = NT.nhap_danh_gia(storage, df, ui.records(NOI_TRU_PHONG, optional=True),
+                                   ui.records(NOI_TRU_DANH_GIA, optional=True), nam,
+                                   ui.records(NHAP_HOC), ui.current_user(), progress=prog)
+            msg = (f"Đã ghi đánh giá **{res['ok']}** lượt học sinh ({res['ban_ghi']} phòng-ngày)"
+                   f" · lỗi **{len(res['errors'])}**")
+        else:
+            res = importer.import_rows(storage, ld, df, nam, keep_all=keep_all or not du_lieu,
+                                       skip_existing=True, progress=prog)
+            msg = (f"Đã ghi **{res['ok']}** dòng · bỏ qua **{res['skipped']}** dòng đã có"
+                   f" · lỗi **{len(res['errors'])}**"
+                   + (f" · liên kết **{res['linked']}** hồ sơ với Data tuyển sinh"
+                      if ld is NHAP_HOC else ""))
+    except Exception as e:
+        ui.error_state(e, compact=True)
+        return
+    ui.invalidate()
+    bar.progress(1.0, text="Hoàn tất")
+    st.success(msg, icon=":material/check_circle:")
+    _bao_loi(res["errors"])
+    if ld is TAI_KHOAN:
+        st.warning("Đã nhập xong: hãy **xóa file chứa mật khẩu** trên máy.",
+                   icon=":material/delete:")
+
+
 # ------------------------------------------------------------------ tài khoản
 with tab_tk:
     render_tai_khoan()
@@ -257,91 +377,22 @@ with tab_dl:
                     "- **Danh sách nội trú & phân phòng từ Excel**: Nội trú → *Phòng & giáo viên*.")
     # ------------------------------------------------------------------ 3. nhập Excel
     with ui.section("Nhập dữ liệu từ Excel",
-                    "Bước 1: tải file mẫu, điền mỗi học sinh một dòng. Bước 2: tải file lên ở dưới, "
-                    "xem trước rồi bấm Nhập. Nhận cả file Export to Excel từ list và file VEMIS. "
-                    "Chạy lại an toàn: dòng đã có trên list sẽ được bỏ qua."):
-        m1, m2 = st.columns(2)
-        for col, ld_mau in ((m1, NHAP_HOC), (m2, TUYEN_SINH)):
-            col.download_button(
-                f"Tải file mẫu {ld_mau.title}", lambda ld_mau=ld_mau: importer.file_mau(ld_mau),
+                    "Có file mẫu cho cả 6 list SharePoint. Điền theo sheet HuongDan trong file, tải "
+                    "lên, xem trước rồi bấm Nhập — app tự nhận list theo tên sheet. Nhận cả file "
+                    "Export to Excel từ list và file VEMIS. Chạy lại an toàn: dòng đã có được bỏ "
+                    "qua."):
+        st.markdown("**Bước 1 — Tải file mẫu** của list cần nhập")
+        g = st.columns(3)
+        for i, ld_mau in enumerate(ALL_LISTS):
+            g[i % 3].download_button(
+                TEN_MAU[ld_mau.name], lambda ld_mau=ld_mau: importer.file_mau(ld_mau),
                 file_name=f"Mau_{ld_mau.name}.xlsx", mime=ui.XLSX, on_click="ignore",
                 icon=":material/download:", width="stretch", key=f"mau_{ld_mau.name}",
-                help="Tiêu đề cột đúng như app, cột cam là bắt buộc, có ô chọn sẵn và sheet "
-                     "HuongDan giải thích từng cột.")
-        up = st.file_uploader("File Excel đã điền", type=["xlsx", "csv"])
+                help=f"List {config.list_name(ld_mau.name)}. Cột cam là bắt buộc, có ô chọn sẵn "
+                     "và sheet HuongDan giải thích từng cột.")
+        up = st.file_uploader("Bước 2 — Tải lên file đã điền", type=["xlsx", "csv"])
         if up is not None:
-            try:
-                sheets = pd.ExcelFile(up).sheet_names if up.name.lower().endswith(".xlsx") else []
-            except Exception:
-                sheets = []
-            c1, c2, c3 = st.columns(3)
-            guess = importer.guess_list(sheets)
-            ld = c1.selectbox("Nhập vào list", [TUYEN_SINH, NHAP_HOC], index=[TUYEN_SINH, NHAP_HOC].index(guess),
-                              format_func=lambda x: f"{x.title} ({config.list_name(x.name)})")
-            default_sheet = ld.name if ld.name in sheets else (sheets[0] if sheets else None)
-            sheet = c2.selectbox("Sheet", sheets, index=sheets.index(default_sheet)) if sheets else None
-            nam = c3.selectbox("Năm học cho dòng để trống", config.school_years(),
-                               index=config.school_years().index(ui.nam_hoc())
-                               if ui.nam_hoc() in config.school_years() else 0)
-            vemis = st.checkbox("File theo biểu mẫu VEMIS (Danh sách học sinh, 2 dòng tiêu đề)",
-                                value=False, disabled=ld is not NHAP_HOC)
-            mode = st.radio("Cách nhập", ["Thêm dòng mới (bỏ qua dòng đã có)",
-                                          "Bổ sung ô còn trống cho dòng đã có"], horizontal=True,
-                            help="Bổ sung: điền các ô đang trống trên SharePoint (vd cột Khối bị "
-                                 "mất khi tạo list từ Excel) — không thêm dòng, không ghi đè ô đã có.")
-            bo_sung = mode.startswith("Bổ sung")
-            keep_all = st.checkbox("Giữ nguyên dữ liệu cũ (ghi cả dòng thiếu trường bắt buộc)",
-                                   value=True, disabled=bo_sung)
-            try:
-                up.seek(0)
-                df, skipped = importer.read_frame(up, ld, sheet, vemis and ld is NHAP_HOC)
-            except Exception as e:
-                ui.error_state(e, compact=True)
-                st.stop()
-            st.caption(f"**{len(df)}** dòng · {len(df.columns)} cột nhận được"
-                       + (f" · bỏ qua cột: {', '.join(skipped)}" if skipped else ""))
-            st.dataframe(df.head(20), hide_index=True, width="stretch", height=260)
-            if bo_sung and st.button(f"Bổ sung ô trống từ {len(df)} dòng", type="primary",
-                                     icon=":material/format_color_fill:", disabled=df.empty):
-                bar = st.progress(0.0, text="Đang đọc dữ liệu trên SharePoint…")
-                try:
-                    res = importer.fill_blanks(
-                        storage, ld, df, nam,
-                        progress=lambda d, t: bar.progress(d / max(t, 1),
-                                                           text=f"Đã cập nhật {d}/{t} dòng"))
-                except Exception as e:
-                    ui.error_state(e, compact=True)
-                else:
-                    ui.invalidate()
-                    bar.progress(1.0, text="Hoàn tất")
-                    st.success(f"Đã bổ sung **{res['cells']}** ô trên **{res['updated']}** dòng · "
-                               f"{res['not_found']} dòng trong file không tìm thấy trên list",
-                               icon=":material/check_circle:")
-            if not bo_sung and st.button(f"Nhập {len(df)} dòng lên {config.list_name(ld.name)}",
-                                         type="primary", icon=":material/cloud_upload:",
-                                         disabled=df.empty):
-                bar = st.progress(0.0, text="Đang chuẩn bị…")
-
-                def prog(done, total):
-                    bar.progress(done / max(total, 1), text=f"Đã ghi {done}/{total} dòng")
-
-                try:
-                    res = importer.import_rows(storage, ld, df, nam, keep_all=keep_all,
-                                               skip_existing=True, progress=prog)
-                except Exception as e:
-                    ui.error_state(e, compact=True)
-                else:
-                    ui.invalidate()
-                    bar.progress(1.0, text="Hoàn tất")
-                    st.success(f"Đã ghi **{res['ok']}** dòng · bỏ qua **{res['skipped']}** dòng đã có"
-                               f" · lỗi **{len(res['errors'])}**"
-                               + (f" · liên kết **{res['linked']}** hồ sơ với Data tuyển sinh"
-                                  if ld is NHAP_HOC else ""), icon=":material/check_circle:")
-                    if res["errors"]:
-                        err = pd.DataFrame(res["errors"])
-                        st.dataframe(err, hide_index=True, width="stretch")
-                        ui.download_excel("Tải danh sách lỗi", err, "LoiNhapDuLieu.xlsx", key="dl_err")
-                        st.caption("Sửa lỗi rồi bấm nhập lại — các dòng đã ghi sẽ được bỏ qua.")
+            render_nhap(up)
 
     # ------------------------------------------------------------------ 4. liên kết
     with ui.section("Liên kết hồ sơ nhập học với Data tuyển sinh",
@@ -365,7 +416,6 @@ with tab_dl:
                     "Tải toàn bộ dữ liệu (mọi năm học) ra một file Excel, mỗi list một sheet — "
                     "nên tải định kỳ để lưu trữ."):
         def _sao_luu():
-            from tuyensinh.schema import NOI_TRU_DANH_GIA, NOI_TRU_PHONG
             frames = {}
             for ld in (TUYEN_SINH, NHAP_HOC, NOI_TRU_PHONG, NOI_TRU_DANH_GIA, GIAY_TO):
                 try:

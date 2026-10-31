@@ -10,8 +10,8 @@ import pandas as pd
 
 from . import config, danh_muc, services
 from .export_vemis import COLUMNS, HEADER_ROW
-from .schema import (ALL_LISTS, BOOL, CHOICE, DATE, NHAP_HOC, NOTE, NUMBER, TUYEN_SINH,
-                     ListDef)
+from .schema import (ALL_LISTS, BOOL, CHOICE, DATE, GIAY_TO, MUC_DANH_GIA, NHAP_HOC, NOI_TRU_DANH_GIA,
+                     NOI_TRU_PHONG, NOTE, NUMBER, TAI_KHOAN, TUYEN_SINH, VAI_TRO, Field, ListDef)
 from .storage.base import Storage
 from .storage.convert import ColumnMap
 
@@ -87,8 +87,15 @@ def read_vemis(src) -> pd.DataFrame:
 
 
 def guess_list(sheet_names: list[str]) -> ListDef:
-    return NHAP_HOC if NHAP_HOC.name in sheet_names and TUYEN_SINH.name not in sheet_names \
-        else TUYEN_SINH
+    """Nhận list theo tên sheet (file mẫu đặt tên sheet = tên list)."""
+    if TUYEN_SINH.name in sheet_names:
+        return TUYEN_SINH
+    for ld in ALL_LISTS:
+        if ld.name in sheet_names:
+            return ld
+    if "DSHS" in sheet_names:  # file danh sách nội trú của Tổ quản nhiệm
+        return NOI_TRU_PHONG
+    return TUYEN_SINH
 
 
 def read_frame(src, ld: ListDef, sheet: str | None = None, vemis: bool = False,
@@ -103,6 +110,7 @@ def read_frame(src, ld: ListDef, sheet: str | None = None, vemis: bool = False,
         sheet = sheet or (ld.name if ld.name in sheets else sheets[0])
         df = pd.read_excel(src, sheet_name=sheet, dtype=str)
     # nhận key, nhãn trong app và tên hiển thị trên SharePoint (file "Export to Excel")
+    ld = mau(ld) if ld.name in MAU or ld.name == NOI_TRU_DANH_GIA.name else ld
     rename = {f.label: f.key for f in ld.fields}
     rename.update({f.sp_title: f.key for f in ld.fields})
     rename.update(mapping or {})
@@ -131,8 +139,68 @@ def ngay_chuan(v):
 BO_QUA_MAU = {"TuyenSinhID"}  # trường app tự quản lý, không cho nhập tay
 
 
+def _mau_danh_gia() -> ListDef:
+    from . import noi_tru as NT
+    cot = [Field("Ngay", "Ngày", DATE, required=True), Field("Phong", "Phòng", required=True),
+           Field("HoTen", "Học sinh", required=True), Field("Lop", "Lớp")]
+    for m in NT.MUC:
+        cot += [Field(m, NT.TEN_MUC[m], CHOICE, MUC_DANH_GIA), Field(NT.NX[m], NT.TEN_NX[m], NOTE)]
+    cot += [Field(k, NT.TEN_LOI[k], NOTE) for k in NT.LOI]
+    cot.append(Field("NguoiDanhGia", "Người đánh giá"))
+    return ListDef(NOI_TRU_DANH_GIA.name, NOI_TRU_DANH_GIA.title, tuple(cot))
+
+
+# List có cột app tự quản lý (ID, mật khẩu đã mã hóa, JSON): file mẫu dùng cột dễ điền hơn,
+# tên sheet vẫn = tên list để trang Cài đặt tự nhận đúng list
+MAU = {
+    TAI_KHOAN.name: ListDef(TAI_KHOAN.name, TAI_KHOAN.title, (
+        Field("HoTen", "Họ tên", required=True),
+        Field("TenDangNhap", "Tên đăng nhập", required=True),
+        Field("MatKhau", "Mật khẩu", required=True),
+        Field("VaiTro", "Vai trò", CHOICE, VAI_TRO, required=True),
+        Field("HoatDong", "Hoạt động", CHOICE, ("Có", "Không")))),
+    # cùng tiêu đề với file DSHS của Tổ quản nhiệm (noi_tru.doc_ds_phong đọc được)
+    NOI_TRU_PHONG.name: ListDef(NOI_TRU_PHONG.name, "Danh sách nội trú & phân phòng", (
+        Field("HoTen", "Họ và tên", required=True),
+        Field("Lop", "Lớp"),
+        Field("GioiTinh", "Giới tính", CHOICE, ("Nam", "Nữ")),
+        Field("Phong", "Phòng NT", required=True),
+        Field("GiaoVien", "QN quản lý"))),
+}
+
+
+def mau(ld: ListDef) -> ListDef:
+    """Cột của file mẫu nhập cho list `ld`."""
+    if ld.name == NOI_TRU_DANH_GIA.name:
+        return _mau_danh_gia()
+    return MAU.get(ld.name, ld)
+
+
 def truong_mau(ld: ListDef) -> list:
-    return [f for f in ld.fields if f.key not in BO_QUA_MAU and f.group != "_"]
+    return [f for f in mau(ld).fields if f.key not in BO_QUA_MAU and f.group != "_"]
+
+
+# Hướng dẫn riêng từng list (dòng 4–6 của sheet HuongDan)
+_HD = {
+    GIAY_TO.name: [
+        "4. Mỗi dòng là một giấy tờ cần nộp của một khối. Khối ghi như trong app (vd 6, 10, "
+        "10-IEP). Thứ tự: số nhỏ đứng trước.",
+        "6. Nhập lại cùng file vẫn an toàn: dòng trùng khối + tên giấy tờ được bỏ qua."],
+    TAI_KHOAN.name: [
+        "4. Mật khẩu gõ dạng thường, ít nhất 6 ký tự — app chỉ lưu dạng đã mã hóa. XÓA file này "
+        "sau khi nhập xong. Trang được vào lấy mặc định theo vai trò (sửa sau ở tab Tài khoản).",
+        "6. Tên đăng nhập đã có thì bỏ qua (không đổi mật khẩu tài khoản cũ)."],
+    NOI_TRU_PHONG.name: [
+        "4. Mỗi học sinh nội trú một dòng. App ghép với Hồ sơ nhập học của năm học chọn lúc nhập "
+        "theo họ tên (trùng tên thì xét lớp, giới tính), đánh dấu Nội trú và tạo phòng. QN quản "
+        "lý = họ tên giáo viên quản nhiệm (trùng họ tên tài khoản thì tự gắn tài khoản).",
+        "6. Nhập lại an toàn: phòng trùng tên trong năm được cập nhật theo file, không tạo trùng."],
+    NOI_TRU_DANH_GIA.name: [
+        "4. Mỗi dòng là một học sinh trong một ngày; học sinh phải đang ở phòng ghi ở cột Phòng "
+        "(năm học chọn lúc nhập). Mức để trống = Tốt. Mỗi ô nhận xét tối đa 300 ký tự. File tải "
+        "ở Nội trú → Xem → Tải Excel cũng nhập lại được.",
+        "6. Phòng + ngày đã có đánh giá: em có trong file được cập nhật, các em khác giữ nguyên."],
+}
 
 
 def _lua_chon(f) -> list[str]:
@@ -160,6 +228,7 @@ def file_mau(ld: ListDef) -> bytes:
     from openpyxl.worksheet.datavalidation import DataValidation
 
     fields = truong_mau(ld)
+    ld = mau(ld)
     wb = Workbook()
     ws = wb.active
     ws.title = ld.name
@@ -200,17 +269,20 @@ def file_mau(ld: ListDef) -> bytes:
     hd.column_dimensions["B"].width = 11
     hd.column_dimensions["C"].width = 12
     hd.column_dimensions["D"].width = 70
+    hd4, hd6 = _HD.get(ld.name, [
+        "4. Năm học để trống thì app lấy năm học chọn lúc nhập.",
+        "6. Nhập lại cùng file vẫn an toàn: dòng đã có (trùng họ tên + "
+        + ("ngày sinh" if ld.name == NHAP_HOC.name else "SĐT + ngày liên hệ")
+        + " + năm học) được bỏ qua."])
     loi = [f"FILE MẪU NHẬP: {ld.title.upper()} (list {config.list_name(ld.name)})", "",
-           f"1. Nhập mỗi học sinh một dòng ở sheet \"{ld.name}\", bắt đầu từ dòng 2. Không đổi "
+           f"1. Nhập mỗi dòng một bản ghi ở sheet \"{ld.name}\", bắt đầu từ dòng 2. Không đổi "
            "tên, không xóa dòng tiêu đề.",
            "2. Cột tô CAM là bắt buộc; cột XANH để trống được. Cột không dùng có thể xóa cả cột.",
            "3. Ô có mũi tên: chọn trong danh sách. Ngày gõ dạng dd/mm/yyyy (vd 01/05/2012).",
-           "4. Năm học để trống thì app lấy năm học chọn lúc nhập.",
-           "5. Vào app: Cài đặt & đồng bộ → Kết nối & đồng bộ → 3. Nhập dữ liệu từ Excel → tải file "
+           hd4,
+           "5. Vào app: Cài đặt & đồng bộ → Nhập / xuất dữ liệu → Nhập dữ liệu từ Excel → tải file "
            "lên → kiểm tra bảng xem trước → bấm Nhập.",
-           "6. Nhập lại cùng file vẫn an toàn: dòng đã có (trùng họ tên + "
-           + ("ngày sinh" if ld is NHAP_HOC else "SĐT + ngày liên hệ") + " + năm học) được bỏ qua.",
-           ""]
+           hd6, ""]
     for r, t in enumerate(loi, 1):
         hd.cell(r, 1, t).font = Font(bold=r == 1, size=13 if r == 1 else 11)
     r0 = len(loi) + 1
@@ -243,6 +315,8 @@ def signature(ld: ListDef, rec: dict) -> tuple:
 
     if ld is NHAP_HOC:
         return (rec.get("NamHoc") or "", danh_muc.fold(rec.get("HoTen")), d(rec.get("NgaySinh")))
+    if ld is GIAY_TO:
+        return (danh_muc.fold(rec.get("Khoi")), danh_muc.fold(rec.get("TenGiayTo")))
     return (rec.get("NamHoc") or "", danh_muc.fold(rec.get("HoTenHS")),
             services.normalize_phone(rec.get("SDT")), d(rec.get("NgayLienHe")))
 
@@ -286,7 +360,7 @@ def import_rows(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
 
     def write(item):
         i, data, clean = item
-        if keep_all:
+        if keep_all or ld not in (TUYEN_SINH, NHAP_HOC):
             return storage.create_item(ld.name, clean)
         if ld is TUYEN_SINH:
             return services.save_tuyen_sinh(storage, data)
@@ -344,6 +418,30 @@ def fill_blanks(storage: Storage, ld: ListDef, df: pd.DataFrame, nam_hoc: str,
             if progress:
                 progress(done, len(todo))
     return {"updated": len(todo), "cells": cells, "not_found": not_found, "total": len(df)}
+
+
+def nhap_tai_khoan(storage: Storage, df: pd.DataFrame, items: list[dict]) -> dict:
+    """Tạo tài khoản từ file mẫu; tên đăng nhập đã có thì bỏ qua (không đổi mật khẩu)."""
+    from . import tai_khoan
+    items = list(items)
+    ok, skipped, errors = 0, 0, []
+    for i, row in df.iterrows():
+        d = {k: ("" if _blank(v) else str(v).strip()) for k, v in row.to_dict().items()}
+        ten = d.get("TenDangNhap", "").lower()
+        if ten and any(str(t.get("TenDangNhap") or "").strip().lower() == ten for t in items):
+            skipped += 1
+            continue
+        try:
+            vai = d.get("VaiTro") or ""
+            if vai not in VAI_TRO:
+                raise ValueError(f"Vai trò không hợp lệ: \"{vai}\" (chọn: {', '.join(VAI_TRO)})")
+            items.append(tai_khoan.luu(storage, items, d.get("HoTen", ""), ten, vai,
+                                       d.get("MatKhau") or None,
+                                       hoat_dong=d.get("HoatDong") != "Không"))
+            ok += 1
+        except Exception as e:
+            errors.append({"Dòng": i + 2, "Lỗi": str(e).replace("**", "")[:300]})
+    return {"ok": ok, "skipped": skipped, "errors": errors, "total": len(df)}
 
 
 def link_existing(storage: Storage, workers: int = 4,

@@ -141,3 +141,56 @@ def test_nhap_phan_phong_tu_excel(st_, tmp_path):
                                                              "VaiTro": "GV quản nhiệm"})
     NT.ap_dung_phan_phong(st_, phongs, NAM, g, kh, NHAP_HOC.name)  # chạy lại: không tạo trùng
     assert len(st_.list_items(NOI_TRU_PHONG.name)) == 2
+
+
+def test_nhap_danh_gia_tu_file_mau(st_):
+    """File mẫu đánh giá: ghép học sinh trong phòng theo tên, gộp với đánh giá đã có."""
+    from tuyensinh import importer
+    from tuyensinh.schema import NHAP_HOC
+    from tests.test_importer import _dien
+
+    a = st_.create_item(NHAP_HOC.name, {"HoTen": "Trần An", "LopHoc": "6.1", "NamHoc": NAM})
+    b = st_.create_item(NHAP_HOC.name, {"HoTen": "Lê Bình", "LopHoc": "6.1", "NamHoc": NAM})
+    p = NT.luu_phong(st_, [], NAM, "507", "", GV1, [str(a["id"]), str(b["id"])])
+    ngay = date(2026, 10, 19)
+    NT.luu_danh_gia(st_, [], NAM, ngay, p, [{"id": str(a["id"]), "ten": "Trần An"},
+                                            {"id": str(b["id"]), "ten": "Lê Bình",
+                                             "NeNep": "Khá"}], "Cô Hoa")
+    hdr_ngay, hdr_hoc = "Ngày", NT.TEN_MUC["HocTap"]
+    buf, hdr = _dien(NOI_TRU_DANH_GIA, [
+        {hdr_ngay: "19/10/2026", "Phòng": 507, "Học sinh": "trần an", hdr_hoc: "Chưa tốt",
+         NT.TEN_NX["HocTap"]: "Chưa thuộc bài"},
+        {hdr_ngay: "20/10/2026", "Phòng": "507", "Học sinh": "Lê Bình"},
+        {hdr_ngay: "20/10/2026", "Phòng": "999", "Học sinh": "Lê Bình"},
+        {hdr_ngay: "20/10/2026", "Phòng": "507", "Học sinh": "Võ C"},
+        {hdr_ngay: "20/10/2026", "Phòng": "507", "Học sinh": "Trần An", hdr_hoc: "Giỏi"}])
+    assert "Người đánh giá" in hdr
+    df, skipped = importer.read_frame(buf, NOI_TRU_DANH_GIA)
+    assert not skipped
+    res = NT.nhap_danh_gia(st_, df, st_.list_items(NOI_TRU_PHONG.name),
+                           st_.list_items(NOI_TRU_DANH_GIA.name), NAM,
+                           st_.list_items(NHAP_HOC.name), "Admin")
+    assert res["ok"] == 2 and res["ban_ghi"] == 2 and [e["Dòng"] for e in res["errors"]] == [4, 5, 6]
+    long = NT.bang_dai(st_.list_items(NOI_TRU_DANH_GIA.name), NAM)
+    ngay1 = long[long["Ngày"] == ngay].set_index("Học sinh")
+    assert ngay1.loc["Trần An", "Học tập"] == "Chưa tốt"
+    assert ngay1.loc["Lê Bình", "Nề nếp"] == "Khá"  # em không có trong file: giữ nguyên
+    assert ngay1.loc["Trần An", "Người đánh giá"] == "Cô Hoa"
+    assert len(long) == 3
+    # file tải từ trang Nội trú (Xem → Tải Excel) nhập lại được
+    xuat = long.drop(columns=["PhongID", "HocSinhID"])
+    import io
+    bio = io.BytesIO()
+    xuat.to_excel(bio, index=False, sheet_name=NOI_TRU_DANH_GIA.name)
+    bio.seek(0)
+    df2, skipped = importer.read_frame(bio, NOI_TRU_DANH_GIA)
+    assert not skipped and len(df2) == 3
+
+
+def test_mau_phan_phong_doc_duoc():
+    from tests.test_importer import _dien
+    buf, _ = _dien(NOI_TRU_PHONG, [{"Họ và tên": "Trần  An", "Lớp": "6.2", "Giới tính": "Nam",
+                                    "Phòng NT": "508", "QN quản lý": "Cô Hoa"}])
+    ds, sheet = NT.doc_ds_phong(buf)
+    assert sheet == NOI_TRU_PHONG.name
+    assert ds.iloc[0].tolist() == ["Trần An", "6.2", "Nam", "508", "Cô Hoa"]
