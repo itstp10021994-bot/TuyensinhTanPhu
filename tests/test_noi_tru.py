@@ -239,3 +239,18 @@ def test_theo_ho_so_ten_lop_hien_tai_bo_hs_da_xoa(st_):
     long = NT.theo_ho_so(NT.bang_dai(st_.list_items(NOI_TRU_DANH_GIA.name), NAM),
                          st_.list_items(NHAP_HOC.name))
     assert long[["Học sinh", "Lớp"]].values.tolist() == [["An", "6.2"]]
+
+
+def test_chuyen_ban_tru(st_):
+    from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
+    t = st_.create_item(TUYEN_SINH.name, {"HoTenHS": "An", "CheDo": "Nội trú", "NamHoc": NAM})
+    a = st_.create_item(NHAP_HOC.name, {"HoTen": "An", "NoiTruBanTru": "Nội trú", "NamHoc": NAM,
+                                        "TuyenSinhID": str(t["id"])})
+    b = st_.create_item(NHAP_HOC.name, {"HoTen": "Bình", "NoiTruBanTru": "Nội trú", "NamHoc": NAM})
+    c = st_.create_item(NHAP_HOC.name, {"HoTen": "Chi", "NoiTruBanTru": "Nội trú", "NamHoc": NAM})
+    n = NT.chuyen_ban_tru(st_, st_.list_items(NHAP_HOC.name), st_.list_items(TUYEN_SINH.name),
+                          [str(a["id"]), str(b["id"])])
+    assert n == 2
+    assert [st_.get_item(NHAP_HOC.name, x["id"])["NoiTruBanTru"] for x in (a, b, c)] == \
+        ["Bán trú", "Bán trú", "Nội trú"]
+    assert st_.get_item(TUYEN_SINH.name, t["id"])["CheDo"] == "Bán trú"

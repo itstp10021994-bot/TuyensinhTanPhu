@@ -110,6 +110,32 @@ def luu_phong(storage: Storage, phongs: list[dict], nam_hoc: str, ten: str, khu:
     return storage.create_item(NOI_TRU_PHONG.name, data)
 
 
+def chuyen_ban_tru(storage: Storage, nh: list[dict], ts: list[dict], hoc_sinh: list[str],
+                   progress=None) -> int:
+    """Chuyển học sinh sang Bán trú: hồ sơ nhập học (N.trú, B.trú) và liên hệ Data tuyển sinh
+    liên kết (Chế độ)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from .schema import NHAP_HOC, TUYEN_SINH
+    chon = {str(i) for i in hoc_sinh}
+    ts_ids = {str(t.get("id")) for t in ts}
+    viec = []
+    for r in nh:
+        if str(r.get("id")) not in chon:
+            continue
+        viec.append((NHAP_HOC.name, r["id"], {"NoiTruBanTru": "Bán trú"}))
+        tid = _s(r.get("TuyenSinhID"))
+        if tid in ts_ids:
+            viec.append((TUYEN_SINH.name, tid, {"CheDo": "Bán trú"}))
+    done = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for _ in pool.map(lambda v: storage.update_item(*v), viec):
+            done += 1
+            if progress:
+                progress(done, len(viec))
+    return len(chon)
+
+
 def bo_khoi_phong(storage: Storage, phongs: list[dict], hoc_sinh: list[str]) -> int:
     """Bỏ các học sinh khỏi mọi phòng đang chứa các em."""
     bo, n = {str(i) for i in hoc_sinh}, 0

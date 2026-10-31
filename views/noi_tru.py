@@ -15,7 +15,7 @@ from tuyensinh import importer, ui
 from tuyensinh.ui_noi_tru import nhap_phan_phong
 from tuyensinh import noi_tru as NT
 from tuyensinh.schema import (MUC_DANH_GIA, NHAP_HOC, NOI_TRU_DANH_GIA, NOI_TRU_PHONG,
-                              TAI_KHOAN)
+                              TAI_KHOAN, TUYEN_SINH)
 
 S = st.session_state
 nam_hoc = ui.nam_hoc()
@@ -390,7 +390,8 @@ def render_chua_xep():
               if (not tim or fold(tim) in fold(f"{HS[i]['ten']} {HS[i]['lop']}"))
               and (khoi == "Tất cả khối" or str(HS[i]["khoi"]) == khoi)
               and (gt == "Nam và nữ" or HS[i]["gt"] == gt)]
-        bang = pd.DataFrame([{"Chọn": False, "id": i, "Họ tên": HS[i]["ten"],
+        ca = st.checkbox(f"Chọn tất cả {len(ds)} em đang hiện", key="nt_cx_ca")
+        bang = pd.DataFrame([{"Chọn": ca, "id": i, "Họ tên": HS[i]["ten"],
                               "Lớp": HS[i]["lop"], "Giới tính": HS[i]["gt"]} for i in ds],
                             columns=["Chọn", "id", "Họ tên", "Lớp", "Giới tính"])
         sua = st.data_editor(bang, hide_index=True, width="stretch",
@@ -398,7 +399,7 @@ def render_chua_xep():
                              disabled=["Họ tên", "Lớp", "Giới tính"],
                              column_config={"id": None,
                                             "Chọn": st.column_config.CheckboxColumn(width="small")},
-                             key=f"nt_cx_ed_{tim}_{khoi}_{gt}_{ui.data_version()}")
+                             key=f"nt_cx_ed_{tim}_{khoi}_{gt}_{ca}_{ui.data_version()}")
         chon = sua.loc[sua["Chọn"], "id"].tolist()
         theo_ten = {f"{p['TenPhong']} · {p.get('GiaoVien') or 'chưa có GV'} · "
                     f"{len(NT.hs_ids(p))} HS": p for p in phongs}
@@ -410,6 +411,16 @@ def render_chua_xep():
                      icon=":material/meeting_room:", disabled=not chon, key="nt_cx_go"):
             if ui.mutate(NT.them_vao_phong, storage, phongs_all, nam_hoc, theo_ten.get(dich),
                          ten_moi, chon, success=f"Đã xếp {len(chon)} học sinh") is not None:
+                st.rerun()
+        c1, c2 = st.columns([3.2, 1.2], vertical_alignment="center")
+        c1.caption("Em không ở nội trú nữa: chuyển sang **Bán trú** — đổi cả hồ sơ nhập học "
+                   "(N.trú, B.trú) và Data tuyển sinh (Chế độ); các em ra khỏi danh sách nội trú.")
+        if c2.button(f"Chuyển {len(chon)} em sang Bán trú", width="stretch",
+                     icon=":material/swap_horiz:", disabled=not chon, key="nt_cx_bt"):
+            if ui.mutate(NT.chuyen_ban_tru, storage, ui.records(NHAP_HOC),
+                         ui.records(TUYEN_SINH), chon,
+                         success=f"Đã chuyển {len(chon)} em sang Bán trú") is not None:
+                S.pop("nt_cx_ca", None)
                 st.rerun()
         st.caption("Em không có trong danh sách: mở hồ sơ ở **Hồ sơ nhập học**, đặt **N.trú, "
                    "B.trú = Nội trú** (tab Giấy tờ & chính sách) và kiểm tra đúng năm học.")
