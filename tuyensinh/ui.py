@@ -214,13 +214,18 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
 .stApp [data-testid="stBaseButton-secondary"] {background: #FFFFFF;
   box-shadow: 0 .5px 1px rgba(0,0,0,.08);}
 /* tab dạng "segmented control" của macOS: mỗi tab là một ô tách biệt, tab đang chọn nổi lên */
-[data-testid="stTabs"] [role="tablist"] {gap: .3rem; padding: .3rem; margin-bottom: .6rem;
-  background: rgba(118,118,128,.12); border-radius: 12px; width: fit-content; max-width: 100%;
+[data-testid="stTabs"] [role="tablist"] {gap: .15rem; padding: .2rem; margin-bottom: .5rem;
+  background: rgba(118,118,128,.12); border-radius: 10px; width: fit-content; max-width: 100%;
   overflow-x: auto; scrollbar-width: none;}
 [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {display: none;}
-[data-testid="stTabs"] [role="tab"] {padding: .42rem .95rem !important; height: auto;
-  border-radius: 9px; color: #3C3C43; white-space: nowrap; transition: background .15s, color .15s;}
-[data-testid="stTabs"] [role="tab"] p {font-size: .9rem; font-weight: 500; margin: 0;}
+[data-testid="stTabs"] [role="tab"] {padding: .26rem .75rem !important; height: auto;
+  min-height: 0; border-radius: 8px; color: #3C3C43; white-space: nowrap; transition: background .15s, color .15s;}
+[data-testid="stTabs"] [role="tab"] p {font-size: .82rem; font-weight: 500; margin: 0;}
+[data-testid="stTabs"] [role="tab"] [data-testid="stIconMaterial"] {font-size: 1rem;}
+/* thẻ nổi: bảng chính của trang (vd bảng nhập đánh giá) */
+[class*="st-key-the_noi"] {background: #FFFFFF; border-radius: 14px; padding: 1rem 1.1rem;
+  box-shadow: 0 4px 18px rgba(0,0,0,.08), 0 0 0 .5px rgba(0,0,0,.06);}
+[class*="st-key-the_noi"] [data-testid="stDataFrame"] {box-shadow: none;}
 [data-testid="stTabs"] [role="tab"]:hover {background: rgba(255,255,255,.6); color: #1D1D1F;}
 [data-testid="stTabs"] [role="tab"][aria-selected="true"] {background: #FFFFFF; color: #007AFF;
   box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.04);}
@@ -265,6 +270,8 @@ CSS = CSS_TEMPLATE.replace("ROBOT_URI", ROBOT_URI)
 CSS_TOI = """<style>
 header[data-testid="stHeader"] {background: rgba(28,28,30,.72) !important;
   border-bottom-color: rgba(255,255,255,.08);}
+[class*="st-key-the_noi"] {background: #1C1C1E;
+  box-shadow: 0 4px 18px rgba(0,0,0,.45), 0 0 0 .5px rgba(255,255,255,.08);}
 [class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #2C2C2E;
   border-color: rgba(255,255,255,.07) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3);}
 .stApp [data-testid="stBaseButton-secondary"] {background: #3A3A3C;}

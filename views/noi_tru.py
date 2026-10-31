@@ -168,13 +168,15 @@ def render_nhap():
             options=list(MUC_DANH_GIA), required=True, width=130)
     for c in NT.COT_LOI:
         cfg[c] = st.column_config.TextColumn(width=230, max_chars=NT.MAX_LOI)
-    sua = st.data_editor(
+    the = st.container(key="the_noi_nhap")
+    the.markdown(f"**Phòng {phong['TenPhong']}** · {ngay:%d/%m/%Y} · {len(bang)} học sinh")
+    sua = the.data_editor(
         bang, hide_index=True, width="stretch", disabled=["Học sinh", "Lớp"],
         height=min(38 + 35 * len(bang), 720), column_config=cfg,
         key=f"nt_ed_{phong['id']}_{ngay}_{ui.data_version()}")
     can = int(sum(sua[c].isin(NT.CAN_CHU_Y).sum() for c in NT.COT_MUC))
     co_loi = int(sua[NT.COT_LOI].fillna("").ne("").any(axis=1).sum())
-    b1, b2 = st.columns([3, 1.2], vertical_alignment="center")
+    b1, b2 = the.columns([3, 1.2], vertical_alignment="center")
     b2.caption(f"{len(sua)} học sinh · {can} lượt TB/Chưa tốt · {co_loi} em có nhận xét")
     if b1.button(f"Lưu đánh giá phòng {phong['TenPhong']} ngày {ngay:%d/%m/%Y}", type="primary",
                  icon=":material/save:", width="stretch"):
