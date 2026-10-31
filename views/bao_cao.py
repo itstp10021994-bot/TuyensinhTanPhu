@@ -99,11 +99,11 @@ MAC_DINH = {"cap": dia_ban.CAP[1], "tinh": "Tất cả", "loai": "Tất cả", "
 
 
 def _gon(spec: dict) -> dict:
-    """Biểu đồ trong thẻ tổng hợp: thanh ngang nhiều mục chỉ giữ 8 mục lớn nhất."""
+    """Biểu đồ trong thẻ tổng hợp: thanh ngang nhiều mục chỉ giữ 6 mục lớn nhất."""
     data, x, y = spec["data"], spec["x"], spec["y"]
     ngang = spec["kind"] == "hbar" or spec.get("horizontal")
-    if ngang and data[x].nunique() > 8:
-        top = data.groupby(x)[y].sum().nlargest(8).index
+    if ngang and data[x].nunique() > 6:
+        top = data.groupby(x)[y].sum().nlargest(6).index
         data = data[data[x].isin(top)]
     return {**spec, "data": data}
 
@@ -113,16 +113,18 @@ def _mo(rid_: str):
 
 
 def dashboard(ds: list, ctx, sel_khoi):
-    """Mọi mẫu báo cáo của nhóm trên một trang: lưới thẻ (chỉ số + biểu đồ), bấm Chi tiết để mở."""
+    """Mọi mẫu báo cáo của nhóm trên một màn hình: lưới 2 hàng (số cột theo số mẫu), mỗi thẻ
+    gồm 2 chỉ số chính và biểu đồ; bấm ⤢ để mở chi tiết."""
+    so_cot = max(2, -(-len(ds) // 2))
     for i, r in enumerate(ds):
-        if i % 2 == 0:  # mỗi hàng 2 thẻ, thẳng hàng
-            cot = st.columns(2, gap="small")
+        if i % so_cot == 0:
+            cot = st.columns(so_cot, gap="small")
         p = {**MAC_DINH, **ctx.params, "moc": date.today()}
         if r.id == "xh_cungky" and len(p.get("nam") or []) > 2:
             p["nam"] = p["nam"][-2:]
         c = reports.Ctx(ctx.ts, ctx.nh, ctx.ts_all, ctx.nam_hoc, p, nh_all=ctx.nh_all)
-        with cot[i % 2], st.container(key=f"tp_card_bc_{r.id}"):
-            h = st.container(horizontal=True, vertical_alignment="center", wrap=False)
+        with cot[i % so_cot], st.container(key=f"tp_card_bc_{r.id}"):
+            h = st.container(horizontal=True, vertical_alignment="center", wrap=False, gap=None)
             h.markdown(f"#### {r.title}", width="stretch")
             h.button("", key=f"bc_mo_{r.id}", on_click=_mo, args=(r.id,), help="Mở chi tiết",
                      icon=":material/open_in_full:", type="tertiary")
@@ -134,46 +136,45 @@ def dashboard(ds: list, ctx, sel_khoi):
             if res.kpis:
                 st.html('<div class="bc-kpi">' + "".join(
                     f'<span><em>{lbl}</em><b>{fmt_kpi(lbl, v)}</b></span>'
-                    for lbl, v in res.kpis[:4]) + "</div>")
+                    for lbl, v in res.kpis[:2]) + "</div>")
             if res.table.empty:
-                st.caption("Không có dữ liệu phù hợp bộ lọc.")
+                st.html('<div class="bc-trong" style="height:%dpx">Không có dữ liệu</div>' % H_THE)
             elif res.chart and len(res.chart.get("data", [])):
-                g = _gon(res.chart)
-                ngang = g["kind"] == "hbar" or g.get("horizontal")
-                so = g["data"][g["x"]].nunique() * (
-                    g["data"][g["color"]].nunique() if g["kind"] == "group" else 1)
-                BD.ve(g, height=min(340, max(230, 18 * so + 50)) if ngang else 230, gon=True,
-                      key=f"bc_dash_{r.id}")
+                BD.ve(_gon(res.chart), height=H_THE, gon=True, key=f"bc_dash_{r.id}")
             else:
-                st.dataframe(res.table.head(8), hide_index=True, width="stretch",
-                             height=min(38 + 35 * min(len(res.table), 8), 320))
+                st.html('<div class="bc-trong" style="height:%dpx">%d dòng · bấm ⤢ để xem bảng'
+                        '</div>' % (H_THE, len(res.table)))
+
+
+H_THE = 168  # chiều cao biểu đồ trong thẻ: 2 hàng thẻ vừa một màn hình
 
 
 # ------------------------------------------------------------------ trang
-actions = ui.page_header("Báo cáo", f"{len(reports.REPORTS)} mẫu báo cáo · năm học {nam_hoc}")
-all_slot = actions.container(width="content")
+# trang gọn: không khối tiêu đề lớn — tên trang đã có ở thanh bên trái
 
-nav, main = st.columns([1, 3.3], gap="medium")
-with nav:
-    groups = list(dict.fromkeys(r.group for r in reports.REPORTS))
-    grp = st.selectbox("Nhóm báo cáo", groups, key="bc_grp", label_visibility="collapsed")
-    in_grp = [r for r in reports.REPORTS if r.group == grp]
-    if S.get("bc_rep") not in [DASH] + [r.id for r in in_grp]:
-        S["bc_rep"] = DASH  # vào nhóm: mở trang tổng hợp trước
-    with st.container(border=True):
-        rid = st.radio("Mẫu báo cáo", [DASH] + [r.id for r in in_grp], key="bc_rep",
-                       format_func=lambda i: "▦  Tổng hợp nhóm (dashboard)" if i == DASH
-                       else reports.BY_ID[i].title,
-                       label_visibility="collapsed")
+# chọn nhóm (thanh ngang) + mẫu báo cáo (ô chọn) + bộ lọc chung — cùng một hàng
+groups = list(dict.fromkeys(r.group for r in reports.REPORTS))
+if S.get("bc_grp") not in groups:
+    S["bc_grp"] = groups[0]
+r1, r2, r3 = st.columns([3, 1.5, .28], vertical_alignment="bottom", gap="small")
+all_slot = r3
+grp = r1.segmented_control("Nhóm báo cáo", groups, key="bc_grp", required=True,
+                           label_visibility="collapsed")
+in_grp = [r for r in reports.REPORTS if r.group == grp]
+if S.get("bc_rep") not in [DASH] + [r.id for r in in_grp]:
+    S["bc_rep"] = DASH  # vào nhóm: mở trang tổng hợp trước
+rid = r2.selectbox("Mẫu báo cáo", [DASH] + [r.id for r in in_grp], key="bc_rep",
+                   format_func=lambda i: f"▦  Tổng hợp {len(in_grp)} báo cáo" if i == DASH
+                   else reports.BY_ID[i].title, label_visibility="collapsed")
 
 # trang tổng hợp: một "mẫu" giả, bộ lọc chung của nhóm (khối, ngày, năm học so sánh)
-rep = reports.Report(DASH, grp, f"Tổng hợp: {grp}", f"Tất cả {len(in_grp)} mẫu báo cáo của "
-                     "nhóm trên một trang — bấm Chi tiết để mở từng mẫu.", None,
+rep = reports.Report(DASH, grp, f"Tổng hợp: {grp}", "", None,
                      ("nam",) if any("nam" in r.params for r in in_grp) else ()) \
     if rid == DASH else reports.BY_ID[rid]
+main = st.container()
 with main:
     # ---- bộ lọc chung + tham số của mẫu
-    f = st.columns([1.3, 2.4, 1.1], vertical_alignment="bottom", gap="small")
+    f = st.columns([1.2, 2.2, 1.6], vertical_alignment="bottom", gap="small")
     d = pd.to_datetime(ts_year["NgayLienHe"], errors="coerce")
     rng = None
     if rep.group == reports.G_TS and d.notna().any():
@@ -189,7 +190,7 @@ with main:
                         if str(y).strip()})
         so = 2 if rep.id == "xh_cungky" else 3  # cùng kỳ: mặc định năm này và năm trước
         mac_dinh = [y for y in co_dl if y <= nam_hoc][-so:] or co_dl[-so:]
-        params["nam"] = st.multiselect("Năm học so sánh", co_dl, default=mac_dinh,
+        params["nam"] = f[2].multiselect("Năm học so sánh", co_dl, default=mac_dinh,
                                        key="bc_nam_ck" if so == 2 else "bc_nam",
                                        placeholder="Chọn 2–3 năm học",
                                        help=f"Mặc định {so} năm học gần nhất (tính đến năm đang "
@@ -214,18 +215,20 @@ with main:
                 "Học sinh", ["Tất cả", "HS mới", "HS cũ học tiếp"], default="Tất cả",
                 required=True, key="bc_loai",
                 help="HS mới = qua tuyển sinh; HS cũ = học sinh của trường lên lớp")
+    f2 = st.columns([1.2, 2.2, 1.6], vertical_alignment="bottom", gap="small")[2] \
+        if "nam" in rep.params else f[2]
     if "moc" in rep.params:
-        params["moc"] = f[2].date_input(
+        params["moc"] = f2.date_input(
             "Tính đến ngày", value=date.today(), format="DD/MM/YYYY", key="bc_moc",
             help=f"Mốc của năm học {nam_hoc}; các năm khác lấy cùng ngày/tháng tương ứng "
                  "(lùi đúng số năm).")
     if "ky" in rep.params:
-        params["ky"] = f[2].segmented_control("Kỳ", ["Tháng", "Tuần"], default="Tháng",
+        params["ky"] = f2.segmented_control("Kỳ", ["Tháng", "Tuần"], default="Tháng",
                                               required=True, key="bc_ky")
     if "top" in rep.params:
-        params["top"] = f[2].number_input("Số trường", 5, 200, 30, 5, key="bc_top")
+        params["top"] = f2.number_input("Số trường", 5, 200, 30, 5, key="bc_top")
     if "ngay" in rep.params:
-        params["ngay"] = f[2].number_input("Quá số ngày", 1, 365, 14, key="bc_ngay")
+        params["ngay"] = f2.number_input("Quá số ngày", 1, 365, 14, key="bc_ngay")
 
     ts = ts_year
     if rng and isinstance(rng, tuple) and len(rng) == 2:
@@ -255,7 +258,8 @@ def _all_reports() -> bytes:
     return reports.excel(items, SCHOOL, nam_hoc)
 
 
-all_slot.download_button("Tải tất cả báo cáo", _all_reports,
+all_slot.download_button("", _all_reports, icon=":material/folder_zip:",
                          file_name=f"BaoCao_TongHop_{nam_hoc}_{date.today():%Y%m%d}.xlsx",
-                         mime=ui.XLSX, icon=":material/folder_zip:", on_click="ignore",
-                         help="Một file Excel, mỗi báo cáo một sheet (theo bộ lọc hiện tại)")
+                         mime=ui.XLSX, on_click="ignore", width="stretch",
+                         help="Tải tất cả báo cáo: một file Excel, mỗi báo cáo một sheet (theo "
+                              "bộ lọc hiện tại)")

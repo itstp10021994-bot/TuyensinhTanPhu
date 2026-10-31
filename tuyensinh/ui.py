@@ -218,12 +218,18 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
 .tp-seg-i b {color: #1D1D1F; font-weight: 600;}
 .tp-seg-i em {font-style: normal; color: #898781;}
 /* Báo cáo — trang tổng hợp nhóm: thẻ chỉ số nhỏ trong mỗi thẻ báo cáo */
-[class*="st-key-tp_card_bc_"] h4 {font-size: .95rem; margin: 0;}
-[class*="st-key-tp_card_bc_"] {padding: .8rem 1rem .6rem;}
-.bc-kpi {display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: -.2rem 0 .1rem;}
+[class*="st-key-tp_card_bc_"] h4 {font-size: .86rem; margin: 0; padding: 0;}
+[class*="st-key-tp_card_bc_"] {padding: .55rem .75rem .45rem;}
+.bc-kpi {display: flex; flex-wrap: nowrap; gap: .4rem 1rem; margin: -.3rem 0 0; overflow: hidden;}
+.bc-kpi span {min-width: 0;} .bc-kpi em, .bc-kpi b {white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;}
+.bc-trong {display: flex; align-items: center; justify-content: center; font-size: .8rem;
+  color: #898781; border: 1px dashed rgba(0,0,0,.1); border-radius: 10px;}
+[class*="st-key-tp_card_bc_"] [data-testid="stVerticalBlock"] {gap: .35rem;}
+[class*="st-key-tp_card_bc_"] h4 {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
 .bc-kpi span {display: flex; flex-direction: column;}
 .bc-kpi em {font-style: normal; font-size: .72rem; color: #898781;}
-.bc-kpi b {font-size: 1.15rem; font-weight: 600; line-height: 1.25;}
+.bc-kpi b {font-size: 1rem; font-weight: 600; line-height: 1.2;}
 /* Tổng quan: gọn trong một màn hình */
 .st-key-tq [class*="st-key-tp_card_"] {padding: .7rem .9rem .5rem;}
 .st-key-tq [class*="st-key-tp_card_"] h4 {font-size: .92rem; margin: 0 0 .1rem;}

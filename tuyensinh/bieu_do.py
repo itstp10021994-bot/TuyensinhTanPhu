@@ -64,7 +64,9 @@ def cau_hinh(c, height: int, gon: bool = False):
             .configure_axisBand(grid=False, ticks=False)
             .configure_legend(orient="top", direction="horizontal", title=None,
                               labelColor=m["phu"], labelFontSize=fs, symbolType="circle",
-                              symbolSize=80, columnPadding=14, padding=0, offset=6)
+                              symbolSize=50 if gon else 80, columnPadding=8 if gon else 14,
+                              labelLimit=80 if gon else 200, columns=2 if gon else 0,
+                              rowPadding=2, padding=0, offset=6)
             .configure_title(color=m["chu"], fontSize=13, anchor="start"))
 
 
@@ -173,7 +175,8 @@ def bieu_do(spec: dict, height: int | None = None, gon: bool = False):
     # ---------------------------------------------------------------- thanh / cột
     horiz = spec.get("horizontal") or kind == "hbar"
     n = data[x].nunique()
-    cat_axis = (alt.Axis(labelLimit=240, labelAngle=0, domain=False, ticks=False, labelPadding=8)
+    cat_axis = (alt.Axis(labelLimit=95 if gon else 240, labelAngle=0, domain=False, ticks=False,
+                         labelPadding=6 if gon else 8)
                 if horiz else
                 alt.Axis(labelAngle=0 if n <= 12 else -40, labelLimit=140, domain=True,
                          ticks=False))
