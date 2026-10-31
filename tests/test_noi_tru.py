@@ -205,3 +205,10 @@ def test_them_vao_phong(st_):
         NT.them_vao_phong(st_, [p], NAM, None, "P2", ["2"])
     NT.them_vao_phong(st_, [p], NAM, None, "P2", ["3"])
     assert len(st_.list_items(NOI_TRU_PHONG.name)) == 2
+
+
+def test_bo_khoi_phong(st_):
+    NT.luu_phong(st_, [], NAM, "P1", "", GV1, ["1", "2"])
+    NT.luu_phong(st_, st_.list_items(NOI_TRU_PHONG.name), NAM, "P2", "", GV1, ["3"])
+    assert NT.bo_khoi_phong(st_, st_.list_items(NOI_TRU_PHONG.name), ["2", "9"]) == 1
+    assert [NT.hs_ids(p) for p in st_.list_items(NOI_TRU_PHONG.name)] == [["1"], ["3"]]

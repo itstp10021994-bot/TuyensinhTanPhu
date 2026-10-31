@@ -110,6 +110,17 @@ def luu_phong(storage: Storage, phongs: list[dict], nam_hoc: str, ten: str, khu:
     return storage.create_item(NOI_TRU_PHONG.name, data)
 
 
+def bo_khoi_phong(storage: Storage, phongs: list[dict], hoc_sinh: list[str]) -> int:
+    """Bỏ các học sinh khỏi mọi phòng đang chứa các em."""
+    bo, n = {str(i) for i in hoc_sinh}, 0
+    for p in phongs:
+        con = [i for i in hs_ids(p) if i not in bo]
+        if len(con) != len(hs_ids(p)):
+            storage.update_item(NOI_TRU_PHONG.name, p["id"], {"HocSinhIDs": ";".join(con)})
+            n += 1
+    return n
+
+
 def them_vao_phong(storage: Storage, phongs: list[dict], nam_hoc: str, phong: dict | None,
                    ten_moi: str, hoc_sinh: list[str]) -> dict:
     """Xếp thêm học sinh vào phòng có sẵn (giữ giáo viên, học sinh cũ) hoặc phòng mới."""

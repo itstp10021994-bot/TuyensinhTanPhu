@@ -609,7 +609,9 @@ def render_cap_nhat(bang_kq: pd.DataFrame, ds: pd.DataFrame, file_id: str):
     dem = {k: sum(k in t["thay"] for t in thay) for k in importer.COT_CAP_NHAT}
     st.caption(f"**{len(thay)} hồ sơ** khác file: " + ", ".join(
         f"{importer.COT_CAP_NHAT[k]} {n}" for k, n in sorted(dem.items(), key=lambda x: -x[1])
-        if n) + ". Mọi cột của biểu mẫu VEMIS theo file (trừ Ghi chú của app).")
+        if n) + ". Mọi cột của biểu mẫu VEMIS theo file (trừ Ghi chú của app). Em đổi sang "
+        "không còn Nội trú được bỏ khỏi phòng nội trú; em mới thành Nội trú hiện ở Nội trú → "
+        "Phòng & giáo viên để xếp phòng.")
 
     def hien(v):
         return "x" if v is True else (v or "(trống)")
@@ -635,6 +637,7 @@ def render_cap_nhat(bang_kq: pd.DataFrame, ds: pd.DataFrame, file_id: str):
                  width="stretch", disabled=not chon, key="dc_cn_go"):
         bar = st.progress(0.0, text="Đang ghi lên SharePoint…")
         n = ui.mutate(importer.cap_nhat_tu_file, storage, chon,
+                      ui.records(NOI_TRU_PHONG, optional=True),
                       progress=lambda d, t: bar.progress(d / max(t, 1), text=f"Đã cập nhật {d}/{t}"),
                       success=f"Đã cập nhật {len(chon)} hồ sơ theo file")
         if n is not None:

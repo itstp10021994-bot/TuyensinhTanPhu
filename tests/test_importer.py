@@ -283,3 +283,21 @@ def test_cap_nhat_moi_cot_vemis(tmp_path):
     assert r["NgayVaoTruong"] == "2026-06-27" and r["DoanVien"] is True and r["GhiChu"] == "app"
     nh = st.list_items(NHAP_HOC.name)
     assert importer.thay_doi_tu_file(importer.doi_chieu_hien_huu(nh, ds, "N")[0], ds, nh) == []
+
+
+def test_cap_nhat_doi_che_do_bo_khoi_phong(tmp_path):
+    from tuyensinh.schema import NHAP_HOC, NOI_TRU_PHONG
+    st = LocalStorage(tmp_path / "e.sqlite3")
+    a = st.create_item(NHAP_HOC.name, {"HoTen": "An", "NgaySinh": "2015-01-02", "NamHoc": "N",
+                                       "NoiTruBanTru": "Nội trú"})
+    b = st.create_item(NHAP_HOC.name, {"HoTen": "Bình", "NgaySinh": "2015-01-03", "NamHoc": "N",
+                                       "NoiTruBanTru": "Nội trú"})
+    p = st.create_item(NOI_TRU_PHONG.name, {"NamHoc": "N", "TenPhong": "P1",
+                                            "HocSinhIDs": f"{a['id']};{b['id']}"})
+    ds = pd.DataFrame([{"HoTen": "An", "NgaySinh": "2015-01-02", "NoiTruBanTru": "Bán trú"},
+                       {"HoTen": "Bình", "NgaySinh": "2015-01-03", "NoiTruBanTru": "Nội trú"}])
+    nh = st.list_items(NHAP_HOC.name)
+    thay = importer.thay_doi_tu_file(importer.doi_chieu_hien_huu(nh, ds, "N")[0], ds, nh)
+    importer.cap_nhat_tu_file(st, thay, st.list_items(NOI_TRU_PHONG.name))
+    assert st.get_item(NHAP_HOC.name, a["id"])["NoiTruBanTru"] == "Bán trú"
+    assert st.get_item(NOI_TRU_PHONG.name, p["id"])["HocSinhIDs"] == str(b["id"])

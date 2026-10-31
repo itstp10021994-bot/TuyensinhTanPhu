@@ -472,6 +472,9 @@ def doi_chieu_hien_huu(nh: list[dict], ds: pd.DataFrame, nam_hoc: str
 
     from .noi_tru import _chuan_lop, _khoi_lop
     con = ds.reset_index(drop=True).copy()
+    for k in ("HoTen", "NgaySinh", "LopHoc", "MaVEMIS", "MaHocSinh"):
+        if k not in con.columns:
+            con[k] = None
     theo_ma: dict[str, int] = {}
     theo_ten_ns: dict[tuple, list[int]] = {}
     theo_ten: dict[str, list[int]] = {}
@@ -561,16 +564,38 @@ def thay_doi_tu_file(bang: pd.DataFrame, ds: pd.DataFrame, nh: list[dict],
     return out
 
 
-def cap_nhat_tu_file(storage: Storage, thay: list[dict], workers: int = 4,
-                     progress: Callable[[int, int], None] | None = None) -> int:
-    viec = [(t["id"], {k: v[1] for k, v in t["thay"].items()}) for t in thay]
+def _bo_khoi_phong(phongs: list[dict], ids: set[str]) -> list[tuple]:
+    """Việc cập nhật phòng nội trú để bỏ các học sinh `ids`."""
+    viec = []
+    for p in phongs:
+        cu = [x.strip() for x in str(p.get("HocSinhIDs") or "").split(";") if x.strip()]
+        con = [x for x in cu if x not in ids]
+        if len(con) != len(cu):
+            viec.append(("phong", (p["id"], ";".join(con))))
+    return viec
+
+
+def cap_nhat_tu_file(storage: Storage, thay: list[dict], phongs: list[dict] | None = None,
+                     workers: int = 4, progress: Callable[[int, int], None] | None = None) -> int:
+    """Ghi các thay đổi; em đổi sang không còn Nội trú được bỏ khỏi phòng nội trú."""
+    viec = [("nh", (t["id"], {k: v[1] for k, v in t["thay"].items()})) for t in thay]
+    het_nt = {t["id"] for t in thay if "NoiTruBanTru" in t["thay"]
+              and not str(t["thay"]["NoiTruBanTru"][1]).startswith("Nội trú")}
+    viec += _bo_khoi_phong(phongs or [], het_nt)
+
+    def lam(v):
+        loai, x = v
+        if loai == "phong":
+            return storage.update_item(NOI_TRU_PHONG.name, x[0], {"HocSinhIDs": x[1]})
+        return storage.update_item(NHAP_HOC.name, *x)
+
     done = 0
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        for _ in pool.map(lambda v: storage.update_item(NHAP_HOC.name, *v), viec):
+        for _ in pool.map(lam, viec):
             done += 1
             if progress:
                 progress(done, len(viec))
-    return len(viec)
+    return len(thay)
 
 
 def xoa_ho_so(storage: Storage, ids: list[str], ngung: bool, phongs: list[dict],
@@ -578,13 +603,7 @@ def xoa_ho_so(storage: Storage, ids: list[str], ngung: bool, phongs: list[dict],
     """Xóa hồ sơ nhập học (hoặc chỉ đánh dấu "Không học tiếp" khi `ngung`) và bỏ các em khỏi
     phòng nội trú."""
     ids = [str(i) for i in ids]
-    bo = set(ids)
-    viec = [("nh", i) for i in ids]
-    for p in phongs:
-        cu = [x.strip() for x in str(p.get("HocSinhIDs") or "").split(";") if x.strip()]
-        con = [x for x in cu if x not in bo]
-        if len(con) != len(cu):
-            viec.append(("phong", (p["id"], ";".join(con))))
+    viec = [("nh", i) for i in ids] + _bo_khoi_phong(phongs, set(ids))
 
     def lam(v):
         loai, x = v

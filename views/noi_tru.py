@@ -409,11 +409,38 @@ def render_chua_xep():
                    "B.trú = Nội trú** (tab Giấy tờ & chính sách) và kiểm tra đúng năm học.")
 
 
+def render_khong_con_nt():
+    """Em còn trong phòng nhưng hồ sơ đã bị xóa, không còn Nội trú hoặc đã nghỉ học."""
+    thua = sorted({i for i in o_phong if i not in HS})
+    if not thua:
+        return
+    tat_ca = {str(r["id"]): r for _, r in nh.iterrows()}
+
+    def mo_ta(i):
+        r = tat_ca.get(i)
+        if r is None:
+            return {"Họ tên": f"(hồ sơ {i} đã bị xóa)", "Lý do": "Không còn hồ sơ nhập học"}
+        ly_do = (r["TinhTrangHS"] if r["TinhTrangHS"] in ("Rút hồ sơ", "Không học tiếp")
+                 else f"Chế độ: {r['NoiTruBanTru'] or '(trống)'}")
+        return {"Họ tên": r["HoTen"], "Lý do": ly_do}
+    with ui.section(f"{len(thua)} em trong phòng không còn là học sinh nội trú",
+                    "Hồ sơ đã bị xóa, đổi sang Bán trú / chế độ khác, hoặc đã rút / không học tiếp."):
+        st.dataframe(pd.DataFrame([{"Phòng": o_phong[i].get("TenPhong"), **mo_ta(i)}
+                                   for i in thua]), hide_index=True, width="stretch",
+                     height=min(38 + 35 * len(thua), 300))
+        if st.button(f"Bỏ {len(thua)} em khỏi phòng", icon=":material/person_remove:",
+                     key="nt_kc_go"):
+            if ui.mutate(NT.bo_khoi_phong, storage, phongs, thua,
+                         success=f"Đã bỏ {len(thua)} em khỏi phòng") is not None:
+                st.rerun()
+
+
 def render_phong():
     tks = [t for t in ui.records(TAI_KHOAN, optional=True)
            if str(t.get("HoatDong") or "Có") != "Không"]
     tks.sort(key=lambda t: (t.get("VaiTro") != "GV quản nhiệm", str(t.get("HoTen") or "")))
     render_nhap_excel(tks)
+    render_khong_con_nt()
     render_chua_xep()
     left, right = st.columns([1.4, 1.2], gap="medium")
     with left, ui.section("Danh sách phòng", f"{len(phongs)} phòng · năm học {nam_hoc}"):
