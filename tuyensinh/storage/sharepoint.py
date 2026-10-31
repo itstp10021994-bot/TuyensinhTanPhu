@@ -119,6 +119,20 @@ class SharePointStorage(Storage):
                                               it.get("createdDateTime"),
                                               it.get("lastModifiedDateTime"))
 
+    def lan_doi_cuoi(self, list_names):
+        data = self.request("GET", f"/sites/{self.site_id}/lists"
+                                   "?$select=id,name,displayName,lastModifiedDateTime")
+        out = {}
+        for name in list_names:
+            try:
+                lid = self.list_id(name)
+            except RuntimeError:
+                continue
+            for r in data.get("value", []):
+                if r.get("id") == lid:
+                    out[name] = convert.utc(r.get("lastModifiedDateTime"))
+        return out
+
     def list_exists(self, list_name: str) -> bool:
         try:
             self.list_id(list_name)

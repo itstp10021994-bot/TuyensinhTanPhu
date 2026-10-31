@@ -46,6 +46,16 @@ def date_in(v) -> str:
     return dt.astimezone(ZoneInfo(config.timezone())).date().isoformat()
 
 
+def utc(v) -> datetime:
+    """Chuỗi thời gian SharePoint ("2026-10-31T03:12:45Z") -> datetime UTC; lỗi / trống -> rất cũ."""
+    from datetime import timezone
+    try:
+        d = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
 def _num_text(v) -> str:
     try:
         return f"{float(v):g}"

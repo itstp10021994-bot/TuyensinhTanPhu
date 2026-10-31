@@ -24,3 +24,8 @@ class Storage(ABC):
 
     @abstractmethod
     def delete_item(self, list_name: str, item_id: str) -> None: ...
+
+    def lan_doi_cuoi(self, list_names: list[str]) -> dict | None:
+        """Thời điểm (datetime UTC) có thay đổi / xóa dòng gần nhất của từng list — để app biết
+        list nào vừa bị sửa thẳng trên SharePoint mà tải lại. None: kho không hỗ trợ."""
+        return None

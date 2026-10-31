@@ -15,7 +15,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from html import escape
 
 import pandas as pd
@@ -313,6 +313,7 @@ def storage() -> Storage:
 
 
 TTL = 600  # giây: dữ liệu sửa thẳng trên SharePoint hiện lên app sau tối đa 10 phút
+KIEM_TRA = 30  # giây: hỏi SharePoint list nào vừa đổi / xóa dòng để tải lại ngay
 
 
 @st.cache_resource
@@ -331,11 +332,41 @@ def _fresh(e: dict, version: int) -> bool:
     return e.get("version") == version and time.monotonic() - e.get("at", -1e9) < TTL
 
 
+def _kiem_tra_thay_doi(st_obj: Storage):
+    """Tối đa mỗi KIEM_TRA giây (chung mọi người dùng): một lần hỏi SharePoint thời điểm đổi /
+    xóa dòng gần nhất của các list đã tải; list đổi sau lúc tải thì bỏ bản đệm để tải lại."""
+    store = _data_store()
+    if time.monotonic() - store.get("kt_at", -1e9) < KIEM_TRA:
+        return
+    if not store.setdefault("kt_lock", threading.Lock()).acquire(blocking=False):
+        return  # người khác đang kiểm tra
+    try:
+        store["kt_at"] = time.monotonic()
+        with store["lock"]:
+            da_tai = {n: e for n, e in store["lists"].items() if "luc" in e}
+        if not da_tai:
+            return
+        try:
+            moc = st_obj.lan_doi_cuoi(list(da_tai))
+        except Exception:  # lỗi mạng: dùng TTL như cũ
+            return
+        for n, t in (moc or {}).items():
+            e = da_tai[n]
+            # đổi sau (hoặc sát) lúc bắt đầu tải -> bản đệm có thể thiếu thay đổi đó
+            if t >= e["luc"] - timedelta(seconds=5):
+                with store["lock"]:
+                    if store["lists"].get(n) is e:
+                        store["lists"].pop(n)
+    finally:
+        store["kt_lock"].release()
+
+
 def _fetch(st_obj: Storage, name: str, version: int, optional: bool = False) -> dict:
     e = _entry(name)
     with e["lock"]:  # nhiều người mở cùng lúc: chỉ tải 1 lần
         if not _fresh(e, version):
             err = ""
+            luc = datetime.now(timezone.utc)
             try:
                 items = st_obj.list_items(name)
             except Exception as ex:  # list tùy chọn (vd danh mục) chưa có: không chặn app
@@ -343,7 +374,7 @@ def _fetch(st_obj: Storage, name: str, version: int, optional: bool = False) -> 
                     raise
                 items, err = [], str(ex)
             e.update(version=version, at=time.monotonic(), items=items, frames={}, memo={},
-                     error=err)
+                     error=err, luc=luc)
     return e
 
 
@@ -351,6 +382,7 @@ def preload(*lds: ListDef, optional: tuple = ()):
     """Tải các list trang cần — song song — vào bộ nhớ đệm (nếu chưa có / đã cũ).
 
     `optional`: list không bắt buộc (lỗi -> coi như rỗng, ghi lại lỗi để trang Cài đặt báo)."""
+    _kiem_tra_thay_doi(storage())
     v = data_version()
     opt = {ld.name for ld in optional}
     need = [ld.name for ld in lds if not _fresh(_entry(ld.name), v)]

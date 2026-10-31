@@ -212,6 +212,22 @@ class PowerAutomateStorage(Storage):
                 return False
             raise
 
+    def lan_doi_cuoi(self, list_names):
+        """Một lần gọi cho mọi list: LastItemModifiedDate / LastItemDeletedDate."""
+        data = self.call("GET", "_api/web/lists?$filter=Hidden eq false&$select=Id,Title,"
+                                "LastItemModifiedDate,LastItemDeletedDate")
+        rows = data.get("value", [])
+        out = {}
+        for name in list_names:
+            real = config.list_name(name)
+            for r in rows:
+                if (str(r.get("Id", "")).lower() == real.strip("{}").lower() if _GUID.match(real)
+                        else str(r.get("Title", "")).lower() == real.lower()):
+                    out[name] = max(convert.utc(r.get("LastItemModifiedDate")),
+                                    convert.utc(r.get("LastItemDeletedDate")))
+                    break
+        return out
+
     def list_titles(self) -> list[str]:
         """Các list đang có trên site mà flow kết nối (để chẩn đoán sai site / sai tên)."""
         data = self.call("GET", "_api/web/lists?$filter=Hidden eq false&$select=Title")
