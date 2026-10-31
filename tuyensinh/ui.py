@@ -217,6 +217,13 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
 .tp-seg-i i {width: 9px; height: 9px; border-radius: 50%; display: inline-block;}
 .tp-seg-i b {color: #1D1D1F; font-weight: 600;}
 .tp-seg-i em {font-style: normal; color: #898781;}
+/* Báo cáo — trang tổng hợp nhóm: thẻ chỉ số nhỏ trong mỗi thẻ báo cáo */
+[class*="st-key-tp_card_bc_"] h4 {font-size: .95rem; margin: 0;}
+[class*="st-key-tp_card_bc_"] {padding: .8rem 1rem .6rem;}
+.bc-kpi {display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: -.2rem 0 .1rem;}
+.bc-kpi span {display: flex; flex-direction: column;}
+.bc-kpi em {font-style: normal; font-size: .72rem; color: #898781;}
+.bc-kpi b {font-size: 1.15rem; font-weight: 600; line-height: 1.25;}
 /* Tổng quan: gọn trong một màn hình */
 .st-key-tq [class*="st-key-tp_card_"] {padding: .7rem .9rem .5rem;}
 .st-key-tq [class*="st-key-tp_card_"] h4 {font-size: .92rem; margin: 0 0 .1rem;}

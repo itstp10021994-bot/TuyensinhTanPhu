@@ -218,7 +218,10 @@ def bieu_do(spec: dict, height: int | None = None, gon: bool = False):
         enc["color"] = alt.Color(f"{color}:N", sort=doms, scale=alt.Scale(
             domain=doms, range=_mau_nhom(doms, ten_mau)))
         mark = alt.Chart(data).mark_bar(cornerRadiusEnd=4, stroke=m["nen"], strokeWidth=1.5,
-                                        size=14 if horiz else max(8, min(22, 64 // len(doms))))
+                                        **({"height": {"band": .85}} if horiz else
+                                           {"size": max(8, min(22, 64 // len(doms)))}
+                                           if n * len(doms) <= 16 else
+                                           {"width": {"band": .85}}))
         enc["yOffset" if horiz else "xOffset"] = (alt.YOffset if horiz else alt.XOffset)(
             f"{color}:N", sort=doms, scale=alt.Scale(paddingOuter=.6 if n <= 2 else .2))
         c = mark.encode(**enc, tooltip=tip)

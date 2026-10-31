@@ -52,6 +52,103 @@ def table(df: pd.DataFrame):
                  height=min(560, 38 + 35 * max(len(df), 1)))
 
 
+def mot_bao_cao(rep, ctx, sel_khoi):
+    """Một mẫu báo cáo: chỉ số, biểu đồ, bảng, tải Excel."""
+    with st.container(border=True, key="bc_noi_dung"):
+        h1, h2 = st.columns([3, 1.2], vertical_alignment="center")
+        h1.markdown(f"#### {rep.title}")
+        h1.caption(rep.desc + (f" · Khối {', '.join(sel_khoi)}" if sel_khoi else ""))
+        try:
+            res = rep.fn(ctx)
+        except Exception as e:  # dữ liệu bất thường: báo lỗi của riêng mẫu này
+            ui.error_state(e, compact=True)
+            return
+        items = reports.export_items(rep, res)
+        h2.download_button("Tải báo cáo (Excel)", lambda: reports.excel(items, SCHOOL, nam_hoc),
+                           file_name=f"{rep.id}_{nam_hoc}.xlsx", mime=ui.XLSX,
+                           icon=":material/download:", on_click="ignore", width="stretch",
+                           type="primary")
+        if res.kpis:
+            cols = st.columns(len(res.kpis))
+            for col, (label, v) in zip(cols, res.kpis):
+                ui.kpi(col, label, fmt_kpi(label, v))
+        if res.table.empty:
+            ui.empty_state("inbox", "Không có dữ liệu", "Không có học sinh phù hợp với bộ lọc.")
+        elif res.chart:  # màn hình rộng: biểu đồ và bảng cạnh nhau
+            ngang = res.chart.get("kind") in ("hbar",) or res.chart.get("horizontal")
+            n = res.chart["data"][res.chart["x"]].nunique()
+            if n > 14 or len(res.table.columns) > 7:  # biểu đồ dài / bảng nhiều cột: xếp dọc
+                draw(res.chart, height=None if ngang else 270)
+                table(res.table)
+            else:
+                g1, g2 = st.columns([1.35, 1], gap="medium")
+                with g1:
+                    draw(res.chart, height=max(300, 30 * n + 40) if ngang else 340)
+                with g2:
+                    table(res.table)
+        else:
+            table(res.table)
+        if res.note:
+            st.caption(f":material/info: {res.note}")
+
+
+# ------------------------------------------------------------------ trang tổng hợp nhóm
+DASH = "__tong_hop__"
+MAC_DINH = {"cap": dia_ban.CAP[1], "tinh": "Tất cả", "loai": "Tất cả", "ky": "Tháng",
+            "top": 10, "ngay": 14}
+
+
+def _gon(spec: dict) -> dict:
+    """Biểu đồ trong thẻ tổng hợp: thanh ngang nhiều mục chỉ giữ 8 mục lớn nhất."""
+    data, x, y = spec["data"], spec["x"], spec["y"]
+    ngang = spec["kind"] == "hbar" or spec.get("horizontal")
+    if ngang and data[x].nunique() > 8:
+        top = data.groupby(x)[y].sum().nlargest(8).index
+        data = data[data[x].isin(top)]
+    return {**spec, "data": data}
+
+
+def _mo(rid_: str):
+    S["bc_rep"] = rid_
+
+
+def dashboard(ds: list, ctx, sel_khoi):
+    """Mọi mẫu báo cáo của nhóm trên một trang: lưới thẻ (chỉ số + biểu đồ), bấm Chi tiết để mở."""
+    for i, r in enumerate(ds):
+        if i % 2 == 0:  # mỗi hàng 2 thẻ, thẳng hàng
+            cot = st.columns(2, gap="small")
+        p = {**MAC_DINH, **ctx.params, "moc": date.today()}
+        if r.id == "xh_cungky" and len(p.get("nam") or []) > 2:
+            p["nam"] = p["nam"][-2:]
+        c = reports.Ctx(ctx.ts, ctx.nh, ctx.ts_all, ctx.nam_hoc, p, nh_all=ctx.nh_all)
+        with cot[i % 2], st.container(key=f"tp_card_bc_{r.id}"):
+            h = st.container(horizontal=True, vertical_alignment="center", wrap=False)
+            h.markdown(f"#### {r.title}", width="stretch")
+            h.button("", key=f"bc_mo_{r.id}", on_click=_mo, args=(r.id,), help="Mở chi tiết",
+                     icon=":material/open_in_full:", type="tertiary")
+            try:
+                res = r.fn(c)
+            except Exception as e:
+                ui.error_state(e, compact=True)
+                continue
+            if res.kpis:
+                st.html('<div class="bc-kpi">' + "".join(
+                    f'<span><em>{lbl}</em><b>{fmt_kpi(lbl, v)}</b></span>'
+                    for lbl, v in res.kpis[:4]) + "</div>")
+            if res.table.empty:
+                st.caption("Không có dữ liệu phù hợp bộ lọc.")
+            elif res.chart and len(res.chart.get("data", [])):
+                g = _gon(res.chart)
+                ngang = g["kind"] == "hbar" or g.get("horizontal")
+                so = g["data"][g["x"]].nunique() * (
+                    g["data"][g["color"]].nunique() if g["kind"] == "group" else 1)
+                BD.ve(g, height=min(340, max(230, 18 * so + 50)) if ngang else 230, gon=True,
+                      key=f"bc_dash_{r.id}")
+            else:
+                st.dataframe(res.table.head(8), hide_index=True, width="stretch",
+                             height=min(38 + 35 * min(len(res.table), 8), 320))
+
+
 # ------------------------------------------------------------------ trang
 actions = ui.page_header("Báo cáo", f"{len(reports.REPORTS)} mẫu báo cáo · năm học {nam_hoc}")
 all_slot = actions.container(width="content")
@@ -61,14 +158,19 @@ with nav:
     groups = list(dict.fromkeys(r.group for r in reports.REPORTS))
     grp = st.selectbox("Nhóm báo cáo", groups, key="bc_grp", label_visibility="collapsed")
     in_grp = [r for r in reports.REPORTS if r.group == grp]
-    if S.get("bc_rep") not in [r.id for r in in_grp]:
-        S["bc_rep"] = in_grp[0].id
+    if S.get("bc_rep") not in [DASH] + [r.id for r in in_grp]:
+        S["bc_rep"] = DASH  # vào nhóm: mở trang tổng hợp trước
     with st.container(border=True):
-        rid = st.radio("Mẫu báo cáo", [r.id for r in in_grp], key="bc_rep",
-                       format_func=lambda i: reports.BY_ID[i].title,
+        rid = st.radio("Mẫu báo cáo", [DASH] + [r.id for r in in_grp], key="bc_rep",
+                       format_func=lambda i: "▦  Tổng hợp nhóm (dashboard)" if i == DASH
+                       else reports.BY_ID[i].title,
                        label_visibility="collapsed")
 
-rep = reports.BY_ID[rid]
+# trang tổng hợp: một "mẫu" giả, bộ lọc chung của nhóm (khối, ngày, năm học so sánh)
+rep = reports.Report(DASH, grp, f"Tổng hợp: {grp}", f"Tất cả {len(in_grp)} mẫu báo cáo của "
+                     "nhóm trên một trang — bấm Chi tiết để mở từng mẫu.", None,
+                     ("nam",) if any("nam" in r.params for r in in_grp) else ()) \
+    if rid == DASH else reports.BY_ID[rid]
 with main:
     # ---- bộ lọc chung + tham số của mẫu
     f = st.columns([1.3, 2.4, 1.1], vertical_alignment="bottom", gap="small")
@@ -135,43 +237,10 @@ with main:
     ctx = reports.Ctx(ts.reset_index(drop=True), nh.reset_index(drop=True), ts_all, nam_hoc,
                       params, nh_all=nh_all)
 
-    # ---- nội dung báo cáo
-    with st.container(border=True, key="bc_noi_dung"):
-        h1, h2 = st.columns([3, 1.2], vertical_alignment="center")
-        h1.markdown(f"#### {rep.title}")
-        h1.caption(rep.desc + (f" · Khối {', '.join(sel_khoi)}" if sel_khoi else ""))
-        try:
-            res = rep.fn(ctx)
-        except Exception as e:  # dữ liệu bất thường: báo lỗi của riêng mẫu này
-            ui.error_state(e, compact=True)
-            st.stop()
-        items = reports.export_items(rep, res)
-        h2.download_button("Tải báo cáo (Excel)", lambda: reports.excel(items, SCHOOL, nam_hoc),
-                           file_name=f"{rep.id}_{nam_hoc}.xlsx", mime=ui.XLSX,
-                           icon=":material/download:", on_click="ignore", width="stretch",
-                           type="primary")
-        if res.kpis:
-            cols = st.columns(len(res.kpis))
-            for col, (label, v) in zip(cols, res.kpis):
-                ui.kpi(col, label, fmt_kpi(label, v))
-        if res.table.empty:
-            ui.empty_state("inbox", "Không có dữ liệu", "Không có học sinh phù hợp với bộ lọc.")
-        elif res.chart:  # màn hình rộng: biểu đồ và bảng cạnh nhau
-            ngang = res.chart.get("kind") in ("hbar",) or res.chart.get("horizontal")
-            n = res.chart["data"][res.chart["x"]].nunique()
-            if n > 14 or len(res.table.columns) > 7:  # biểu đồ dài / bảng nhiều cột: xếp dọc
-                draw(res.chart, height=None if ngang else 270)
-                table(res.table)
-            else:
-                g1, g2 = st.columns([1.35, 1], gap="medium")
-                with g1:
-                    draw(res.chart, height=max(300, 30 * n + 40) if ngang else 340)
-                with g2:
-                    table(res.table)
-        else:
-            table(res.table)
-        if res.note:
-            st.caption(f":material/info: {res.note}")
+    if rid == DASH:
+        dashboard(in_grp, ctx, sel_khoi)
+    else:
+        mot_bao_cao(rep, ctx, sel_khoi)
 
 
 def _all_reports() -> bytes:
