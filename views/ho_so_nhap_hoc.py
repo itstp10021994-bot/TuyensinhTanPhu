@@ -617,20 +617,24 @@ def render_cap_nhat(bang_kq: pd.DataFrame, ds: pd.DataFrame, file_id: str):
         return "x" if v is True else (v or "(trống)")
 
     def lech(t):
-        """Khối đổi hơn 1 (vd 6 → 10): có thể khớp nhầm em trùng tên — mặc định không chọn."""
+        """Khớp theo họ tên mà khối đổi hơn 1 (vd 6 → 10): có thể khớp nhầm em trùng tên —
+        mặc định không chọn. Khớp theo mã là chắc chắn đúng em: chỉ là khối trong app sai."""
         cu, moi = t["thay"].get("Khoi", ("", ""))
-        return cu.isdigit() and moi.isdigit() and abs(int(moi) - int(cu)) > 1
+        return (t["Kết quả"] != importer.KQ_MA and cu.isdigit() and moi.isdigit()
+                and abs(int(moi) - int(cu)) > 1)
+    n_lech = sum(lech(t) for t in thay)
+    ca_lech = False
+    if n_lech:
+        st.warning(f"**{n_lech} hồ sơ** khớp theo họ tên nhưng khối đổi hơn 1 bậc (vd 6 → 10) — "
+                   "có thể là em trùng tên bị khớp nhầm, hoặc khối trong app đang sai. Mặc định "
+                   "không chọn: kiểm tra rồi tick từng em, hoặc chọn cả.", icon=":material/warning:")
+        ca_lech = st.checkbox(f"Chọn cả {n_lech} hồ sơ khối lệch", key="dc_cn_lech")
     bang = pd.DataFrame([{
-        "Chọn": not lech(t), "id": t["id"], "Họ tên": t["Họ tên"], "Số ô đổi": len(t["thay"]),
+        "Chọn": ca_lech or not lech(t), "id": t["id"], "Họ tên": t["Họ tên"], "Số ô đổi": len(t["thay"]),
         "Thay đổi": " · ".join(f"{importer.COT_CAP_NHAT[k]}: {hien(cu)} → {hien(moi)}"
                                for k, (cu, moi) in t["thay"].items()),
         "Khớp theo": t["Kết quả"].removeprefix("Có (").rstrip(")")
         + (" ⚠ khối lệch, kiểm tra" if lech(t) else "")} for t in thay])
-    n_lech = sum(lech(t) for t in thay)
-    if n_lech:
-        st.warning(f"**{n_lech} hồ sơ** có khối đổi hơn 1 bậc (vd 6 → 10) — có thể là em trùng tên "
-                   "bị khớp nhầm, hoặc khối trong app đang sai. Mặc định không chọn: mở hồ sơ kiểm "
-                   "tra rồi tick nếu đúng.", icon=":material/warning:")
     sua = st.data_editor(bang, hide_index=True, width="stretch",
                          height=min(38 + 35 * len(bang), 380),
                          disabled=[c for c in bang.columns if c != "Chọn"],
@@ -638,7 +642,7 @@ def render_cap_nhat(bang_kq: pd.DataFrame, ds: pd.DataFrame, file_id: str):
                                         "Chọn": st.column_config.CheckboxColumn(width="small"),
                                         "Số ô đổi": st.column_config.NumberColumn(width="small"),
                                         "Thay đổi": st.column_config.TextColumn(width="large")},
-                         key=f"dc_cn_{file_id}_{xoa}_{ui.data_version()}")
+                         key=f"dc_cn_{file_id}_{xoa}_{ca_lech}_{ui.data_version()}")
     ids = set(sua.loc[sua["Chọn"], "id"])
     chon = [t for t in thay if t["id"] in ids]
     if any(t["Kết quả"] == importer.KQ_TEN for t in chon):
