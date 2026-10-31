@@ -230,6 +230,11 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
 .bc-kpi span {display: flex; flex-direction: column;}
 .bc-kpi em {font-style: normal; font-size: .72rem; color: #898781;}
 .bc-kpi b {font-size: 1rem; font-weight: 600; line-height: 1.2;}
+.bi-banner {display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+  padding: .65rem 1.1rem; border-radius: 12px; color: #FFFFFF; margin-bottom: .2rem;
+  background: linear-gradient(90deg, #1c5cab, #2a78d6 60%, #3987e5);}
+.bi-banner b {font-size: 1.25rem; letter-spacing: .02em;}
+.bi-banner span {font-size: .85rem; opacity: .9;}
 /* dashboard báo cáo: dải ô số liệu lớn */
 .bi-dai {display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: .6rem;}
 .bi-o {background: #FFFFFF; border-radius: 12px; padding: .6rem .9rem .65rem;

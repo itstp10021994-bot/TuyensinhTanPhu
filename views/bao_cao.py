@@ -125,6 +125,17 @@ DASH_CFG = {
                    "xnh_truongcu"]},
 }
 H_O = 188  # chiều cao biểu đồ trong ô: dải chỉ số + 2 hàng ô vừa một màn hình
+H_TC = 300  # trình chiếu: vừa màn hình 1920×1080 (16:9) khi bấm F11
+# Trình chiếu: ẩn menu trái, thanh trên, bộ lọc, ô chọn mẫu; nội dung dùng hết bề ngang
+TRINH_CHIEU_CSS = """<style>
+section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
+header[data-testid="stHeader"], .st-key-tp_toolbar, .st-key-tp_ai, .st-key-bc_loc,
+.st-key-bc_rep {display: none !important;}
+.block-container {padding: .9rem 1.6rem 1rem !important; max-width: none !important;}
+.bi-o b {font-size: 2.1rem;} .bi-o em {font-size: .86rem;} .bi-o {padding: .75rem 1.1rem .8rem;}
+[class*="st-key-tp_card_bc_"] h4 {font-size: 1.05rem;}
+[class*="st-key-tp_card_bc_"] {padding: .75rem 1rem .6rem;}
+</style>"""
 
 
 def _gon(spec: dict) -> dict:
@@ -169,7 +180,7 @@ def _o_chi_so(ds: list[tuple[str, object]]):
     st.html(f'<div class="bi-dai" style="--n:{len(o)}">{"".join(o)}</div>')
 
 
-def dashboard(ds: list, ctx, sel_khoi):
+def dashboard(ds: list, ctx, sel_khoi, lon: bool = False):
     """Dashboard của nhóm: dải chỉ số + 4–6 biểu đồ chọn lọc (lưới 3×2), vừa một màn hình."""
     cfg = DASH_CFG.get(ds[0].group) if ds else None
     if not cfg:
@@ -196,6 +207,7 @@ def dashboard(ds: list, ctx, sel_khoi):
             chi_so.append(res.kpis[i])
     if chi_so:
         _o_chi_so(chi_so)
+    cao = H_TC if lon else H_O
     panels = cfg["panels"]
     so_cot = 2 if len(panels) <= 4 else 3
     for i, rid_ in enumerate(panels):
@@ -211,12 +223,12 @@ def dashboard(ds: list, ctx, sel_khoi):
             if isinstance(res, Exception):
                 ui.error_state(res, compact=True)
             elif res.table.empty:
-                st.html(f'<div class="bc-trong" style="height:{H_O}px">Không có dữ liệu</div>')
+                st.html(f'<div class="bc-trong" style="height:{cao}px">Không có dữ liệu</div>')
             elif res.chart and len(res.chart.get("data", [])):
-                BD.ve(_gon(res.chart), height=H_O, gon=True, key=f"bc_dash_{rid_}")
+                BD.ve(_gon(res.chart), height=cao, gon=not lon, key=f"bc_dash_{rid_}")
             else:  # mẫu chỉ có bảng: vài dòng đầu
                 st.dataframe(res.table.head(6), hide_index=True, width="stretch",
-                             height=H_O + 24)
+                             height=cao + 24)
 
 
 # ------------------------------------------------------------------ trang
@@ -226,8 +238,14 @@ def dashboard(ds: list, ctx, sel_khoi):
 groups = list(dict.fromkeys(r.group for r in reports.REPORTS))
 if S.get("bc_grp") not in groups:
     S["bc_grp"] = groups[0]
-r1, r2, r3 = st.columns([3, 1.5, .28], vertical_alignment="bottom", gap="small")
-all_slot = r3
+tc = bool(S.get("bc_tc")) and S.get("bc_rep", DASH) == DASH  # chế độ trình chiếu 16:9
+if tc:
+    st.html(TRINH_CHIEU_CSS)
+    st.html(f'<div class="bi-banner"><b>BÁO CÁO {escape(str(S.get("bc_grp", "")).upper())}</b>'
+            f'<span>Trường TH, THCS và THPT Tân Phú · Năm học {nam_hoc} · cập nhật '
+            f'{date.today():%d/%m/%Y}</span></div>')
+r1, r2, r3 = st.columns([3, 1.5, .62], vertical_alignment="bottom", gap="small")
+all_slot = r3.container(horizontal=True, gap="small", horizontal_alignment="right")
 grp = r1.segmented_control("Nhóm báo cáo", groups, key="bc_grp", required=True,
                            label_visibility="collapsed")
 in_grp = [r for r in reports.REPORTS if r.group == grp]
@@ -241,8 +259,9 @@ rid = r2.selectbox("Mẫu báo cáo", [DASH] + [r.id for r in in_grp], key="bc_r
 rep = reports.Report(DASH, grp, f"Tổng hợp: {grp}", "", None,
                      ("nam",) if any("nam" in r.params for r in in_grp) else ()) \
     if rid == DASH else reports.BY_ID[rid]
-main = st.container()
-with main:
+loc = st.container(key="bc_loc")  # bộ lọc (ẩn khi trình chiếu, vẫn giữ giá trị)
+noi = st.container()
+with loc:
     # ---- bộ lọc chung + tham số của mẫu
     f = st.columns([1.2, 2.2, 1.6], vertical_alignment="bottom", gap="small")
     d = pd.to_datetime(ts_year["NgayLienHe"], errors="coerce")
@@ -310,10 +329,11 @@ with main:
     ctx = reports.Ctx(ts.reset_index(drop=True), nh.reset_index(drop=True), ts_all, nam_hoc,
                       params, nh_all=nh_all)
 
-    if rid == DASH:
-        dashboard(in_grp, ctx, sel_khoi)
-    else:
-        mot_bao_cao(rep, ctx, sel_khoi)
+    with noi:
+        if rid == DASH:
+            dashboard(in_grp, ctx, sel_khoi, lon=tc)
+        else:
+            mot_bao_cao(rep, ctx, sel_khoi)
 
 
 def _all_reports() -> bytes:
@@ -333,3 +353,10 @@ all_slot.download_button("", _all_reports, icon=":material/folder_zip:",
                          mime=ui.XLSX, on_click="ignore", width="stretch",
                          help="Tải tất cả báo cáo: một file Excel, mỗi báo cáo một sheet (theo "
                               "bộ lọc hiện tại)")
+if rid == DASH:
+    all_slot.button("Thoát" if tc else "Trình chiếu", key="bc_tc_nut",
+                    icon=":material/close_fullscreen:" if tc else ":material/fit_screen:",
+                    type="primary" if not tc else "secondary",
+                    on_click=lambda: S.update(bc_tc=not S.get("bc_tc")),
+                    help="Dashboard toàn màn hình 16:9 (ẩn menu và bộ lọc). Bấm F11 để trình chiếu "
+                         "toàn màn hình trình duyệt.")
