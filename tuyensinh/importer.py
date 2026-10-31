@@ -74,8 +74,17 @@ def _blank(v) -> bool:
     return str(v).strip() in ("", "nan", "NaN", "NaT", "None")
 
 
+def _excel_engine(src) -> str | None:
+    """File .xls cũ xuất từ VEMIS: xlrd hay báo lỗi "Workbook corruption" -> dùng calamine."""
+    if str(getattr(src, "name", src)).lower().endswith(".xls"):
+        from importlib.util import find_spec
+        return "calamine" if find_spec("python_calamine") else None
+    return None
+
+
 def read_vemis(src) -> pd.DataFrame:
-    raw = pd.read_excel(src, header=None, skiprows=HEADER_ROW + 1, dtype=str)
+    raw = pd.read_excel(src, header=None, skiprows=HEADER_ROW + 1, dtype=str,
+                        engine=_excel_engine(src))
     raw = raw.iloc[:, :len(COLUMNS)]
     raw.columns = [key or "STT" for _, _, key in COLUMNS][:raw.shape[1]]
     raw = raw.dropna(subset=["HoTen"])
@@ -442,6 +451,105 @@ def nhap_tai_khoan(storage: Storage, df: pd.DataFrame, items: list[dict]) -> dic
         except Exception as e:
             errors.append({"Dòng": i + 2, "Lỗi": str(e).replace("**", "")[:300]})
     return {"ok": ok, "skipped": skipped, "errors": errors, "total": len(df)}
+
+
+# ------------------------------------------------------------------ đối chiếu học sinh hiện hữu
+KQ_MA, KQ_TEN_NS, KQ_TEN = "Có (trùng mã)", "Có (họ tên + ngày sinh)", "Có (chỉ trùng họ tên)"
+KQ_KHONG = "Không có trong file"
+
+
+def doi_chieu_hien_huu(nh: list[dict], ds: pd.DataFrame, nam_hoc: str
+                       ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """So hồ sơ nhập học năm `nam_hoc` với danh sách học sinh hiện hữu (file VEMIS đã đọc).
+
+    Khớp theo Mã VEMIS / Mã học sinh, rồi họ tên + ngày sinh, rồi họ tên (một em duy nhất).
+    Trả về (hồ sơ app kèm cột Kết quả, các dòng trong file không có hồ sơ trong app)."""
+    def d(v):
+        return "" if _blank(v) else str(v)[:10]
+
+    def ma(v):
+        return "" if _blank(v) else str(v).strip().lstrip("0")
+
+    from .noi_tru import _chuan_lop, _khoi_lop
+    con = ds.reset_index(drop=True).copy()
+    theo_ma: dict[str, int] = {}
+    theo_ten_ns: dict[tuple, list[int]] = {}
+    theo_ten: dict[str, list[int]] = {}
+    for i, r in con.iterrows():
+        for k in ("MaVEMIS", "MaHocSinh"):
+            if ma(r.get(k)):
+                theo_ma[k + ma(r.get(k))] = i
+        ten = danh_muc.fold(r.get("HoTen"))
+        theo_ten_ns.setdefault((ten, d(r.get("NgaySinh"))), []).append(i)
+        theo_ten.setdefault(ten, []).append(i)
+    dung: set[int] = set()
+    rows = []
+    for rec in [r for r in nh if str(r.get("NamHoc") or "") == nam_hoc]:
+        kq, j = KQ_KHONG, None
+        for k in ("MaVEMIS", "MaHocSinh"):
+            j = theo_ma.get(k + ma(rec.get(k))) if ma(rec.get(k)) else None
+            if j is not None:
+                kq = KQ_MA
+                break
+        ten = danh_muc.fold(rec.get("HoTen"))
+        if j is None:
+            ung = [x for x in theo_ten_ns.get((ten, d(rec.get("NgaySinh"))), []) if x not in dung]
+            if ung and d(rec.get("NgaySinh")):
+                kq, j = KQ_TEN_NS, ung[0]
+        if j is None:  # trùng tên nhiều em: xét lớp, rồi khối
+            ung = [x for x in theo_ten.get(ten, []) if x not in dung]
+            lop = _chuan_lop(rec.get("LopHoc"))
+            khoi = str(rec.get("Khoi") or "").split("-")[0] or _khoi_lop(lop)
+            for loc in (lambda x: lop and _chuan_lop(con.at[x, "LopHoc"]) == lop,
+                        lambda x: khoi and _khoi_lop(_chuan_lop(con.at[x, "LopHoc"])) == khoi):
+                if len(ung) > 1:
+                    ung = [x for x in ung if loc(x)] or ung
+            if len(ung) == 1:
+                kq, j = KQ_TEN, ung[0]
+        if j is not None:
+            dung.add(j)
+        rows.append({"id": str(rec.get("id")), "Họ tên": rec.get("HoTen") or "",
+                     "Ngày sinh": d(rec.get("NgaySinh")), "Khối": rec.get("Khoi") or "",
+                     "Lớp (app)": rec.get("LopHoc") or "",
+                     "Tình trạng": rec.get("TinhTrangHS") or "",
+                     "Lớp (file)": "" if j is None else str(con.at[j, "LopHoc"] or ""),
+                     "Kết quả": kq})
+    bang = pd.DataFrame(rows, columns=["id", "Họ tên", "Ngày sinh", "Khối", "Lớp (app)",
+                                       "Tình trạng", "Lớp (file)", "Kết quả"])
+    thua = con.loc[[i for i in con.index if i not in dung]]
+    thua = pd.DataFrame({"Họ tên": thua["HoTen"], "Ngày sinh": thua["NgaySinh"].map(d),
+                         "Lớp": thua["LopHoc"]})
+    return bang, thua
+
+
+def xoa_ho_so(storage: Storage, ids: list[str], ngung: bool, phongs: list[dict],
+              workers: int = 4, progress: Callable[[int, int], None] | None = None) -> int:
+    """Xóa hồ sơ nhập học (hoặc chỉ đánh dấu "Không học tiếp" khi `ngung`) và bỏ các em khỏi
+    phòng nội trú."""
+    ids = [str(i) for i in ids]
+    bo = set(ids)
+    viec = [("nh", i) for i in ids]
+    for p in phongs:
+        cu = [x.strip() for x in str(p.get("HocSinhIDs") or "").split(";") if x.strip()]
+        con = [x for x in cu if x not in bo]
+        if len(con) != len(cu):
+            viec.append(("phong", (p["id"], ";".join(con))))
+
+    def lam(v):
+        loai, x = v
+        if loai == "phong":
+            return storage.update_item(NOI_TRU_PHONG.name, x[0], {"HocSinhIDs": x[1]})
+        if ngung:
+            return storage.update_item(NHAP_HOC.name, x, {"TinhTrangHS": "Không học tiếp"})
+        return storage.delete_item(NHAP_HOC.name, x)
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        for _ in pool.map(lam, viec):
+            done += 1
+            if progress:
+                progress(done, len(viec))
+    return len(ids)
 
 
 def link_existing(storage: Storage, workers: int = 4,

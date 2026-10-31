@@ -180,3 +180,54 @@ def test_nhap_giay_to_va_tai_khoan(tmp_path):
     items = st.list_items(TAI_KHOAN.name)
     assert items[0]["MatKhau"] != "abc123" and tai_khoan.dang_nhap(items, "hoa", "abc123")
     assert importer.nhap_tai_khoan(st, df.iloc[:1], items)["skipped"] == 1
+
+
+def test_doi_chieu_hien_huu_va_xoa(tmp_path):
+    """So hồ sơ nhập học với file VEMIS học sinh hiện hữu; xóa / đánh dấu em không có trong file."""
+    import io
+
+    from tuyensinh import export_vemis
+    from tuyensinh.schema import NHAP_HOC, NOI_TRU_PHONG
+    st = LocalStorage(tmp_path / "v.sqlite3")
+    nam = "2026-2027"
+    mk = lambda **d: st.create_item(NHAP_HOC.name, dict(d, NamHoc=nam))  # noqa: E731
+    a = mk(HoTen="Nguyễn An", NgaySinh="2015-01-02", MaVEMIS="0226000001")
+    b = mk(HoTen="Trần Bình", NgaySinh="2014-03-04")
+    c = mk(HoTen="Lê Chi", NgaySinh="2013-05-06")          # file ghi sai ngày sinh: khớp theo tên
+    d = mk(HoTen="Võ Dũng", NgaySinh="2012-07-08")         # không có trong file
+    st.create_item(NHAP_HOC.name, {"HoTen": "Võ Dũng", "NamHoc": "2025-2026"})  # năm khác: bỏ qua
+    p = st.create_item(NOI_TRU_PHONG.name, {"NamHoc": nam, "TenPhong": "P1",
+                                            "HocSinhIDs": f"{a['id']};{d['id']}"})
+    file = pd.DataFrame([
+        {"HoTen": "Nguyen An đổi tên", "NgaySinh": "2015-01-02", "MaVEMIS": "226000001",
+         "LopHoc": "6.1"},
+        {"HoTen": "trần  bình", "NgaySinh": "2014-03-04", "LopHoc": "7.1"},
+        {"HoTen": "Lê Chi", "NgaySinh": "2013-06-05", "LopHoc": "8.1"},
+        {"HoTen": "Phạm Em", "NgaySinh": "2011-01-01", "LopHoc": "9.1"}])
+    buf = io.BytesIO(export_vemis.to_bytes(file))
+    ds = importer.read_vemis(buf)
+    assert len(ds) == 4
+    bang, thua = importer.doi_chieu_hien_huu(st.list_items(NHAP_HOC.name), ds, nam)
+    kq = dict(zip(bang["Họ tên"], bang["Kết quả"]))
+    assert kq == {"Nguyễn An": importer.KQ_MA, "Trần Bình": importer.KQ_TEN_NS,
+                  "Lê Chi": importer.KQ_TEN, "Võ Dũng": importer.KQ_KHONG}
+    assert thua["Họ tên"].tolist() == ["Phạm Em"]
+    phongs = st.list_items(NOI_TRU_PHONG.name)
+    importer.xoa_ho_so(st, [str(d["id"])], True, phongs)
+    assert st.get_item(NHAP_HOC.name, d["id"])["TinhTrangHS"] == "Không học tiếp"
+    importer.xoa_ho_so(st, [str(d["id"])], False, phongs)
+    assert len(st.list_items(NHAP_HOC.name)) == 4
+    assert st.get_item(NOI_TRU_PHONG.name, p["id"])["HocSinhIDs"] == str(a["id"])
+
+
+def test_doi_chieu_trung_ten_xet_lop():
+    ds = pd.DataFrame([{"HoTen": "Nguyễn Huy", "NgaySinh": None, "LopHoc": "7.3", "MaVEMIS": None,
+                        "MaHocSinh": None},
+                       {"HoTen": "Nguyễn Huy", "NgaySinh": None, "LopHoc": "8.1", "MaVEMIS": None,
+                        "MaHocSinh": None}])
+    nh = [{"id": 1, "HoTen": "Nguyễn Huy", "Khoi": "8", "LopHoc": "8.1E", "NamHoc": "N"},
+          {"id": 2, "HoTen": "Nguyễn Huy", "Khoi": "7", "LopHoc": "", "NamHoc": "N"},
+          {"id": 3, "HoTen": "Nguyễn Huy", "Khoi": "9", "LopHoc": "", "NamHoc": "N"}]
+    bang, thua = importer.doi_chieu_hien_huu(nh, ds, "N")
+    assert bang["Kết quả"].tolist() == [importer.KQ_TEN, importer.KQ_TEN, importer.KQ_KHONG]
+    assert bang["Lớp (file)"].tolist() == ["8.1", "7.3", ""] and thua.empty

@@ -12,10 +12,10 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import bien_nhan, config, export_vemis, services, ui
+from tuyensinh import bien_nhan, config, export_vemis, importer, services, ui
 from tuyensinh.schema import (G_CHUNG, G_DIACHI, G_GIADINH, G_GIAYTO, G_HOCPHI, G_HOCTAP,
                               G_KHANCAP, G_LIENLAC, G_MON, G_NGANHANG, GIAY_TO_NHAP_HOC, MON_HOC,
-                              NHAP_HOC, TINH_TRANG_HS, TUYEN_SINH)
+                              NHAP_HOC, NOI_TRU_PHONG, TINH_TRANG_HS, TUYEN_SINH)
 
 S = st.session_state
 S.setdefault("nh_v", 0)
@@ -597,6 +597,85 @@ def len_lop_dialog():
             st.rerun()
 
 
+@ui.dialog("Đối chiếu với danh sách học sinh hiện hữu", width="large")
+def doi_chieu_dialog():
+    st.caption(f"Tải file **Danh sách học sinh** xuất từ VEMIS (học sinh đang học toàn trường). "
+               f"App so với hồ sơ nhập học năm **{nam_hoc}** theo mã VEMIS / mã học sinh, rồi họ "
+               "tên + ngày sinh; em có hồ sơ mà **không có trong file** được liệt kê để xóa.")
+    up = st.file_uploader("File VEMIS (.xls, .xlsx)", type=["xls", "xlsx"], key="dc_up")
+    if up is None:
+        return
+    try:
+        ds = importer.read_vemis(up)
+    except Exception as e:
+        ui.error_state(e, compact=True)
+        return
+    if ds.empty:
+        st.error("Không đọc được học sinh nào — file cần đúng biểu mẫu Danh sách học sinh VEMIS "
+                 "(tiêu đề ở dòng 7–8, dữ liệu từ dòng 9).", icon=":material/error:")
+        return
+    bang, thua = importer.doi_chieu_hien_huu(ui.records(NHAP_HOC), ds, nam_hoc)
+    khong = bang[bang["Kết quả"] == importer.KQ_KHONG]
+    chi_ten = bang[bang["Kết quả"] == importer.KQ_TEN]
+    k = st.columns(4)
+    ui.kpi(k[0], "Học sinh trong file", len(ds))
+    ui.kpi(k[1], f"Hồ sơ {nam_hoc} trong app", len(bang))
+    ui.kpi(k[2], "Có trong file", len(bang) - len(khong),
+           f"{len(chi_ten)} em chỉ trùng họ tên" if len(chi_ten) else None)
+    ui.kpi(k[3], "Không có trong file", len(khong))
+    if len(chi_ten):
+        with st.expander(f"{len(chi_ten)} em chỉ trùng họ tên (khác / thiếu ngày sinh) — vẫn giữ, "
+                         "nên kiểm tra"):
+            st.dataframe(chi_ten.drop(columns=["id", "Kết quả"]), hide_index=True,
+                         width="stretch", height=min(38 + 35 * len(chi_ten), 300))
+    if len(thua):
+        with st.expander(f"{len(thua)} em trong file chưa có hồ sơ {nam_hoc} trong app"):
+            st.dataframe(thua, hide_index=True, width="stretch",
+                         height=min(38 + 35 * len(thua), 300))
+            ui.download_excel("Tải danh sách", thua, f"ChuaCoHoSo_{nam_hoc}.xlsx", key="dc_thua")
+    if khong.empty:
+        st.success("Mọi hồ sơ nhập học đều có trong danh sách hiện hữu.",
+                   icon=":material/check_circle:")
+        return
+    st.markdown(f"**{len(khong)} hồ sơ không có trong file** — bỏ chọn em nào cần giữ "
+                "(vd học sinh mới nhập học chưa có trên VEMIS):")
+    sua = st.data_editor(khong.drop(columns=["Lớp (file)", "Kết quả"]).assign(Chọn=True)[
+                             ["Chọn", "id", "Họ tên", "Ngày sinh", "Khối", "Lớp (app)",
+                              "Tình trạng"]],
+                         hide_index=True, width="stretch",
+                         height=min(38 + 35 * len(khong), 380),
+                         disabled=["Họ tên", "Ngày sinh", "Khối", "Lớp (app)", "Tình trạng"],
+                         column_config={"id": None,
+                                        "Chọn": st.column_config.CheckboxColumn(width="small")},
+                         key=f"dc_ed_{up.file_id}_{ui.data_version()}")
+    chon = sua[sua["Chọn"]]
+    cach = st.radio("Cách xử lý", ["Xóa hẳn hồ sơ", "Giữ hồ sơ, đánh dấu \"Không học tiếp\""],
+                    horizontal=True, key="dc_cach",
+                    help="Đánh dấu Không học tiếp: hồ sơ ẩn khỏi danh sách đang học và báo cáo, "
+                         "vẫn xem lại được. Xóa hẳn: không khôi phục được.")
+    ngung = not cach.startswith("Xóa")
+    ui.download_excel(f"Tải danh sách {len(chon)} em (lưu lại trước khi xử lý)",
+                      chon.drop(columns=["Chọn", "id"]), f"KhongCoTrongVEMIS_{nam_hoc}.xlsx",
+                      key="dc_tai")
+    if not ngung:
+        st.warning("Xóa hẳn **không hoàn tác được**. Các em cũng được bỏ khỏi phòng nội trú. "
+                   "Nên tải danh sách ở trên (hoặc bản sao lưu ở Cài đặt) trước.",
+                   icon=":material/warning:")
+    ok = st.checkbox(f"Tôi đã kiểm tra danh sách {len(chon)} em ở trên", key="dc_ok")
+    if st.button(("Đánh dấu Không học tiếp" if ngung else "Xóa") + f" {len(chon)} hồ sơ",
+                 type="primary", icon=":material/person_remove:", width="stretch",
+                 disabled=chon.empty or not ok, key="dc_go"):
+        bar = st.progress(0.0, text="Đang ghi lên SharePoint…")
+        n = ui.mutate(importer.xoa_ho_so, storage, chon["id"].tolist(), ngung,
+                      ui.records(NOI_TRU_PHONG, optional=True),
+                      progress=lambda d, t: bar.progress(d / max(t, 1), text=f"Đã xử lý {d}/{t}"),
+                      success=f"Đã {'đánh dấu Không học tiếp' if ngung else 'xóa'} "
+                              f"{len(chon)} hồ sơ")
+        if n is not None:
+            S.pop("dc_ok", None)
+            st.rerun()
+
+
 def render_page():
     actions = ui.page_header("Hồ sơ nhập học", f"Năm học {nam_hoc}")
     view_all = nh
@@ -608,6 +687,9 @@ def render_page():
         if cong_cu.button("Lên lớp từ năm trước", icon=":material/upgrade:", width="stretch",
                           help="Chuyển học sinh đang học của năm trước sang năm học này"):
             len_lop_dialog()
+        if cong_cu.button("Đối chiếu danh sách hiện hữu", icon=":material/rule:", width="stretch",
+                          help="So với file VEMIS học sinh đang học, xóa hồ sơ không còn học"):
+            doi_chieu_dialog()
     actions.button("Thêm hồ sơ", icon=":material/add:", on_click=open_record, args=("new",),
                    type="primary", help="Thêm học sinh nhập học không qua Data tuyển sinh")
 
