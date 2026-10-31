@@ -525,13 +525,42 @@ def doi_chieu_hien_huu(nh: list[dict], ds: pd.DataFrame, nam_hoc: str
                                        "Tình trạng", "Lớp (file)", "Kết quả", "_dong"])
     thua = con.loc[[i for i in con.index if i not in dung]]
     thua = pd.DataFrame({"Họ tên": thua["HoTen"], "Ngày sinh": thua["NgaySinh"].map(d),
-                         "Lớp": thua["LopHoc"]})
+                         "Lớp": thua["LopHoc"], "_dong": list(thua.index)})
     return bang, thua
+
+
+NGHI = ("Không học tiếp", "Rút hồ sơ")
+
+
+def tao_tu_file(storage: Storage, ds: pd.DataFrame, dong: list[int], nam_hoc: str,
+                workers: int = 4, progress: Callable[[int, int], None] | None = None) -> int:
+    """Tạo hồ sơ nhập học cho các em có trong file VEMIS mà app chưa có (mọi cột theo file)."""
+    from .noi_tru import _chuan_lop, _khoi_lop
+    con = ds.reset_index(drop=True)
+    viec = []
+    for j in dong:
+        f = con.loc[j]
+        data = {k: _gia_tri(NHAP_HOC.get(k), f.get(k)) for k in COT_CAP_NHAT
+                if k in f.index and k != "Khoi"}
+        data = {k: v for k, v in data.items() if v not in ("", False)}
+        khoi = _khoi_lop(_chuan_lop(f.get("LopHoc")))
+        if khoi in KHOI_HOP_LE:
+            data["Khoi"] = khoi
+        data.update(NamHoc=nam_hoc, TinhTrangHS="Học tiếp")
+        viec.append(services._clean(NHAP_HOC, data))
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        for _ in pool.map(lambda x: storage.create_item(NHAP_HOC.name, x), viec):
+            done += 1
+            if progress:
+                progress(done, len(viec))
+    return len(viec)
 
 
 # Cột của biểu mẫu VEMIS được cập nhật theo file (Ghi chú là ghi chú nội bộ của app: giữ nguyên)
 COT_CAP_NHAT = {k: (f"{g} - {l}" if g else l) for g, l, k in COLUMNS if k and k != "GhiChu"}
 COT_CAP_NHAT["Khoi"] = "Khối"  # không có trong file: suy ra từ lớp (10A1 -> 10)
+COT_CAP_NHAT["TinhTrangHS"] = "Tình trạng"  # có trong file = đang học
 
 
 KHOI_HOP_LE = {str(i) for i in range(1, 13)}
@@ -570,6 +599,8 @@ def thay_doi_tu_file(bang: pd.DataFrame, ds: pd.DataFrame, nh: list[dict],
         khoi = _khoi_lop(_chuan_lop(f.get("LopHoc")))
         if khoi in KHOI_HOP_LE and khoi != str(rec.get("Khoi") or "").strip():
             upd["Khoi"] = (str(rec.get("Khoi") or ""), khoi)
+        if str(rec.get("TinhTrangHS") or "") in NGHI:  # có trong danh sách đang học
+            upd["TinhTrangHS"] = (str(rec.get("TinhTrangHS")), "Học tiếp")
         if upd:
             out.append({"id": b["id"], "Họ tên": b["Họ tên"], "Kết quả": b["Kết quả"],
                         "thay": upd})

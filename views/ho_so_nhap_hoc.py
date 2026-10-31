@@ -692,10 +692,21 @@ def doi_chieu_dialog():
             st.dataframe(chi_ten.drop(columns=["id", "Kết quả", "_dong"]), hide_index=True,
                          width="stretch", height=min(38 + 35 * len(chi_ten), 300))
     if len(thua):
-        with st.expander(f"{len(thua)} em trong file chưa có hồ sơ {nam_hoc} trong app"):
-            st.dataframe(thua, hide_index=True, width="stretch",
+        with st.expander(f"{len(thua)} em trong file chưa có hồ sơ {nam_hoc} trong app",
+                         expanded=True):
+            st.caption("Thường là học sinh mới / chuyển đến chưa nhập vào app, hoặc hồ sơ đã bị "
+                       "xóa. Tạo hồ sơ thì mọi thông tin lấy theo file, tình trạng *Học tiếp*.")
+            st.dataframe(thua.drop(columns=["_dong"]), hide_index=True, width="stretch",
                          height=min(38 + 35 * len(thua), 300))
-            ui.download_excel("Tải danh sách", thua, f"ChuaCoHoSo_{nam_hoc}.xlsx", key="dc_thua")
+            c1, c2 = st.columns(2)
+            ui.download_excel("Tải danh sách", thua.drop(columns=["_dong"]),
+                              f"ChuaCoHoSo_{nam_hoc}.xlsx", container=c1, key="dc_thua")
+            if c2.button(f"Tạo hồ sơ cho {len(thua)} em", type="primary",
+                         icon=":material/person_add:", width="stretch", key="dc_tao"):
+                n = ui.mutate(importer.tao_tu_file, storage, ds, thua["_dong"].tolist(), nam_hoc,
+                              success=f"Đã tạo {len(thua)} hồ sơ")
+                if n is not None:
+                    st.rerun(scope="fragment")
     render_cap_nhat(bang, ds, up.file_id)
     st.markdown("##### 2. Hồ sơ không còn trong danh sách")
     if khong.empty:

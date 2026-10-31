@@ -317,3 +317,24 @@ def test_cap_nhat_khoi_theo_lop_va_khong_khop_nham_khac_khoi():
     assert bang["Kết quả"].tolist() == [importer.KQ_TEN_NS, importer.KQ_KHONG]
     thay = importer.thay_doi_tu_file(bang, ds, nh)
     assert thay[0]["thay"]["Khoi"] == ("6", "10") and thay[0]["thay"]["LopHoc"] == ("6.1", "10A1")
+
+
+def test_tao_ho_so_tu_file_va_hoc_tiep_lai(tmp_path):
+    from tuyensinh.schema import NHAP_HOC
+    st = LocalStorage(tmp_path / "f.sqlite3")
+    st.create_item(NHAP_HOC.name, {"HoTen": "An", "NgaySinh": "2015-01-02", "NamHoc": "N",
+                                   "Khoi": "6", "LopHoc": "6.1", "TinhTrangHS": "Không học tiếp"})
+    ds = pd.DataFrame([{"HoTen": "An", "NgaySinh": "2015-01-02", "LopHoc": "6.1"},
+                       {"HoTen": "Bình Mới", "NgaySinh": "2012-02-03", "LopHoc": "9.2",
+                        "GioiTinh": "Nữ", "MaVEMIS": "0226009999", "DoanVien": True}])
+    nh = st.list_items(NHAP_HOC.name)
+    bang, thua = importer.doi_chieu_hien_huu(nh, ds, "N")
+    # em có trong danh sách đang học mà app ghi Không học tiếp -> Học tiếp
+    thay = importer.thay_doi_tu_file(bang, ds, nh)
+    assert thay[0]["thay"] == {"TinhTrangHS": ("Không học tiếp", "Học tiếp")}
+    assert importer.tao_tu_file(st, ds, thua["_dong"].tolist(), "N") == 1
+    moi = [r for r in st.list_items(NHAP_HOC.name) if r["HoTen"] == "Bình Mới"][0]
+    assert (moi["Khoi"], moi["LopHoc"], moi["MaVEMIS"], moi["TinhTrangHS"], moi["NamHoc"]) == \
+        ("9", "9.2", "0226009999", "Học tiếp", "N") and moi["DoanVien"] is True
+    nh = st.list_items(NHAP_HOC.name)
+    assert importer.doi_chieu_hien_huu(nh, ds, "N")[1].empty
