@@ -49,6 +49,20 @@ def nhap_phan_phong(up, storage, nam_hoc: str, phongs_all: list[dict], nh: list[
                          height=min(38 + 35 * len(loi), 400))
             ui.download_excel("Tải danh sách chưa ghép", loi.drop(columns=["HocSinhID"]),
                               f"NoiTru_ChuaGhep_{nam_hoc}.xlsx", key=f"{key}_loi")
+    ngoai = [r for r in nh if str(r.get("NamHoc") or "") == nam_hoc
+             and str(r.get("NoiTruBanTru") or "").startswith("Nội trú")
+             and str(r.get("TinhTrangHS") or "") not in ("Rút hồ sơ", "Không học tiếp")
+             and str(r.get("id")) not in set(khop["HocSinhID"])]
+    if ngoai:
+        with st.expander(f"{len(ngoai)} em app ghi Nội trú nhưng không có trong file"):
+            st.caption("Áp dụng không đổi các em này: vẫn là Nội trú, giữ phòng đang ở (nếu có). "
+                       "Em không còn ở nội trú thì sửa N.trú, B.trú trong hồ sơ.")
+            bang = pd.DataFrame([{"Họ tên": r.get("HoTen"), "Lớp": r.get("LopHoc"),
+                                  "Giới tính": r.get("GioiTinh")} for r in ngoai])
+            st.dataframe(bang, hide_index=True, width="stretch",
+                         height=min(38 + 35 * len(bang), 300))
+            ui.download_excel("Tải danh sách", bang, f"NoiTru_KhongCoTrongFile_{nam_hoc}.xlsx",
+                              key=f"{key}_ngoai")
     if any(x["NhieuGV"] for x in kh):
         st.warning("Có phòng mà file ghi nhiều giáo viên — app lấy giáo viên xuất hiện nhiều "
                    "nhất; sửa lại ở khung Thêm / sửa phòng nếu cần.", icon=":material/warning:")

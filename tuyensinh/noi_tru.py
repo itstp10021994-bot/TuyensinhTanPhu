@@ -493,7 +493,9 @@ def ghep_hs(ds: pd.DataFrame, nh: list[dict], nam_hoc: str) -> pd.DataFrame:
                 lambda c: _chuan_lop(c.get("LopHoc")) == lop and lop,
                 lambda c: (_s(c.get("Khoi")) == khoi or _khoi_lop(_chuan_lop(c.get("LopHoc")))
                            == khoi) and khoi,
-                lambda c: fold(c.get("GioiTinh")) == fold(d["Giới tính"]) and d["Giới tính"]):
+                lambda c: fold(c.get("GioiTinh")) == fold(d["Giới tính"]) and d["Giới tính"],
+                # vẫn trùng (vd 2 em cùng tên, cùng lớp): chọn em đang là Nội trú
+                lambda c: _s(c.get("NoiTruBanTru")).startswith("Nội trú")):
             if len(cands) > 1:
                 hep = [c for c in cands if loc(c)]
                 cands = hep or cands

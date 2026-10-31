@@ -212,3 +212,15 @@ def test_bo_khoi_phong(st_):
     NT.luu_phong(st_, st_.list_items(NOI_TRU_PHONG.name), NAM, "P2", "", GV1, ["3"])
     assert NT.bo_khoi_phong(st_, st_.list_items(NOI_TRU_PHONG.name), ["2", "9"]) == 1
     assert [NT.hs_ids(p) for p in st_.list_items(NOI_TRU_PHONG.name)] == [["1"], ["3"]]
+
+
+def test_ghep_trung_ten_cung_lop_chon_em_noi_tru():
+    import pandas as pd
+    ds = pd.DataFrame([{"Họ tên": "Lê Văn A", "Lớp": "12C2", "Giới tính": "Nam", "Phòng": "404",
+                        "Giáo viên": ""}])
+    nh = [{"id": 1, "HoTen": "Lê Văn A", "LopHoc": "12C2", "GioiTinh": "Nam",
+           "NoiTruBanTru": "Bán trú", "NamHoc": NAM},
+          {"id": 2, "HoTen": "Lê Văn A", "LopHoc": "12C2", "GioiTinh": "Nam",
+           "NoiTruBanTru": "Nội trú", "NamHoc": NAM}]
+    g = NT.ghep_hs(ds, nh, NAM)
+    assert g.iloc[0]["Kết quả"] == NT.TT_KHOP and g.iloc[0]["HocSinhID"] == "2"
