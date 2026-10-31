@@ -65,7 +65,7 @@ def cau_hinh(c, height: int, gon: bool = False):
             .configure_legend(orient="top", direction="horizontal", title=None,
                               labelColor=m["phu"], labelFontSize=fs, symbolType="circle",
                               symbolSize=50 if gon else 80, columnPadding=8 if gon else 14,
-                              labelLimit=80 if gon else 200, columns=2 if gon else 0,
+                              labelLimit=80 if gon else 200, columns=4 if gon else 0,
                               rowPadding=2, padding=0, offset=6)
             .configure_title(color=m["chu"], fontSize=13, anchor="start"))
 
@@ -86,6 +86,16 @@ def _mau_nhom(doms: list, ten_mau: dict | None) -> list[str]:
     if ten_mau and all(d in ten_mau for d in doms):
         return [ten_mau[d] for d in doms]
     return cat()[:len(doms)] if len(doms) <= 8 else None
+
+
+def _thu_tu(cot: pd.Series) -> list:
+    """Thứ tự trục danh mục: giữ thứ tự của bảng, trừ khi toàn số (khối 6, 8, 10, 11 — không
+    xếp kiểu chữ 10, 11, 6, 8)."""
+    ds = list(dict.fromkeys(cot))
+    so = pd.to_numeric(pd.Series(ds, dtype="object").astype(str), errors="coerce")
+    if so.notna().all():
+        return [d for _, d in sorted(zip(so, ds))]
+    return ds
 
 
 def ve(spec: dict, height: int | None = None, gon: bool = False, key: str | None = None):
@@ -181,7 +191,7 @@ def bieu_do(spec: dict, height: int | None = None, gon: bool = False):
                 alt.Axis(labelAngle=0 if n <= 12 else -40, labelLimit=140, domain=True,
                          ticks=False))
     sort = (alt.EncodingSortField(y, "sum", "descending") if horiz and not spec.get("giu_thu_tu")
-            else list(dict.fromkeys(data[x])))
+            else _thu_tu(data[x]))
     cenc_cat = (alt.Y(f"{x}:N", title=None, sort=sort, axis=cat_axis) if horiz
                 else alt.X(f"{x}:N", title=None, sort=sort, axis=cat_axis))
     vax = (alt.Axis(labelExpr="format(datum.value / 1e6, ',.0f') + ' tr'", tickCount=5,

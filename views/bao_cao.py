@@ -3,6 +3,7 @@
 Tính toán nằm ở tuyensinh/reports.py; trang này chỉ chọn mẫu, lọc, vẽ và xuất file.
 """
 from datetime import date
+from html import escape
 
 import pandas as pd
 import streamlit as st
@@ -98,13 +99,49 @@ MAC_DINH = {"cap": dia_ban.CAP[1], "tinh": "Tất cả", "loai": "Tất cả", "
             "top": 10, "ngay": 14}
 
 
+# Dashboard của từng nhóm: ô chỉ số (mẫu báo cáo, thứ tự chỉ số) và các biểu đồ chọn lọc
+DASH_CFG = {
+    reports.G_TS: {
+        "kpi": [("ts_khoi", 0), ("ts_khoi", 1), ("ts_khoi", 2), ("ts_rut", 0), ("ts_chedo", 1),
+                ("ts_quahan", 0)],
+        "panels": ["ts_khoi", "ts_thoigian", "ts_nguon", "ts_chedo", "ts_truongcu", "ts_tuvan"]},
+    reports.G_KT: {
+        "kpi": [("kt_giucho", 0), ("kt_giucho", 1), ("kt_hocphi", 0), ("kt_hocphi", 1),
+                ("kt_hocphi", 2), ("kt_hoanphi", 1)],
+        "panels": ["kt_giucho", "kt_hocphi", "kt_congno", "kt_hoanphi"]},
+    reports.G_NH: {
+        "kpi": [("nh_siso", 0), ("nh_siso", 1), ("nh_siso", 2), ("nh_tinhtrang", 2),
+                ("nh_hoanthien", 0), ("nh_giayto", 0)],
+        "panels": ["nh_siso", "nh_tinhtrang", "nh_hoanthien", "nh_giayto", "nh_diaban",
+                   "nh_tohop"]},
+    reports.G_XH: {
+        "kpi": [("xh_tongquan", 1), ("xh_tongquan", 2), ("xh_tongquan", 3), ("xh_cungky", -1)],
+        "panels": ["xh_tongquan", "xh_thang", "xh_khoi", "xh_nguon", "xh_cungky",
+                   "xh_truongcu"]},
+    reports.G_XNH: {
+        "kpi": [("xnh_tongquan", 0), ("xnh_tongquan", 1), ("xnh_tongquan", 2),
+                ("xnh_tongquan", 3), ("xnh_doichieu", 2)],
+        "panels": ["xnh_tongquan", "xnh_khoi", "xnh_chedo", "xnh_doichieu", "xnh_diaban",
+                   "xnh_truongcu"]},
+}
+H_O = 188  # chiều cao biểu đồ trong ô: dải chỉ số + 2 hàng ô vừa một màn hình
+
+
 def _gon(spec: dict) -> dict:
-    """Biểu đồ trong thẻ tổng hợp: thanh ngang nhiều mục chỉ giữ 6 mục lớn nhất."""
+    """Biểu đồ trong ô dashboard: thanh ngang giữ 6 mục lớn nhất; cột theo lớp gộp về khối."""
     data, x, y = spec["data"], spec["x"], spec["y"]
     ngang = spec["kind"] == "hbar" or spec.get("horizontal")
     if ngang and data[x].nunique() > 6:
         top = data.groupby(x)[y].sum().nlargest(6).index
         data = data[data[x].isin(top)]
+    elif not ngang and spec["kind"] == "bar" and data[x].nunique() > 16:
+        khoi = data[x].astype(str).str.extract(r"^(\d+)")[0]
+        if khoi.notna().mean() > .8:  # cột theo lớp (6.1, 10A1…) -> theo khối
+            data = (data.assign(_k=khoi.fillna("?")).groupby("_k", sort=False)[y].sum()
+                    .reset_index())
+            data["_n"] = pd.to_numeric(data["_k"], errors="coerce")
+            data = data.sort_values("_n").assign(**{x: lambda d: "Khối " + d["_k"]})
+            data = data[[x, y]]
     return {**spec, "data": data}
 
 
@@ -112,41 +149,74 @@ def _mo(rid_: str):
     S["bc_rep"] = rid_
 
 
+def _o_chi_so(ds: list[tuple[str, object]]):
+    """Dải ô số liệu lớn kiểu bảng điều khiển; ô tỷ lệ (%) có thanh đo bên dưới."""
+    o = []
+    for lbl, v in ds:
+        gt = fmt_kpi(lbl, v)
+        if isinstance(v, (int, float)) and any(w in lbl.lower() for w in MONEY_WORDS) \
+                and abs(v) >= 1e6:  # tiền: gọn "62,0 tr" cho vừa ô
+            gt = f"{v / 1e6:,.1f} tr".replace(",", "#").replace(".", ",").replace("#", ".")
+        do = ""
+        try:
+            pct = float(str(v).rstrip("%").replace(",", ".")) if "tỷ lệ" in lbl.lower() \
+                else None
+        except ValueError:
+            pct = None
+        if pct is not None and 0 <= pct <= 100:
+            do = f'<i class="do"><i style="width:{pct:.0f}%"></i></i>'
+        o.append(f'<div class="bi-o"><em>{escape(lbl)}</em><b>{escape(gt)}</b>{do}</div>')
+    st.html(f'<div class="bi-dai" style="--n:{len(o)}">{"".join(o)}</div>')
+
+
 def dashboard(ds: list, ctx, sel_khoi):
-    """Mọi mẫu báo cáo của nhóm trên một màn hình: lưới 2 hàng (số cột theo số mẫu), mỗi thẻ
-    gồm 2 chỉ số chính và biểu đồ; bấm ⤢ để mở chi tiết."""
-    so_cot = max(2, -(-len(ds) // 2))
-    for i, r in enumerate(ds):
+    """Dashboard của nhóm: dải chỉ số + 4–6 biểu đồ chọn lọc (lưới 3×2), vừa một màn hình."""
+    cfg = DASH_CFG.get(ds[0].group) if ds else None
+    if not cfg:
+        return
+    p = {**MAC_DINH, **ctx.params, "moc": date.today()}
+    kq = {}
+
+    def chay(rid_):
+        if rid_ not in kq:
+            pp = dict(p)
+            if rid_ == "xh_cungky" and len(pp.get("nam") or []) > 2:
+                pp["nam"] = pp["nam"][-2:]
+            c = reports.Ctx(ctx.ts, ctx.nh, ctx.ts_all, ctx.nam_hoc, pp, nh_all=ctx.nh_all)
+            try:
+                kq[rid_] = reports.BY_ID[rid_].fn(c)
+            except Exception as e:  # một ô lỗi không làm hỏng cả dashboard
+                kq[rid_] = e
+        return kq[rid_]
+
+    chi_so = []
+    for rid_, i in cfg["kpi"]:
+        res = chay(rid_)
+        if not isinstance(res, Exception) and res.kpis and -len(res.kpis) <= i < len(res.kpis):
+            chi_so.append(res.kpis[i])
+    if chi_so:
+        _o_chi_so(chi_so)
+    panels = cfg["panels"]
+    so_cot = 2 if len(panels) <= 4 else 3
+    for i, rid_ in enumerate(panels):
         if i % so_cot == 0:
             cot = st.columns(so_cot, gap="small")
-        p = {**MAC_DINH, **ctx.params, "moc": date.today()}
-        if r.id == "xh_cungky" and len(p.get("nam") or []) > 2:
-            p["nam"] = p["nam"][-2:]
-        c = reports.Ctx(ctx.ts, ctx.nh, ctx.ts_all, ctx.nam_hoc, p, nh_all=ctx.nh_all)
-        with cot[i % so_cot], st.container(key=f"tp_card_bc_{r.id}"):
+        r = reports.BY_ID[rid_]
+        with cot[i % so_cot], st.container(key=f"tp_card_bc_{rid_}"):
             h = st.container(horizontal=True, vertical_alignment="center", wrap=False, gap=None)
             h.markdown(f"#### {r.title}", width="stretch")
-            h.button("", key=f"bc_mo_{r.id}", on_click=_mo, args=(r.id,), help="Mở chi tiết",
+            h.button("", key=f"bc_mo_{rid_}", on_click=_mo, args=(rid_,), help="Mở chi tiết",
                      icon=":material/open_in_full:", type="tertiary")
-            try:
-                res = r.fn(c)
-            except Exception as e:
-                ui.error_state(e, compact=True)
-                continue
-            if res.kpis:
-                st.html('<div class="bc-kpi">' + "".join(
-                    f'<span><em>{lbl}</em><b>{fmt_kpi(lbl, v)}</b></span>'
-                    for lbl, v in res.kpis[:2]) + "</div>")
-            if res.table.empty:
-                st.html('<div class="bc-trong" style="height:%dpx">Không có dữ liệu</div>' % H_THE)
+            res = chay(rid_)
+            if isinstance(res, Exception):
+                ui.error_state(res, compact=True)
+            elif res.table.empty:
+                st.html(f'<div class="bc-trong" style="height:{H_O}px">Không có dữ liệu</div>')
             elif res.chart and len(res.chart.get("data", [])):
-                BD.ve(_gon(res.chart), height=H_THE, gon=True, key=f"bc_dash_{r.id}")
-            else:
-                st.html('<div class="bc-trong" style="height:%dpx">%d dòng · bấm ⤢ để xem bảng'
-                        '</div>' % (H_THE, len(res.table)))
-
-
-H_THE = 168  # chiều cao biểu đồ trong thẻ: 2 hàng thẻ vừa một màn hình
+                BD.ve(_gon(res.chart), height=H_O, gon=True, key=f"bc_dash_{rid_}")
+            else:  # mẫu chỉ có bảng: vài dòng đầu
+                st.dataframe(res.table.head(6), hide_index=True, width="stretch",
+                             height=H_O + 24)
 
 
 # ------------------------------------------------------------------ trang
@@ -164,7 +234,7 @@ in_grp = [r for r in reports.REPORTS if r.group == grp]
 if S.get("bc_rep") not in [DASH] + [r.id for r in in_grp]:
     S["bc_rep"] = DASH  # vào nhóm: mở trang tổng hợp trước
 rid = r2.selectbox("Mẫu báo cáo", [DASH] + [r.id for r in in_grp], key="bc_rep",
-                   format_func=lambda i: f"▦  Tổng hợp {len(in_grp)} báo cáo" if i == DASH
+                   format_func=lambda i: "▦  Dashboard" if i == DASH
                    else reports.BY_ID[i].title, label_visibility="collapsed")
 
 # trang tổng hợp: một "mẫu" giả, bộ lọc chung của nhóm (khối, ngày, năm học so sánh)

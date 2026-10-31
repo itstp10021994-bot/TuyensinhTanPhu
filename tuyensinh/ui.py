@@ -230,6 +230,23 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
 .bc-kpi span {display: flex; flex-direction: column;}
 .bc-kpi em {font-style: normal; font-size: .72rem; color: #898781;}
 .bc-kpi b {font-size: 1rem; font-weight: 600; line-height: 1.2;}
+/* dashboard báo cáo: dải ô số liệu lớn */
+.bi-dai {display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: .6rem;}
+.bi-o {background: #FFFFFF; border-radius: 12px; padding: .6rem .9rem .65rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 0 0 .5px rgba(0,0,0,.05); position: relative;
+  overflow: hidden; min-width: 0;}
+.bi-o::before {content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: #2a78d6;}
+.bi-o:nth-child(2)::before {background: #1baf7a;} .bi-o:nth-child(3)::before {background: #eda100;}
+.bi-o:nth-child(4)::before {background: #eb6834;} .bi-o:nth-child(5)::before {background: #6250d6;}
+.bi-o:nth-child(6)::before {background: #e87ba4;}
+.bi-o em {display: block; font-style: normal; font-size: .74rem; color: #898781;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.bi-o b {display: block; font-size: 1.55rem; font-weight: 650; line-height: 1.2; color: #1D1D1F;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.bi-o .do {display: block; height: 5px; border-radius: 3px; background: #cde2fb; margin-top: .3rem;}
+.bi-o .do i {display: block; height: 100%; border-radius: 3px; background: #2a78d6;}
+@media (max-width: 900px) {.bi-dai {grid-template-columns: repeat(2, minmax(0, 1fr));}}
 /* Tổng quan: gọn trong một màn hình */
 .st-key-tq [class*="st-key-tp_card_"] {padding: .7rem .9rem .5rem;}
 .st-key-tq [class*="st-key-tp_card_"] h4 {font-size: .92rem; margin: 0 0 .1rem;}
@@ -317,6 +334,8 @@ header[data-testid="stHeader"] {background: rgba(28,28,30,.72) !important;
 .tp-seg-ds {color: #c3c2b7;} .tp-seg-i b {color: #f0efec;}
 .tq-todo {border-bottom-color: rgba(255,255,255,.08);}
 .tq-todo .n {background: rgba(217,89,38,.22); color: #ffb08f;}
+.bi-o {background: #2C2C2E; box-shadow: 0 0 0 .5px rgba(255,255,255,.08);}
+.bi-o b {color: #f0efec;} .bi-o .do {background: #184f95;} .bi-o .do i {background: #3987e5;}
 [class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #2C2C2E;
   border-color: rgba(255,255,255,.07) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3);}
 .stApp [data-testid="stBaseButton-secondary"] {background: #3A3A3C;}
