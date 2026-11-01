@@ -37,11 +37,20 @@ except Exception:  # altair cũ: bỏ qua
     pass
 
 # ---------------------------------------------------------------- tokens
-# Màu trạng thái: tên màu theme của Streamlit (tự đổi theo sáng/tối) + mã hex cho biểu đồ.
+# Cùng giá trị với static/styles/tokens.css (CSS) — dùng cho biểu đồ, HTML sinh từ Python.
+TOKENS = {
+    "primary": "#007AFF", "primary_hover": "#0066D6", "primary_light": "#EAF3FF",
+    "bg": "#F5F5F7", "surface": "#FFFFFF", "surface_2": "#FAFAFC",
+    "text": "#1D1D1F", "text_2": "#6E6E73", "text_3": "#86868B",
+    "border": "#E5E5EA", "divider": "#F0F0F2",
+    "success": "#34C759", "warning": "#FF9F0A", "danger": "#FF3B30", "info": "#007AFF",
+}
+# Màu trạng thái: tên màu theme của Streamlit (tự đổi theo sáng/tối) + mã hex ngữ nghĩa.
+# Luôn đi kèm biểu tượng + chữ — không truyền đạt trạng thái chỉ bằng màu.
 STATUS = {
-    "Tư vấn": {"color": "blue", "hex": "#007AFF", "icon": ":material/forum:"},
-    "Nộp hồ sơ": {"color": "orange", "hex": "#FF9500", "icon": ":material/description:"},
-    "Nhập học": {"color": "green", "hex": "#28A745", "icon": ":material/school:"},
+    "Tư vấn": {"color": "blue", "hex": TOKENS["info"], "icon": ":material/forum:"},
+    "Nộp hồ sơ": {"color": "orange", "hex": TOKENS["warning"], "icon": ":material/description:"},
+    "Nhập học": {"color": "green", "hex": TOKENS["success"], "icon": ":material/school:"},
     "Rút hồ sơ": {"color": "gray", "hex": "#8E8E93", "icon": ":material/block:"},
 }
 GIU_CHO_COLOR = {
@@ -73,286 +82,30 @@ def _data_uri(svg: str) -> str:
 
 ROBOT_URI = _data_uri(ROBOT_SVG)
 
-CSS_TEMPLATE = """
-<style>
-/* ---- khung trang ---- */
-/* chừa chỗ cho thanh header của Streamlit (cao hơn khi chạy trên Streamlit Cloud) */
-.block-container {padding-top: 4.25rem; padding-bottom: 3rem; max-width: 1480px;}
-/* logo trường (nền trắng để rõ cả khi giao diện tối) */
-[data-testid="stHeaderLogo"], [data-testid="stSidebarLogo"] {background: #fff; border-radius: 6px;
-  padding: 2px 6px; height: 2.4rem !important; max-width: 11rem;}
-/* thanh công cụ (năm học, người thao tác) nằm trên thanh menu ngang */
-.st-key-tp_toolbar {position: fixed; top: .55rem; right: 4.5rem; z-index: 999991;
-  width: auto !important; background: transparent;}
-.st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 140px;}
-/* màn hình vừa: bỏ dòng nguồn dữ liệu để không đè lên menu (đủ 6 trang) */
-[data-testid="stToolbarActions"] {display: none !important;}  /* Share, ★, GitHub của Cloud */
-/* Hộp thoại (cửa sổ hồ sơ): nền phía sau tối và mờ đi */
-[data-testid="stDialog"] {background: rgba(15, 23, 42, .38) !important;
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);}
-[data-testid="stDialog"] div[role="dialog"] {box-shadow: 0 24px 64px rgba(0, 0, 0, .28);}
-@media (max-width: 1720px) { .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;} }
-@media (max-width: 1500px) { .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;}
-  .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 118px; width: 118px !important;}
-  .st-key-tp_toolbar .stElementContainer:has([data-testid="stSelectbox"]) {width: 118px !important;}
-  /* chỉ hiện biểu tượng người dùng (bấm vào vẫn thấy tên) */
-  .st-key-tp_toolbar [data-testid="stPopover"] button [data-testid="stMarkdownContainer"] {display: none;} }
-/* danh sách thẻ (bố cục như app cũ: danh sách trái, chi tiết phải) */
-[class*="st-key-cards_"] [data-testid="stVerticalBlockBorderWrapper"] {padding: 2px 0;}
-[class*="st-key-cards_"] button {min-height: 30px; padding: 2px 10px; font-size: .78rem;}
-[class*="st-key-cards_"] [class*="st-key-name_"] button {border: 0; background: none; padding: 0;
-  min-height: 0; font-size: 1rem; font-weight: 600; color: #007AFF;
-  text-align: left; justify-content: flex-start;}
-[class*="st-key-cards_"] [class*="st-key-name_"] button p {text-align: left;}
-[class*="st-key-cards_"] [class*="st-key-card_sel"] {border-left: 4px solid #007AFF;
-  background: rgba(0, 122, 255, .07); border-radius: 8px;}
-[class*="st-key-cards_"] [class*="st-key-xoa_"] button {background: #DC2626;
-  border-color: #DC2626; color: #fff;}
-[class*="st-key-cards_"] [class*="st-key-rut_"] button {color: #DC2626;}
-.tp-card {font-size: .86rem; line-height: 1.55; margin: 0;}
-.tp-pill {display: inline-block; padding: 0 8px; border-radius: 999px; font-size: .76rem;
-  font-weight: 600; line-height: 1.6;}
-[class*="st-key-ch_"] [data-testid="stPopover"] button {min-height: 28px; padding: 0 6px;}
-div[data-baseweb="popover"] hr {margin: .3rem 0 !important;}
-div[data-baseweb="popover"] [data-testid="stElementContainer"]:has(hr) {margin: 0 !important;}
-[class*="st-key-ch_"] [class*="st-key-name_"] button {justify-content: flex-start;
-  text-align: left;}
-.tp-card b {font-weight: 600;} .tp-card .k {opacity: .7;} .tp-card .red {color: #DC2626;}
-.tp-tag {font-size: .75rem; font-weight: 600; margin: 0; align-self: center;}
-/* thanh tiêu đề khung chi tiết */
-[class*="st-key-head_"] {background: #EA580C; border-radius: 8px; padding: 8px 14px;}
-[class*="st-key-head_"] h3 {color: #fff !important; margin: 0; font-size: 1.05rem;}
-[class*="st-key-head_"] button {background: #fff; color: #007AFF; border: 0; font-weight: 600;}
-h1, h2, h3 {letter-spacing: -0.01em;}
-[data-testid="stSidebarNav"] {padding-top: .25rem;}
-[data-testid="stSidebarNavSeparator"] {margin: .25rem 0;}
-/* tiêu đề trang */
-.tp-eyebrow {font-size: .8125rem; font-weight: 500; opacity: .65; margin: 0 0 .15rem 0;}
-.tp-title {font-size: 1.625rem; font-weight: 700; line-height: 1.25; margin: 0;}
-.tp-sub {font-size: .9375rem; opacity: .7; margin: .25rem 0 0 0;}
-/* KPI */
-[data-testid="stMetric"] {padding: .85rem 1rem;}
-[data-testid="stMetricLabel"] p {font-size: .8125rem; font-weight: 500; opacity: .75;}
-/* trạng thái trống */
-.tp-empty {text-align: center; padding: 2.5rem 1rem 1rem;}
-.tp-empty .ico {font-family: "Material Symbols Rounded"; font-size: 2.5rem; line-height: 1;
-  opacity: .45; font-feature-settings: "liga"; -webkit-font-feature-settings: "liga";}
-.tp-empty h4 {margin: .5rem 0 .25rem; font-size: 1.0625rem; font-weight: 600;}
-.tp-empty p {opacity: .7; margin: 0 auto; max-width: 30rem; font-size: .9375rem;}
-/* stepper quy trình */
-.tp-steps {display: flex; gap: .5rem; list-style: none; padding: 0 !important;
-  margin: .25rem 0 0 0 !important;}
-.tp-steps li {margin: 0 !important;}
-.tp-steps li {flex: 1; display: flex; align-items: center; gap: .5rem; font-size: .875rem;
-  padding: .5rem .75rem; border-radius: .5rem; border: 1px solid rgba(128,128,128,.25);}
-.tp-steps .n {display: inline-flex; width: 1.4rem; height: 1.4rem; border-radius: 50%;
-  align-items: center; justify-content: center; font-size: .75rem; font-weight: 600;
-  border: 1.5px solid currentColor; flex: none;}
-.tp-steps .done {color: #047857; border-color: rgba(5,150,105,.35);}
-.tp-steps .done .n {background: #059669; border-color: #059669; color: #fff;}
-.tp-steps .cur {border-color: #007AFF; box-shadow: inset 0 0 0 1px #007AFF; font-weight: 600;}
-.tp-steps .cur .n {background: #007AFF; border-color: #007AFF; color: #fff;}
-.tp-steps .todo {opacity: .6;}
-.tp-steps.off li {opacity: .45;}
-/* danh sách key-value trong thẻ phụ */
-.tp-kv {display: grid; grid-template-columns: auto 1fr; gap: .35rem 1rem; font-size: .875rem;
-  margin: .25rem 0 0 0 !important; padding: 0 !important;}
-.tp-kv dt {opacity: .65;} .tp-kv dd {margin: 0; font-weight: 500; text-align: right;}
-/* danh sách việc cần làm */
-.tp-muted {opacity: .7; font-size: .875rem;}
-/* mobile */
-@media (max-width: 640px) {
-  .block-container {padding: 4.25rem .9rem 2.5rem;}
-  .st-key-tp_toolbar {position: static; justify-content: flex-start !important;
-    flex-wrap: nowrap !important;}
-  .st-key-tp_toolbar [data-testid="stSelectbox"] {min-width: 110px; flex: 1;}
-  .st-key-tp_toolbar [data-testid="stCaptionContainer"] {display: none;}
-  /* KPI: 2 thẻ mỗi hàng thay vì xếp dọc từng thẻ */
-  [class*="st-key-kpis"] [data-testid="stHorizontalBlock"] {flex-wrap: wrap; gap: .5rem;}
-  [class*="st-key-kpis"] [data-testid="stColumn"] {flex: 1 1 calc(50% - .5rem) !important;
-    min-width: calc(50% - .5rem) !important; width: auto !important;}
-  .tp-title {font-size: 1.3rem;}
-  .tp-steps {flex-direction: column; gap: .35rem;}
-  [data-testid="stMetric"] {padding: .6rem .75rem;}
-  [data-testid="stMetricValue"] {font-size: 1.3rem;}
-}
-/* ================= phong cách macOS ================= */
-/* phông San Francisco trên Mac/iPhone; Inter (đã tải) trên Windows/Android */
-.stApp, .stApp :is(p, h1, h2, h3, h4, h5, h6, li, label, button, input, textarea, td, th, a,
-  [data-testid="stMarkdownContainer"], [data-testid="stCaptionContainer"]) {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter",
-    "Helvetica Neue", "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased;}
-h1, h2, h3, .tp-title {letter-spacing: -0.022em;}
-/* thanh đầu trang mờ kính */
-header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
-  -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 1px solid rgba(0,0,0,.08);}
-[data-testid="stTopNavLinkContainer"] a {border-radius: 8px;}
-/* thanh bên trái: menu theo bộ phận */
-[data-testid="stSidebarNav"] li:has(a[href$="/tro-ly"]) {display: none;}
-[data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"] {font-size: .72rem;
-  font-weight: 600; letter-spacing: .06em; text-transform: uppercase; opacity: .6;
-  margin-top: .6rem;}
-[data-testid="stSidebarNav"] a {border-radius: 8px;}
-[data-testid="stSidebarNav"] a[aria-current="page"] {background: rgba(0,122,255,.10);}
-[data-testid="stSidebarNav"] a[aria-current="page"] span {color: #007AFF; font-weight: 600;}
-/* menu nhóm: mục đầu (Tổng quan) -> "Tuyển sinh ▾" -> các mục còn lại */
-.rc-overflow:has([data-testid="stTopNavSection"]) > .rc-overflow-item {order: 2 !important;}
-.rc-overflow:has([data-testid="stTopNavSection"]) > .rc-overflow-item:first-child
-  {order: 0 !important;}
-.rc-overflow > .rc-overflow-item:has([data-testid="stTopNavSection"]) {order: 1 !important;}
-.rc-overflow > .rc-overflow-item-rest {order: 3 !important;}
-/* thẻ trắng bo góc, đổ bóng mềm */
-[class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #FFFFFF;
-  border: 1px solid rgba(0,0,0,.06) !important; border-radius: 14px !important;
-  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);}
-[class*="st-key-tp_card_"] {padding: 1rem 1.15rem;}
-/* thanh phân đoạn (một tổng chia nhiều phần) */
-.tp-seg-bar {display: flex; gap: 2px; height: var(--seg-h); border-radius: 6px; overflow: hidden;}
-.tp-seg-bar span:first-child {border-radius: 6px 0 0 6px;}
-.tp-seg-bar span:last-child {border-radius: 0 6px 6px 0;}
-.tp-seg-ds {display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin-top: .55rem;
-  font-size: .8rem; color: #52514e;}
-.tp-seg-i {display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap;}
-.tp-seg-i i {width: 9px; height: 9px; border-radius: 50%; display: inline-block;}
-.tp-seg-i b {color: #1D1D1F; font-weight: 600;}
-.tp-seg-i em {font-style: normal; color: #898781;}
-/* Báo cáo — trang tổng hợp nhóm: thẻ chỉ số nhỏ trong mỗi thẻ báo cáo */
-[class*="st-key-tp_card_bc_"] h4 {font-size: .86rem; margin: 0; padding: 0;}
-[class*="st-key-tp_card_bc_"] {padding: .55rem .75rem .45rem;}
-.bc-kpi {display: flex; flex-wrap: nowrap; gap: .4rem 1rem; margin: -.3rem 0 0; overflow: hidden;}
-.bc-kpi span {min-width: 0;} .bc-kpi em, .bc-kpi b {white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis;}
-.bc-trong {display: flex; align-items: center; justify-content: center; font-size: .8rem;
-  color: #898781; border: 1px dashed rgba(0,0,0,.1); border-radius: 10px;}
-[class*="st-key-tp_card_bc_"] [data-testid="stVerticalBlock"] {gap: .35rem;}
-[class*="st-key-tp_card_bc_"] h4 {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-.bc-kpi span {display: flex; flex-direction: column;}
-.bc-kpi em {font-style: normal; font-size: .72rem; color: #898781;}
-.bc-kpi b {font-size: 1rem; font-weight: 600; line-height: 1.2;}
-.bi-banner {display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
-  padding: .65rem 1.1rem; border-radius: 12px; color: #FFFFFF; margin-bottom: .2rem;
-  background: linear-gradient(90deg, #1c5cab, #2a78d6 60%, #3987e5);}
-.bi-banner b {font-size: 1.25rem; letter-spacing: .02em;}
-.bi-banner span {font-size: .85rem; opacity: .9;}
-/* dashboard báo cáo: dải ô số liệu lớn */
-.bi-dai {display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: .6rem;}
-.bi-o {background: #FFFFFF; border-radius: 12px; padding: .6rem .9rem .65rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 0 0 .5px rgba(0,0,0,.05); position: relative;
-  overflow: hidden; min-width: 0;}
-.bi-o::before {content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
-  background: #2a78d6;}
-.bi-o:nth-child(2)::before {background: #1baf7a;} .bi-o:nth-child(3)::before {background: #eda100;}
-.bi-o:nth-child(4)::before {background: #eb6834;} .bi-o:nth-child(5)::before {background: #6250d6;}
-.bi-o:nth-child(6)::before {background: #e87ba4;}
-.bi-o em {display: block; font-style: normal; font-size: .74rem; color: #898781;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-.bi-o b {display: block; font-size: 1.55rem; font-weight: 650; line-height: 1.2; color: #1D1D1F;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-.bi-o .do {display: block; height: 5px; border-radius: 3px; background: #cde2fb; margin-top: .3rem;}
-.bi-o .do i {display: block; height: 100%; border-radius: 3px; background: #2a78d6;}
-@media (max-width: 900px) {.bi-dai {grid-template-columns: repeat(2, minmax(0, 1fr));}}
-/* Tổng quan: gọn trong một màn hình */
-.st-key-tq [class*="st-key-tp_card_"] {padding: .7rem .9rem .5rem;}
-.st-key-tq [class*="st-key-tp_card_"] h4 {font-size: .92rem; margin: 0 0 .1rem;}
-.st-key-tq [class*="st-key-tp_card_"] [data-testid="stCaptionContainer"] p {font-size: .74rem;
-  margin: 0;}
-.st-key-nt_kpis [data-testid="stMetric"] {padding: .45rem .8rem;}
-.st-key-nt_kpis [data-testid="stMetricValue"] {font-size: 1.35rem;}
-.st-key-tq [data-testid="stMetric"], .st-key-bc_noi_dung [data-testid="stMetric"] {
-  padding: .5rem .8rem;}
-.st-key-bc_noi_dung [data-testid="stMetricValue"] {font-size: 1.4rem;}
-.st-key-tq [data-testid="stMetricDelta"] > div, .st-key-tq [data-testid="stMetricDelta"] {
-  white-space: normal; overflow: visible; text-overflow: clip; max-width: none;}
-.st-key-tq [data-testid="stHeaderActionElements"] {display: none;}
-.st-key-tq [data-testid="stMetricDelta"] {font-size: .78rem;}
-.st-key-tq [data-testid="stMetricValue"] {font-size: 1.45rem;}
-.st-key-tq [data-testid="stVerticalBlock"] {gap: .55rem;}
-.tq-todo {display: flex; align-items: center; gap: .6rem; padding: .42rem .1rem;
-  border-bottom: .5px solid rgba(0,0,0,.07); font-size: .84rem;}
-.tq-todo:last-child {border-bottom: 0;}
-.tq-todo .n {min-width: 2.1rem; text-align: center; font-weight: 600; border-radius: 7px;
-  padding: .1rem .35rem; background: rgba(235,104,52,.12); color: #b4461d;}
-[data-testid="stMetricValue"] {letter-spacing: -0.02em;}
-/* nút bo tròn mềm, nút chính xanh Apple */
-.stApp button[kind="primary"], .stApp [data-testid="stBaseButton-primary"] {
-  box-shadow: 0 1px 2px rgba(0,122,255,.25);}
-.stApp [data-testid="stBaseButton-secondary"] {background: #FFFFFF;
-  box-shadow: 0 .5px 1px rgba(0,0,0,.08);}
-/* tab dạng "segmented control" của macOS: mỗi tab là một ô tách biệt, tab đang chọn nổi lên */
-[data-testid="stTabs"] [role="tablist"] {gap: .15rem; padding: .2rem; margin-bottom: .5rem;
-  background: rgba(118,118,128,.12); border-radius: 10px; width: fit-content; max-width: 100%;
-  overflow-x: auto; scrollbar-width: none;}
-[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {display: none;}
-[data-testid="stTabs"] [role="tab"] {padding: .26rem .75rem !important; height: auto;
-  min-height: 0; border-radius: 8px; color: #3C3C43; white-space: nowrap; transition: background .15s, color .15s;}
-[data-testid="stTabs"] [role="tab"] p {font-size: .82rem; font-weight: 500; margin: 0;}
-[data-testid="stTabs"] [role="tab"] [data-testid="stIconMaterial"] {font-size: 1rem;}
-/* thẻ nổi: bảng chính của trang (vd bảng nhập đánh giá) */
-[class*="st-key-the_noi"] {background: #FFFFFF; border-radius: 14px; padding: 1rem 1.1rem;
-  box-shadow: 0 4px 18px rgba(0,0,0,.08), 0 0 0 .5px rgba(0,0,0,.06);}
-[class*="st-key-the_noi"] [data-testid="stDataFrame"] {box-shadow: none;}
-[data-testid="stTabs"] [role="tab"]:hover {background: rgba(255,255,255,.6); color: #1D1D1F;}
-[data-testid="stTabs"] [role="tab"][aria-selected="true"] {background: #FFFFFF; color: #007AFF;
-  box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.04);}
-[data-testid="stTabs"] [role="tab"][aria-selected="true"] p {font-weight: 600;}
-[data-testid="stTabs"] [data-baseweb="tab-highlight"],
-[data-testid="stTabs"] [data-baseweb="tab-border"],
-[data-testid="stTabs"] [role="tablist"] .react-aria-SelectionIndicator {display: none;}
-/* thanh cuộn mảnh kiểu Mac */
-.stApp ::-webkit-scrollbar {width: 8px; height: 8px;}
-.stApp ::-webkit-scrollbar-thumb {background: rgba(0,0,0,.18); border-radius: 8px;
-  border: 2px solid transparent; background-clip: padding-box;}
-.stApp ::-webkit-scrollbar-track {background: transparent;}
-/* ---- Trợ lý AI Conan Ro: robot nhún nhảy ở góc phải thanh đầu trang ---- */
-.st-key-tp_ai a {width: 46px; height: 46px; padding: 0 !important; border-radius: 50%;
-  background: url("ROBOT_URI") center / 32px no-repeat,
-              linear-gradient(135deg, #6D28D9 0%, #2563EB 55%, #06B6D4 100%) !important;
-  box-shadow: 0 4px 14px rgba(79,70,229,.45); animation: tp-nhun 2.6s ease-in-out infinite;
-  transform-origin: 50% 100%;}
-.st-key-tp_ai a > * {display: none !important;}
-.st-key-tp_ai a:hover {animation-play-state: paused; transform: scale(1.08);
-  box-shadow: 0 6px 20px rgba(79,70,229,.6);}
-@keyframes tp-nhun {
-  0%, 55%, 100% {transform: translateY(0) scale(1, 1);}
-  62% {transform: translateY(0) scale(1.08, .92);}
-  72% {transform: translateY(-9px) scale(.96, 1.05);}
-  82% {transform: translateY(0) scale(1.05, .95);}
-  90% {transform: translateY(-3px) scale(1, 1);}}
-header [data-testid="stTopNavLink"][href*="tro-ly"], header a[href$="/tro-ly"],
-[data-testid="stTopNavLinkContainer"]:has(a[href$="/tro-ly"]) {display: none !important;}
-.st-key-tp_toolbar {top: .3rem;}
-/* màn vừa: menu chỉ còn chữ (bỏ icon) để chừa chỗ cho thanh công cụ */
-@media (max-width: 1400px) { [data-testid="stTopNavLinkContainer"] a [data-testid="stIconMaterial"],
-  [data-testid="stTopNavLinkContainer"] a > span:has([data-testid="stIconMaterial"])
-  {display: none !important;}
-  [data-testid="stTopNavLinkContainer"] a {padding: 0 5px !important;}
-  [data-testid="stTopNavLinkContainer"] a p, [data-testid="stTopNavLinkContainer"] a span
-  {font-size: .86rem !important;} }
-@media (prefers-reduced-motion: reduce) { * {transition: none !important; animation: none !important;} }
-</style>
-"""
-CSS = CSS_TEMPLATE.replace("ROBOT_URI", ROBOT_URI)
-CSS_TOI = """<style>
-header[data-testid="stHeader"] {background: rgba(28,28,30,.72) !important;
-  border-bottom-color: rgba(255,255,255,.08);}
-[class*="st-key-the_noi"] {background: #1C1C1E;
-  box-shadow: 0 4px 18px rgba(0,0,0,.45), 0 0 0 .5px rgba(255,255,255,.08);}
-.tp-seg-ds {color: #c3c2b7;} .tp-seg-i b {color: #f0efec;}
-.tq-todo {border-bottom-color: rgba(255,255,255,.08);}
-.tq-todo .n {background: rgba(217,89,38,.22); color: #ffb08f;}
-.bi-o {background: #2C2C2E; box-shadow: 0 0 0 .5px rgba(255,255,255,.08);}
-.bi-o b {color: #f0efec;} .bi-o .do {background: #184f95;} .bi-o .do i {background: #3987e5;}
-[class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #2C2C2E;
-  border-color: rgba(255,255,255,.07) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3);}
-.stApp [data-testid="stBaseButton-secondary"] {background: #3A3A3C;}
-[data-testid="stTabs"] [role="tablist"] {background: rgba(118,118,128,.24);}
-[data-testid="stTabs"] [role="tab"] {color: #EBEBF5;}
-[data-testid="stTabs"] [role="tab"]:hover {background: rgba(255,255,255,.08); color: #FFFFFF;}
-[data-testid="stTabs"] [role="tab"][aria-selected="true"] {background: #636366; color: #FFFFFF;
-  box-shadow: 0 1px 3px rgba(0,0,0,.4);}
-.stApp ::-webkit-scrollbar-thumb {background: rgba(255,255,255,.22);}
-</style>"""
+def _doc_css(ten: str) -> str:
+    """Đọc file CSS trong static/styles (đọc lại khi file đổi — tiện sửa giao diện)."""
+    from pathlib import Path
+
+    f = Path(__file__).resolve().parent.parent / "static" / "styles" / ten
+    return _doc_css_cache(str(f), f.stat().st_mtime)
+
+
+@st.cache_resource(show_spinner=False)
+def _doc_css_cache(path: str, _mtime: float) -> str:
+    from pathlib import Path
+
+    return Path(path).read_text(encoding="utf-8")
+
+
+def _css() -> str:
+    return ("<style>" + _doc_css("tokens.css") + "\n" +
+            _doc_css("app.css").replace("ROBOT_URI", ROBOT_URI) + "</style>")
+
+
+def _css_toi() -> str:
+    return "<style>" + _doc_css("tokens_dark.css") + "\n" + _doc_css("dark.css") + "</style>"
+
+
 
 
 
@@ -799,9 +552,9 @@ def detail_head(title: str, key: str):
 
 # ---------------------------------------------------------------- khung trang
 def inject_css():
-    st.html(CSS)
+    st.html(_css())
     if st.context.theme.type == "dark":
-        st.html(CSS_TOI)
+        st.html(_css_toi())
     st.session_state["_tp_card_n"] = 0  # đánh số thẻ (khóa CSS) lại từ đầu mỗi lần chạy
     st.session_state["_chi_doc"] = False  # chế độ chỉ xem luôn tắt khi bắt đầu một lần chạy
     st.session_state["_dlg_mo"] = False  # chưa mở hộp thoại nào trong lần chạy này

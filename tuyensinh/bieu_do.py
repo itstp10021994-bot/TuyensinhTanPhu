@@ -22,8 +22,8 @@ CAT_TOI = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9
 # Thang tuần tự (một sắc xanh, nhạt -> đậm) cho bản đồ nhiệt
 TUAN_TU = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 # Trạng thái tuyển sinh (khớp ui.STATUS)
-TRANG_THAI_MAU = {"Tư vấn": "#2a78d6", "Nộp hồ sơ": "#eda100", "Nhập học": "#1baf7a",
-                  "Rút hồ sơ": "#9a9890"}
+TRANG_THAI_MAU = {"Tư vấn": "#007AFF", "Nộp hồ sơ": "#FF9F0A", "Nhập học": "#34C759",
+                  "Rút hồ sơ": "#8E8E93"}  # = ui.STATUS (màu ngữ nghĩa)
 # Mức đánh giá nội trú
 MUC_MAU = {"Tốt": "#1baf7a", "Khá": "#2a78d6", "Trung bình": "#eda100", "Chưa tốt": "#e34948"}
 

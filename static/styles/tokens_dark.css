@@ -1,0 +1,13 @@
+/* Design tokens — giao diện tối (cùng tên biến với tokens.css) */
+:root {
+  --primary: #0A84FF; --primary-hover: #409CFF; --primary-light: rgba(10,132,255,.18);
+  --bg: #1C1C1E; --surface: #2C2C2E; --surface-2: #232325;
+  --text: #F5F5F7; --text-2: #AEAEB2; --text-3: #8E8E93;
+  --border: #3A3A3C; --divider: #2C2C2E;
+  --success: #30D158; --warning: #FF9F0A; --danger: #FF453A; --info: #0A84FF;
+  --success-bg: rgba(48,209,88,.16); --warning-bg: rgba(255,159,10,.16);
+  --danger-bg: rgba(255,69,58,.16); --info-bg: rgba(10,132,255,.16);
+  --shadow-1: 0 0 0 .5px rgba(255,255,255,.08);
+  --shadow-2: 0 4px 18px rgba(0,0,0,.45), 0 0 0 .5px rgba(255,255,255,.08);
+  --focus: 0 0 0 3px rgba(10,132,255,.45);
+}

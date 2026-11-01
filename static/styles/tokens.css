@@ -1,0 +1,28 @@
+/* ===== Design tokens — nguồn duy nhất cho màu, chữ, khoảng cách, bo góc =====
+   Python dùng cùng giá trị ở tuyensinh/ui.py (TOKENS). Theme Streamlit: .streamlit/config.toml */
+:root {
+  /* màu chính */
+  --primary: #007AFF; --primary-hover: #0066D6; --primary-light: #EAF3FF;
+  /* nền */
+  --bg: #F5F5F7; --surface: #FFFFFF; --surface-2: #FAFAFC;
+  /* chữ */
+  --text: #1D1D1F; --text-2: #6E6E73; --text-3: #86868B;
+  /* viền */
+  --border: #E5E5EA; --divider: #F0F0F2;
+  /* ngữ nghĩa — luôn đi kèm chữ / biểu tượng, không dùng màu đơn độc */
+  --success: #34C759; --warning: #FF9F0A; --danger: #FF3B30; --info: #007AFF;
+  --success-bg: #E9F9EE; --warning-bg: #FFF4E5; --danger-bg: #FFEBEA; --info-bg: #EAF3FF;
+  /* chữ */
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui,
+          sans-serif;
+  --fs-title: 30px; --fs-section: 20px; --fs-value: 30px; --fs-body: 15px; --fs-small: 13px;
+  --fs-tiny: 12px;
+  /* khoảng cách (hệ 8px) */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 16px; --sp-4: 24px; --sp-5: 32px; --sp-6: 40px;
+  /* bo góc */
+  --r-sm: 8px; --r-input: 10px; --r-card: 14px; --r-dialog: 18px; --r-panel: 20px;
+  /* bóng rất nhẹ — ưu tiên viền mảnh + tương phản nền */
+  --shadow-1: 0 1px 2px rgba(0,0,0,.04), 0 0 0 .5px rgba(0,0,0,.05);
+  --shadow-2: 0 4px 16px rgba(0,0,0,.06), 0 0 0 .5px rgba(0,0,0,.05);
+  --focus: 0 0 0 3px rgba(0,122,255,.35);
+}

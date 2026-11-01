@@ -1,0 +1,19 @@
+/* Giao diện tối: chỉ nạp khi theme tối (bổ sung cho app.css). */
+header[data-testid="stHeader"] {background: rgba(28,28,30,.72) !important;
+  border-bottom-color: rgba(255,255,255,.08);}
+[class*="st-key-the_noi"] {background: #1C1C1E;
+  box-shadow: 0 4px 18px rgba(0,0,0,.45), 0 0 0 .5px rgba(255,255,255,.08);}
+.tp-seg-ds {color: #c3c2b7;} .tp-seg-i b {color: #f0efec;}
+.tq-todo {border-bottom-color: rgba(255,255,255,.08);}
+.tq-todo .n {background: rgba(217,89,38,.22); color: #ffb08f;}
+.bi-o {background: #2C2C2E; box-shadow: 0 0 0 .5px rgba(255,255,255,.08);}
+.bi-o b {color: #f0efec;} .bi-o .do {background: #184f95;} .bi-o .do i {background: #3987e5;}
+[class*="st-key-tp_card_"], [data-testid="stMetric"] {background: #2C2C2E;
+  border-color: rgba(255,255,255,.07) !important; box-shadow: 0 1px 2px rgba(0,0,0,.3);}
+.stApp [data-testid="stBaseButton-secondary"] {background: #3A3A3C;}
+[data-testid="stTabs"] [role="tablist"] {background: rgba(118,118,128,.24);}
+[data-testid="stTabs"] [role="tab"] {color: #EBEBF5;}
+[data-testid="stTabs"] [role="tab"]:hover {background: rgba(255,255,255,.08); color: #FFFFFF;}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {background: #636366; color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);}
+.stApp ::-webkit-scrollbar-thumb {background: rgba(255,255,255,.22);}

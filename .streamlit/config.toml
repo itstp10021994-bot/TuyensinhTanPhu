@@ -1,4 +1,4 @@
-# Hệ thống thiết kế — xem tuyensinh/ui.py (TOKENS) để biết màu trạng thái dùng chung.
+# Hệ thống thiết kế — biến dùng chung ở static/styles/tokens.css (CSS) và tuyensinh/ui.py (TOKENS).
 
 [server]
 maxUploadSize = 50
@@ -24,7 +24,7 @@ headingFontWeights = [700, 600, 600, 600, 600, 600]
 metricValueFontSize = "1.625rem"
 metricValueFontWeight = 600
 linkUnderline = false
-chartCategoricalColors = ["#007AFF", "#FF9500", "#34C759", "#8E8E93", "#AF52DE", "#FF2D55"]
+chartCategoricalColors = ["#007AFF", "#FF9F0A", "#34C759", "#8E8E93", "#AF52DE", "#FF2D55"]
 
 [theme.light]
 # Bảng màu macOS (Apple system colors)
@@ -32,14 +32,14 @@ primaryColor = "#007AFF"
 backgroundColor = "#F5F5F7"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#1D1D1F"
-borderColor = "#D9D9DE"
-dataframeHeaderBackgroundColor = "#F5F5F7"
+borderColor = "#E5E5EA"
+dataframeHeaderBackgroundColor = "#FAFAFC"
 linkColor = "#0066CC"
 
 [theme.light.sidebar]
-backgroundColor = "#ECECEE"
-secondaryBackgroundColor = "#FFFFFF"
-borderColor = "#D9D9DE"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F5F7"
+borderColor = "#E5E5EA"
 
 [theme.dark]
 primaryColor = "#0A84FF"
