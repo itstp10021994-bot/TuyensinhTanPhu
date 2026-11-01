@@ -257,6 +257,8 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
 .st-key-tq [class*="st-key-tp_card_"] h4 {font-size: .92rem; margin: 0 0 .1rem;}
 .st-key-tq [class*="st-key-tp_card_"] [data-testid="stCaptionContainer"] p {font-size: .74rem;
   margin: 0;}
+.st-key-nt_kpis [data-testid="stMetric"] {padding: .45rem .8rem;}
+.st-key-nt_kpis [data-testid="stMetricValue"] {font-size: 1.35rem;}
 .st-key-tq [data-testid="stMetric"], .st-key-bc_noi_dung [data-testid="stMetric"] {
   padding: .5rem .8rem;}
 .st-key-bc_noi_dung [data-testid="stMetricValue"] {font-size: 1.4rem;}
