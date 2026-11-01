@@ -416,17 +416,27 @@ def card(r: dict, selected: bool):
 
 
 def filters() -> pd.DataFrame:
-    c = st.columns(3, gap="small")
-    khois = sorted({x for x in nh["KhoiPH"] if x},
-                   key=lambda s: (int(s.split("-")[0]) if s.split("-")[0].isdigit() else 99, s))
-    khoi = c[0].selectbox("Khối", ["Tất cả", *khois], key="nh_khoi")
-    lops = sorted(x for x in nh["LopHoc"].unique() if x)
-    lop = c[1].selectbox("Lớp", ["Tất cả", "Chưa xếp lớp", *lops], key="nh_lop")
-    tt = c[2].selectbox("Trạng thái", [DANG_HOC, "Tất cả", *TINH_TRANG_HS], key="nh_tt",
-                        help=f"{DANG_HOC}: bỏ học sinh đã rút hồ sơ / không học tiếp")
-    q = st.text_input("Tìm kiếm", icon=":material/search:", key="nh_q",
-                      label_visibility="collapsed",
-                      placeholder="Nhập tên học sinh, SĐT, tên người đăng ký (cha mẹ / NGH)")
+    # thanh lọc gọn: tìm kiếm nổi bật · Bộ lọc (thu gọn) · kiểu hiển thị Thẻ / Bảng
+    for k, v in (("nh_khoi", "Tất cả"), ("nh_lop", "Tất cả"), ("nh_tt", DANG_HOC)):
+        S.setdefault(k, v)
+    top = st.container(horizontal=True, vertical_alignment="center", gap="small", key="nh_loc")
+    q = top.text_input("Tìm kiếm", icon=":material/search:", key="nh_q", width="stretch",
+                       label_visibility="collapsed",
+                       placeholder="Tìm theo tên học sinh, mã học sinh, SĐT, tên cha mẹ / NGH")
+    n_loc = (S["nh_khoi"] != "Tất cả") + (S["nh_lop"] != "Tất cả") + (S["nh_tt"] != DANG_HOC)
+    with top.popover("Bộ lọc" + (f" · {n_loc}" if n_loc else ""), icon=":material/tune:",
+                     type="primary" if n_loc else "secondary"):
+        khois = sorted({x for x in nh["KhoiPH"] if x},
+                       key=lambda s: (int(s.split("-")[0]) if s.split("-")[0].isdigit() else 99,
+                                      s))
+        khoi = st.selectbox("Khối", ["Tất cả", *khois], key="nh_khoi")
+        lops = sorted(x for x in nh["LopHoc"].unique() if x)
+        lop = st.selectbox("Lớp", ["Tất cả", "Chưa xếp lớp", *lops], key="nh_lop")
+        tt = st.selectbox("Trạng thái", [DANG_HOC, "Tất cả", *TINH_TRANG_HS], key="nh_tt",
+                          help=f"{DANG_HOC}: bỏ học sinh đã rút hồ sơ / không học tiếp")
+    top.segmented_control("Hiển thị", ["Thẻ", "Bảng"], key="nh_kieu", required=True,
+                          default="Thẻ", label_visibility="collapsed",
+                          help="Thẻ: xem nhanh từng em · Bảng: sắp xếp theo cột, chọn nhiều dòng")
     dang_hoc = nh[~nh["TinhTrangHS"].isin(["Rút hồ sơ", "Không học tiếp"])]
     view = dang_hoc if tt == DANG_HOC else nh if tt == "Tất cả" else nh[nh["TinhTrangHS"] == tt]
     if khoi != "Tất cả":
@@ -452,7 +462,42 @@ def filters() -> pd.DataFrame:
 
 
 def render_left(view: pd.DataFrame, selected: str | None):
-    ui.card_list(view, "nh", card, selected, filter_state=S.get("_nh_filter"), cols=3)
+    if S.get("nh_kieu") == "Bảng":
+        bang(view)
+    else:
+        ui.card_list(view, "nh", card, selected, filter_state=S.get("_nh_filter"), cols=3)
+
+
+def bang(view: pd.DataFrame):
+    """Chế độ bảng: sắp xếp theo cột, chọn nhiều dòng để mở / xuất VEMIS."""
+    hien = pd.DataFrame({
+        "id": view["id"], "Họ tên": view["HoTen"],
+        "Ngày sinh": pd.to_datetime(view["NgaySinh"], errors="coerce").dt.strftime("%d/%m/%Y")
+        .fillna(""),  # chữ dd/mm/yyyy: ô trống hiện trống (không "None")
+        "Khối": view["KhoiPH"], "Lớp": view["LopHoc"], "Chế độ": view["NoiTruBanTru"],
+        "Tình trạng": ui.tag_col(view["TinhTrangHS"]), "Hoàn thiện": view["HoanThien"],
+        "SĐT": view["DienThoaiSLL"]})
+    chon = ui.bang_chon(hien, "nh_bang", {
+        "Họ tên": st.column_config.TextColumn(width="medium", pinned=True),
+        "Ngày sinh": st.column_config.TextColumn(width="small"),
+        "Khối": st.column_config.TextColumn(width="small"),
+        "Lớp": st.column_config.TextColumn(width="small"),
+        "Tình trạng": st.column_config.MultiselectColumn(
+            options=list(TINH_TRANG_HS), color=[TT_HEX.get(t, "#8E8E93") for t in TINH_TRANG_HS]),
+        "Hoàn thiện": st.column_config.ProgressColumn(format="%d%%", min_value=0, max_value=100,
+                                                      help="Mức đủ thông tin theo VEMIS")})
+    thanh = st.container(horizontal=True, vertical_alignment="center", gap="small")
+    if not chon:
+        thanh.caption(f"{len(hien)} hồ sơ · tick ô đầu dòng để chọn; bấm tiêu đề cột để sắp xếp.")
+        return
+    thanh.markdown(f"**Đã chọn {len(chon)}**")
+    if len(chon) == 1:
+        thanh.button("Mở hồ sơ", icon=":material/open_in_full:", type="primary",
+                     on_click=open_record, args=(chon[0],), key="nh_bang_mo")
+    xuat = view[view["id"].isin(chon)].drop(columns=["HoanThien", "KhoiPH"], errors="ignore")
+    thanh.download_button(f"Xuất VEMIS ({len(chon)})", lambda: export_vemis.to_bytes(xuat),
+                          file_name=f"VEMIS_chon_{nam_hoc}.xlsx", mime=ui.XLSX,
+                          icon=":material/download:", on_click="ignore", key="nh_bang_vemis")
 
 
 def load_record(item_id: str) -> tuple[dict | None, pd.DataFrame]:

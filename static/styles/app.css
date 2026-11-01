@@ -281,3 +281,5 @@ section[data-testid="stSidebar"] {border-right: 1px solid var(--border);}
   overflow: hidden; text-overflow: ellipsis;}
 .tp-side-user em {font-style: normal; font-size: .74rem; color: var(--text-3);}
 .tp-side-ver {font-size: .7rem; color: var(--text-3); margin: .2rem .2rem 0;}
+/* thanh lọc gọn (tìm kiếm · Bộ lọc · Thẻ/Bảng): chừa chỗ cho thanh công cụ nổi của bảng */
+.st-key-ts_loc, .st-key-nh_loc {margin-bottom: 1.9rem !important;}

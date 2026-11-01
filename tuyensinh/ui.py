@@ -91,7 +91,7 @@ def _doc_css(ten: str) -> str:
 
 
 @st.cache_resource(show_spinner=False)
-def _doc_css_cache(path: str, _mtime: float) -> str:
+def _doc_css_cache(path: str, mtime: float) -> str:  # mtime: đọc lại khi file đổi
     from pathlib import Path
 
     return Path(path).read_text(encoding="utf-8")
@@ -968,6 +968,18 @@ def download_excel(label: str, frames: dict[str, pd.DataFrame] | pd.DataFrame, f
     container.download_button(label, lambda: excel_bytes(frames), file_name=file_name,
                               mime=XLSX, icon=":material/download:", key=key,
                               type="primary" if primary else "secondary", on_click="ignore")
+
+
+def bang_chon(df: pd.DataFrame, key: str, column_config: dict | None = None,
+              height: int | None = None) -> list:
+    """Bảng dữ liệu chọn nhiều dòng (sắp xếp bằng cách bấm tiêu đề cột; tiêu đề dính khi cuộn).
+    `df` có cột "id" (ẩn). Trả về danh sách id các dòng đang chọn."""
+    ev = st.dataframe(
+        df, hide_index=True, width="stretch", on_select="rerun", selection_mode="multi-row",
+        key=table_key(key, df["id"]), row_height=34,
+        height=height or min(38 + 34 * max(len(df), 1), 640),
+        column_config={"id": None, **(column_config or {})})
+    return [df.iloc[i]["id"] for i in ev.selection.rows if i < len(df)]
 
 
 def table_key(prefix: str, ids) -> str:

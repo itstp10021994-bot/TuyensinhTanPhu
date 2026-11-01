@@ -3,6 +3,7 @@
 Lọc theo bước / khối / chế độ / giữ chỗ, tìm kiếm; học sinh đang chọn nằm ở ?id=...
 Thêm liên hệ mới bằng hộp thoại nhập nhanh (?new=1 để mở từ trang khác).
 """
+import pandas as pd
 import streamlit as st
 
 from tuyensinh import services, ui
@@ -347,13 +348,20 @@ def clear_filters():
 def filters(step: str):
     for k in FILTER_KEYS:
         S.setdefault(k, "" if k == "ts_q" else "Tất cả")
-    q = st.text_input("Tìm kiếm", key="ts_q", icon=":material/search:",
-                      label_visibility="collapsed",
-                      placeholder="Nhập tên học sinh, SĐT, tên người liên hệ")
-    c = st.columns(3, gap="small")
-    khoi = c[0].selectbox("Khối", ["Tất cả", *KHOI], key="ts_khoi")
-    che_do = c[1].selectbox("Chế độ", ["Tất cả", *CHE_DO], key="ts_chedo")
-    giu = c[2].selectbox("Giữ chỗ", ["Tất cả", *GIU_CHO], key="ts_giucho")
+    # thanh lọc gọn: tìm kiếm nổi bật · Bộ lọc (thu gọn) · kiểu hiển thị Thẻ / Bảng
+    top = st.container(horizontal=True, vertical_alignment="center", gap="small", key="ts_loc")
+    q = top.text_input("Tìm kiếm", key="ts_q", icon=":material/search:", width="stretch",
+                       label_visibility="collapsed",
+                       placeholder="Tìm theo tên học sinh, SĐT, tên người liên hệ")
+    n_loc = sum(S[k] != "Tất cả" for k in FILTER_KEYS[1:])
+    with top.popover("Bộ lọc" + (f" · {n_loc}" if n_loc else ""), icon=":material/tune:",
+                     type="primary" if n_loc else "secondary"):
+        khoi = st.selectbox("Khối", ["Tất cả", *KHOI], key="ts_khoi")
+        che_do = st.selectbox("Chế độ", ["Tất cả", *CHE_DO], key="ts_chedo")
+        giu = st.selectbox("Giữ chỗ", ["Tất cả", *GIU_CHO], key="ts_giucho")
+    top.segmented_control("Hiển thị", ["Thẻ", "Bảng"], key="ts_kieu", required=True,
+                          default="Thẻ", label_visibility="collapsed",
+                          help="Thẻ: xem nhanh từng em · Bảng: sắp xếp theo cột, chọn nhiều dòng")
     view = ts
     if step and step != "Tất cả":
         view = view[view["TrangThai"] == step]
@@ -378,6 +386,46 @@ def filters(step: str):
             (step, q, khoi, che_do, giu))
 
 
+def _chuyen_nhieu(ids: list, buoc: str) -> int:
+    for i in ids:
+        services.set_trang_thai(storage, i, buoc, nguoi=ui.current_user())
+    return len(ids)
+
+
+def bang(view: pd.DataFrame):
+    """Chế độ bảng: sắp xếp theo cột, chọn nhiều dòng để mở / xuất / chuyển bước hàng loạt."""
+    hien = pd.DataFrame({
+        "id": view["id"], "Học sinh": view["HoTenHS"], "Khối": view["Khoi"],
+        "Bước": ui.tag_col(view["TrangThai"].replace("", "Tư vấn")), "Chế độ": view["CheDo"],
+        "SĐT": view["SDT"], "Ngày liên hệ": pd.to_datetime(view["NgayLienHe"], errors="coerce"),
+        "Nguồn": view["Nguon"], "Giữ chỗ": ui.tag_col(view["GiuCho"].replace("", "Chưa giữ chỗ"))})
+    chon = ui.bang_chon(hien, "ts_bang", {
+        "Học sinh": st.column_config.TextColumn(width="medium", pinned=True),
+        "Khối": st.column_config.TextColumn(width="small"), "Bước": ui.status_column(),
+        "Ngày liên hệ": st.column_config.DateColumn(**ui.DATE_COL),
+        "Giữ chỗ": ui.giu_cho_column()})
+    thanh = st.container(horizontal=True, vertical_alignment="center", gap="small")
+    if not chon:
+        thanh.caption(f"{len(hien)} liên hệ · tick ô đầu dòng để chọn; bấm tiêu đề cột để sắp xếp.")
+        return
+    thanh.markdown(f"**Đã chọn {len(chon)}**")
+    if len(chon) == 1:
+        thanh.button("Mở hồ sơ", icon=":material/open_in_full:", type="primary",
+                     on_click=open_record, args=(chon[0],), key="ts_bang_mo")
+    cols = {f.key: f.label for f in TUYEN_SINH.fields}
+    ui.download_excel(f"Xuất Excel ({len(chon)})",
+                      view[view["id"].isin(chon)][list(cols)].rename(columns=cols),
+                      f"DataTuyenSinh_chon_{nam_hoc}.xlsx", container=thanh, key="ts_bang_xls")
+    with thanh.popover("Chuyển bước", icon=":material/swap_horiz:"):
+        buoc = st.selectbox("Chuyển sang", ["Tư vấn", "Nộp hồ sơ", "Nhập học"], key="ts_bang_buoc",
+                            help="Rút hồ sơ cần lý do — làm từng em trong hồ sơ.")
+        if st.button(f"Chuyển {len(chon)} em sang {buoc}", type="primary", key="ts_bang_go"):
+            if ui.mutate(_chuyen_nhieu, chon, buoc,
+                         success=f"Đã chuyển {len(chon)} em sang {buoc}") is not None:
+                S.ts_v += 1
+                st.rerun()
+
+
 def render_page():
     actions = ui.page_header("Data tuyển sinh", f"Liên hệ, tư vấn và hồ sơ tuyển sinh · năm học {nam_hoc}",
                              eyebrow="Tuyển sinh")
@@ -399,7 +447,10 @@ def render_page():
         view = ts
     else:
         view, fstate = filters(step)
-        ui.card_list(view, "ts", card, qp.get("id"), filter_state=fstate, cols=3)
+        if S.get("ts_kieu") == "Bảng":
+            bang(view)
+        else:
+            ui.card_list(view, "ts", card, qp.get("id"), filter_state=fstate, cols=3)
 
     cols = {f.key: f.label for f in TUYEN_SINH.fields}
     ui.download_excel("Xuất Excel", view[list(cols)].rename(columns=cols),
