@@ -14,7 +14,7 @@ import pandas as pd
 
 from . import dia_ban as DB
 from . import services
-from .schema import GIAY_TO_NHAP_HOC, KHOI, TRANG_THAI
+from .schema import GIAY_TO_NHAP_HOC, TRANG_THAI
 
 G_TS, G_KT, G_NH = "Tuyển sinh", "Tài chính", "Nhập học"
 G_XH, G_XNH = "Xu hướng tuyển sinh", "Xu hướng nhập học"
@@ -562,7 +562,8 @@ def nh_hocluc(c: Ctx) -> Result:
     t["Tổng"] = t.sum(axis=1)
     t = t.sort_values("Tổng", ascending=False).rename_axis("Học lực (kết quả 1)").reset_index()
     t.columns.name = None
-    diem = df.groupby("Khoi")[["Toan1", "Van1", "Anh1"]].mean().round(2)
+    diem = df[["Toan1", "Van1", "Anh1"]].apply(pd.to_numeric, errors="coerce") \
+        .assign(Khoi=df["Khoi"]).groupby("Khoi").mean().round(2)  # điểm dạng chữ -> số
     diem = diem.reindex(_khoi_order(diem.index)).rename_axis("Khối").reset_index().rename(
         columns={"Toan1": "Toán TB", "Van1": "Văn TB", "Anh1": "Anh TB"})
     return Result(t, [("Có điểm Toán", int(df["Toan1"].notna().sum()))],

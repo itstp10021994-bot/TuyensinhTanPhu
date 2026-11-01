@@ -275,7 +275,7 @@ def _hien(m, i):
         st.html(_gio(m))
 
 
-tin.html(f'<div class="zl-ngay">Hôm nay</div>')
+tin.html('<div class="zl-ngay">Hôm nay</div>')
 if not msgs:
     with _bot("zl_b_chao"):
         st.markdown(f"Xin chào 👋 Mình là **{TEN_AI}**. " + tro_ly.huong_dan().text)

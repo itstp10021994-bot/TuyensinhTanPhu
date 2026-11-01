@@ -285,3 +285,10 @@ section[data-testid="stSidebar"] {border-right: 1px solid var(--border);}
 .st-key-ts_loc, .st-key-nh_loc {margin-bottom: 1.9rem !important;}
 /* ô nhập: chiều cao thống nhất */
 .stApp [data-baseweb="input"], .stApp [data-baseweb="select"] > div {min-height: 2.5rem;}
+/* máy tính bảng (≤ 1024px): hàng chỉ số 3 ô / hàng thay vì bóp chữ */
+@media (max-width: 1024px) and (min-width: 641px) {
+  [class*="st-key-kpis"] [data-testid="stHorizontalBlock"] {flex-wrap: wrap; gap: .5rem;}
+  [class*="st-key-kpis"] [data-testid="stColumn"] {flex: 1 1 calc(33.3% - .5rem) !important;
+    min-width: calc(33.3% - .5rem) !important; width: auto !important;}
+  .bi-dai {grid-template-columns: repeat(3, minmax(0, 1fr));}
+}
