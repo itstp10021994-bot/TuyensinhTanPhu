@@ -34,7 +34,7 @@ Tạo chuỗi ngẫu nhiên cho `COOKIE_SECRET`: `python -c "import secrets; pri
    *Quản trị* xóa liên hệ Data tuyển sinh, *Quản trị / Giáo vụ* xóa hồ sơ nhập học.
 3. (Khuyến nghị) đặt `COOKIE_SECRET` trong Secrets (mục 2).
 4. **Đánh giá nội trú theo tháng:** mở **Nội trú** bằng tài khoản Quản trị / Tổ trưởng quản nhiệm →
-   bấm **Tạo list nội trú** (tạo list `NoiTru_DanhGiaThang`: mỗi học sinh mỗi tháng một dòng, mỗi
+   bấm **Tạo list nội trú** (tạo list `NoiTru_DanhGiaThang`: mỗi học sinh mỗi tháng một dòng, 6 mục nhận xét bằng lời, mỗi
    mục một cột). List theo ngày cũ `NoiTru_DanhGia` không bị xóa hay sửa, app không dùng nữa.
 
 ## 4. Hành vi bảo mật mới (bản 2.0)

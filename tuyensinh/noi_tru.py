@@ -1,18 +1,15 @@
-"""Phân hệ Nội trú: phòng, giáo viên quản nhiệm, đánh giá THEO THÁNG từng học sinh theo 6 mục.
+"""Phân hệ Nội trú: phòng, giáo viên quản nhiệm, đánh giá THEO THÁNG từng học sinh.
 
-Mục chọn mức (Tốt / Khá / Trung bình / Chưa tốt) kèm lời nhận xét: Nề nếp, Học tập,
-Sức khỏe - Tâm lý. Mục viết lời: Điểm sáng trong tháng, Quá trình trao đổi và hỗ trợ,
-Định hướng giáo dục.
+Đánh giá là 6 mục nhận xét bằng lời (không chấm mức): Nề nếp, Học tập, Sức khỏe - Tâm lý,
+Điểm sáng trong tháng, Quá trình trao đổi và hỗ trợ, Định hướng giáo dục.
 
 - Phòng (list NoiTru_Phong): mỗi năm học, mỗi phòng có 1 giáo viên quản nhiệm và danh sách
   học sinh (ID hồ sơ nhập học).
 - Đánh giá (list NoiTru_DanhGiaThang): mỗi bản ghi là MỘT HỌC SINH trong MỘT THÁNG, mỗi mục
-  một cột (lọc / xem trực tiếp trên SharePoint được). List theo ngày cũ (NoiTru_DanhGia) không
-  dùng nữa và được giữ nguyên.
+  một cột. List theo ngày cũ (NoiTru_DanhGia) không dùng nữa và được giữ nguyên.
 
-Quyền: nhập/sửa đánh giá: giáo viên quản nhiệm của phòng (phòng mình), Tổ trưởng quản nhiệm và
-Quản trị (mọi phòng); xem đánh giá: mọi người vào được
-trang; quản lý phòng và báo cáo tổng hợp: Tổ trưởng quản nhiệm, Quản trị.
+Quyền: viết / sửa / xem nhận xét: giáo viên quản nhiệm của phòng (chỉ phòng mình), Tổ trưởng
+quản nhiệm và Quản trị (mọi phòng); quản lý phòng và báo cáo: Tổ trưởng quản nhiệm, Quản trị.
 """
 from __future__ import annotations
 
@@ -20,26 +17,21 @@ from datetime import date
 
 import pandas as pd
 
-from .schema import MUC_DANH_GIA, NOI_TRU_DANH_GIA, NOI_TRU_PHONG
+from .schema import NOI_TRU_DANH_GIA, NOI_TRU_PHONG
 from .storage.base import Storage
 
-DIEM = {"Tốt": 4, "Khá": 3, "Trung bình": 2, "Chưa tốt": 1}
-CAN_CHU_Y = ("Trung bình", "Chưa tốt")
-# Mục chọn mức (kèm lời nhận xét) — key trong JSON -> tên cột hiển thị
+# Đánh giá tháng = 6 mục nhận xét bằng lời (không chấm mức). Key = tên cột SharePoint.
 MUC = ("NeNep", "HocTap", "SucKhoe")
-TEN_MUC = {"NeNep": "Nề nếp", "HocTap": "Học tập", "SucKhoe": "Sức khỏe - Tâm lý"}
 NX = {m: f"{m}_NX" for m in MUC}
-TEN_NX = {m: f"Nhận xét {TEN_MUC[m].lower()}" for m in MUC}
-# Mục chỉ viết lời
 LOI = ("DiemSang", "TraoDoi", "DinhHuong")
-TEN_LOI = {"DiemSang": "Điểm sáng trong tháng", "TraoDoi": "Quá trình trao đổi và hỗ trợ",
-           "DinhHuong": "Định hướng giáo dục"}
-COT_MUC = [TEN_MUC[m] for m in MUC]
-COT_BANG = (["Tháng", "PhongID", "Phòng", "HocSinhID", "Học sinh", "Lớp"]
-            + [c for m in MUC for c in (TEN_MUC[m], TEN_NX[m])]
-            + [TEN_LOI[k] for k in LOI] + ["Người đánh giá", "Ngày đánh giá"])
-COT_LOI = [TEN_NX[m] for m in MUC] + [TEN_LOI[k] for k in LOI]
-MAX_LOI = 1000  # ký tự mỗi ô lời nhận xét (cột nhiều dòng SharePoint)
+KHOAN = tuple(NX[m] for m in MUC) + LOI
+TEN = {"NeNep_NX": "Nề nếp", "HocTap_NX": "Học tập", "SucKhoe_NX": "Sức khỏe - Tâm lý",
+       "DiemSang": "Điểm sáng trong tháng", "TraoDoi": "Quá trình trao đổi và hỗ trợ",
+       "DinhHuong": "Định hướng giáo dục"}
+COT_LOI = [TEN[k] for k in KHOAN]
+COT_BANG = (["Tháng", "PhongID", "Phòng", "HocSinhID", "Học sinh", "Lớp"] + COT_LOI
+            + ["Số mục", "Người đánh giá", "Ngày đánh giá"])
+MAX_LOI = 1000  # ký tự mỗi ô nhận xét (cột nhiều dòng SharePoint)
 VAI_QUAN_LY = ("Quản trị", "Tổ trưởng quản nhiệm")
 
 
@@ -206,16 +198,16 @@ def tim_danh_gia(danh_gia: list[dict], hs_id: str, thang: str,
     return None
 
 
-def can_chu_y(r: dict) -> bool:
-    """Có mục nào Trung bình / Chưa tốt."""
-    return any(_s(r.get(m)) in CAN_CHU_Y for m in MUC)
+def so_muc(r: dict | None) -> int:
+    """Số mục đã có nhận xét (0 … 6)."""
+    return sum(bool(_s((r or {}).get(k))) for k in KHOAN)
 
 
 def luu_danh_gia_thang(storage: Storage, danh_gia: list[dict], nam_hoc: str, thang: str,
                        hs: dict, phong: dict | None, values: dict, nguoi: str) -> dict:
-    """Ghi đánh giá tháng của MỘT học sinh (tạo mới hoặc ghi đè bản ghi tháng đó).
+    """Ghi nhận xét tháng của MỘT học sinh (tạo mới hoặc ghi đè bản ghi tháng đó).
 
-    `hs`: {"id", "ten", "lop"}; `values`: {<mục>: mức, <mục>_NX: lời, DiemSang/TraoDoi/DinhHuong}"""
+    `hs`: {"id", "ten", "lop"}; `values`: {<khoản trong KHOAN>: lời nhận xét}"""
     hid = _s(hs.get("id"))
     if not hid:
         raise ValueError("Thiếu học sinh cần đánh giá.")
@@ -225,44 +217,28 @@ def luu_danh_gia_thang(storage: Storage, danh_gia: list[dict], nam_hoc: str, tha
             "Lop": _s(hs.get("lop")), "PhongID": _s((phong or {}).get("id")),
             "Phong": _s((phong or {}).get("TenPhong")), "NguoiDanhGia": _s(nguoi),
             "NgayDanhGia": date.today().isoformat()}
-    for m in MUC:
-        v = _s(values.get(m)) or "Tốt"
-        if v not in MUC_DANH_GIA:
-            raise ValueError(f"Mức đánh giá không hợp lệ: {v}")
-        data[m] = v
-    for k in [NX[m] for m in MUC] + list(LOI):
+    for k in KHOAN:
         v = _s(values.get(k))
         if len(v) > MAX_LOI:
-            ten = TEN_LOI.get(k) or TEN_NX[k.removesuffix("_NX")]
-            raise ValueError(f"{ten} quá dài ({len(v)} ký tự, tối đa {MAX_LOI}).")
+            raise ValueError(f"Nhận xét \"{TEN[k]}\" quá dài ({len(v)} ký tự, tối đa {MAX_LOI}).")
         data[k] = v
+    if not so_muc(data):
+        raise ValueError("Chưa có nhận xét nào — viết ít nhất một mục rồi lưu.")
     cu = tim_danh_gia(danh_gia, hid, thang, nam_hoc)
     if cu:
         return storage.update_item(NOI_TRU_DANH_GIA.name, cu["id"], data)
     return storage.create_item(NOI_TRU_DANH_GIA.name, data)
 
 
-def danh_gia_nhanh(storage: Storage, danh_gia: list[dict], nam_hoc: str, thang: str,
-                   ds: list[tuple[dict, dict | None]], nguoi: str) -> int:
-    """Đánh giá "Tốt" cả 3 mục cho các em CHƯA có đánh giá tháng `thang` (em đã có: bỏ qua).
-    `ds`: [(hs {"id","ten","lop"}, phòng)]."""
-    from concurrent.futures import ThreadPoolExecutor
-
-    viec = [(h, p) for h, p in ds if not tim_danh_gia(danh_gia, h.get("id"), thang, nam_hoc)]
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        list(pool.map(lambda hp: luu_danh_gia_thang(storage, [], nam_hoc, thang, hp[0], hp[1],
-                                                    {}, nguoi), viec))
-    return len(viec)
-
-
 def nhap_danh_gia(storage: Storage, df: pd.DataFrame, phongs_all: list[dict],
                   danh_gia: list[dict], nam_hoc: str, nh: list[dict], nguoi: str,
                   progress=None) -> dict:
-    """Nhập đánh giá tháng từ file mẫu (mỗi dòng = 1 học sinh trong 1 tháng; cột theo key:
-    Thang, Phong, HoTen, Lop, <mục>, <mục>_NX, DiemSang / TraoDoi / DinhHuong, NguoiDanhGia).
+    """Nhập nhận xét tháng từ file mẫu (mỗi dòng = 1 học sinh trong 1 tháng; cột theo key:
+    Thang, Phong, HoTen, Lop, NeNep_NX, HocTap_NX, SucKhoe_NX, DiemSang, TraoDoi, DinhHuong,
+    NguoiDanhGia).
 
     Học sinh tìm trong phòng ghi ở cột Phòng (để trống: mọi phòng của năm học) theo họ tên,
-    trùng tên thì xét lớp. Học sinh + tháng đã có đánh giá: ghi đè theo file (ô trống giữ cũ)."""
+    trùng tên thì xét lớp. Học sinh + tháng đã có nhận xét: ghi đè theo file (ô trống giữ cũ)."""
     from .danh_muc import fold
 
     ps = phong_nam(phongs_all, nam_hoc)
@@ -294,12 +270,7 @@ def nhap_danh_gia(storage: Storage, df: pd.DataFrame, phongs_all: list[dict],
                                               f"\"{d.get('HoTen')}\" — ghi thêm lớp") if ung else
                         f"Không thấy \"{d.get('HoTen', '')}\" trong {noi}"})
             continue
-        sai = [d[m] for m in MUC if d.get(m) and d[m] not in MUC_DANH_GIA]
-        if sai:
-            loi.append({"Dòng": dong, "Lỗi": f"Mức không hợp lệ: {sai[0]} (chọn: "
-                                             f"{', '.join(MUC_DANH_GIA)})"})
-            continue
-        if any(len(d.get(k, "")) > MAX_LOI for k in [NX[m] for m in MUC] + list(LOI)):
+        if any(len(d.get(k, "")) > MAX_LOI for k in KHOAN):
             loi.append({"Dòng": dong, "Lỗi": f"Nhận xét quá dài (tối đa {MAX_LOI} ký tự)"})
             continue
         viec[(ung[0], thang)] = (dong, d, p or o.get(ung[0]))
@@ -308,7 +279,7 @@ def nhap_danh_gia(storage: Storage, df: pd.DataFrame, phongs_all: list[dict],
     for n, ((hid, thang), (dong, d, p)) in enumerate(viec.items(), 1):
         r = hs[hid]
         cu = tim_danh_gia(danh_gia, hid, thang, nam_hoc) or {}
-        vals = {k: d.get(k) or _s(cu.get(k)) for k in list(MUC) + [NX[m] for m in MUC] + list(LOI)}
+        vals = {k: d.get(k) or _s(cu.get(k)) for k in KHOAN}
         try:
             luu_danh_gia_thang(storage, danh_gia, nam_hoc, thang,
                                {"id": hid, "ten": r.get("HoTen"), "lop": r.get("LopHoc")}, p,
@@ -334,11 +305,9 @@ def bang_thang(danh_gia: list[dict], nam_hoc: str | None = None) -> pd.DataFrame
         row = {"Tháng": thang, "PhongID": _s(r.get("PhongID")), "Phòng": _s(r.get("Phong")),
                "HocSinhID": _s(r.get("HocSinhID")), "Học sinh": _s(r.get("HoTen")),
                "Lớp": _s(r.get("Lop"))}
-        for m in MUC:
-            row[TEN_MUC[m]] = _s(r.get(m))
-            row[TEN_NX[m]] = _s(r.get(NX[m]))
-        for k in LOI:
-            row[TEN_LOI[k]] = _s(r.get(k))
+        for k in KHOAN:
+            row[TEN[k]] = _s(r.get(k))
+        row["Số mục"] = so_muc(r)
         row["Người đánh giá"] = _s(r.get("NguoiDanhGia"))
         row["Ngày đánh giá"] = _s(r.get("NgayDanhGia"))[:10]
         rows.append(row)
@@ -360,82 +329,40 @@ def theo_ho_so(long: pd.DataFrame, nh: list[dict]) -> pd.DataFrame:
 
 
 # ------------------------------------------------------------------ báo cáo
-def _ty_le_tot(s: pd.Series) -> float | None:
-    """% "Tốt"; chưa có đánh giá nào thì None (hiện "—", không phải 0%)."""
-    s = s[s.fillna("") != ""]
-    return round(100 * (s == "Tốt").mean(), 1) if len(s) else None
-
-
 def tong_hop_phong(x: pd.DataFrame, phongs: list[dict], dang_nt: set[str]) -> pd.DataFrame:
-    """Một tháng, theo phòng: số em đã / chưa đánh giá, % Tốt từng mục, số em cần chú ý.
+    """Một tháng, theo phòng: số em đã / chưa có nhận xét, số em đủ 6 mục.
     `dang_nt`: ID học sinh nội trú đang học (em đã rời nội trú không tính)."""
     out = []
     for p in phongs:
         ids = [i for i in hs_ids(p) if i in dang_nt]
         y = x[x["HocSinhID"].isin(ids)]
         da = y["HocSinhID"].nunique()
-        r = {"Phòng": _s(p.get("TenPhong")), "Giáo viên": _s(p.get("GiaoVien")),
-             "Số HS": len(ids), "Đã đánh giá": da, "Chưa đánh giá": max(len(ids) - da, 0),
-             "Hoàn thành (%)": round(100 * da / len(ids), 1) if ids else None}
-        for c in COT_MUC:
-            r[f"{c} Tốt (%)"] = _ty_le_tot(y[c])
-        r["Em cần chú ý"] = int(y[COT_MUC].isin(CAN_CHU_Y).any(axis=1).sum())
-        out.append(r)
+        out.append({"Phòng": _s(p.get("TenPhong")), "Giáo viên": _s(p.get("GiaoVien")),
+                    "Số HS": len(ids), "Đã nhận xét": da, "Chưa nhận xét": max(len(ids) - da, 0),
+                    "Hoàn thành (%)": round(100 * da / len(ids), 1) if ids else None,
+                    "Đủ 6 mục": int((y["Số mục"] == len(KHOAN)).sum())})
     return pd.DataFrame(out)
 
 
-def hoc_sinh_can_chu_y(x: pd.DataFrame) -> pd.DataFrame:
-    """Học sinh có mục Trung bình / Chưa tốt (mỗi lượt học sinh-tháng một dòng)."""
-    cols = ["Tháng", "Học sinh", "Lớp", "Phòng", *COT_MUC, "Nhận xét"]
-    if x.empty:
-        return pd.DataFrame(columns=cols)
-    y = x[x[COT_MUC].isin(CAN_CHU_Y).any(axis=1)].copy()
-    if y.empty:
-        return pd.DataFrame(columns=cols)
-    y["Nhận xét"] = y[[TEN_NX[m] for m in MUC]].apply(lambda r: " · ".join(v for v in r if v),
-                                                      axis=1)
-    y["_d"] = [sum(DIEM.get(r, 4) for r in t) for t in zip(*(y[c] for c in COT_MUC))]
-    y = y.sort_values(["Tháng", "_d", "Phòng", "Học sinh"], ascending=[False, True, True, True])
-    y["Tháng"] = y["Tháng"].map(ten_thang)
-    return y[cols].reset_index(drop=True)
+def muc_co_nhan_xet(x: pd.DataFrame) -> pd.DataFrame:
+    """Số học sinh có nhận xét ở từng mục."""
+    return pd.DataFrame([{"Mục": c, "Số HS": int(x[c].fillna("").ne("").sum())}
+                         for c in COT_LOI])
 
 
 def nhan_xet(x: pd.DataFrame) -> pd.DataFrame:
     """Các lượt có lời nhận xét (để đọc nhanh)."""
-    cols = ["Tháng", "Phòng", "Học sinh", "Lớp"] + COT_LOI
+    cols = ["Tháng", "Phòng", "Học sinh", "Lớp"] + COT_LOI + ["Người đánh giá"]
     if x.empty:
         return pd.DataFrame(columns=cols)
     return x.loc[x[COT_LOI].fillna("").ne("").any(axis=1), cols]
 
 
-def xu_huong(x: pd.DataFrame, thangs: list[str]) -> pd.DataFrame:
-    """% Tốt của từng mục theo tháng (chỉ tháng đã có đánh giá)."""
-    rows = []
-    for t in thangs:
-        y = x[x["Tháng"] == t]
-        if y.empty:
-            continue
-        for c in COT_MUC:
-            rows.append({"Tháng": ten_thang(t).removeprefix("Tháng "), "Mục": c,
-                         "Tỷ lệ Tốt (%)": _ty_le_tot(y[c])})
-    return pd.DataFrame(rows, columns=["Tháng", "Mục", "Tỷ lệ Tốt (%)"])
-
-
 def tien_do_thang(x: pd.DataFrame, thangs: list[str], n_hs: int) -> pd.DataFrame:
-    """Số học sinh đã đánh giá mỗi tháng (đến tháng đang xem)."""
+    """Số học sinh đã có nhận xét mỗi tháng (đến tháng đang xem)."""
     return pd.DataFrame([{"Tháng": ten_thang(t).removeprefix("Tháng "),
-                          "Đã đánh giá": int(x.loc[x["Tháng"] == t, "HocSinhID"].nunique()),
+                          "Đã nhận xét": int(x.loc[x["Tháng"] == t, "HocSinhID"].nunique()),
                           "Số HS": n_hs} for t in thangs])
-
-
-def phan_bo_muc(x: pd.DataFrame) -> pd.DataFrame:
-    """Số học sinh ở từng mức của từng mục."""
-    rows = []
-    for col in COT_MUC:
-        vc = x[col].value_counts()
-        for m in MUC_DANH_GIA:
-            rows.append({"Mục": col, "Mức": m, "Số HS": int(vc.get(m, 0))})
-    return pd.DataFrame(rows)
 
 
 # ------------------------------------------------------------------ nhập phân phòng từ Excel

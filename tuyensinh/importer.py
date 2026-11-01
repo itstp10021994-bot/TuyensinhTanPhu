@@ -10,7 +10,7 @@ import pandas as pd
 
 from . import config, danh_muc, services
 from .export_vemis import COLUMNS, HEADER_ROW
-from .schema import (ALL_LISTS, NHAP_DUOC, BOOL, CHOICE, DATE, GIAY_TO, MUC_DANH_GIA, NHAP_HOC, NOI_TRU_DANH_GIA,
+from .schema import (ALL_LISTS, NHAP_DUOC, BOOL, CHOICE, DATE, GIAY_TO, NHAP_HOC, NOI_TRU_DANH_GIA,
                      NOI_TRU_PHONG, NOTE, NUMBER, TAI_KHOAN, TUYEN_SINH, VAI_TRO, Field, ListDef)
 from .storage.base import Storage
 from .storage.convert import ColumnMap
@@ -153,9 +153,7 @@ def _mau_danh_gia() -> ListDef:
     from . import noi_tru as NT
     cot = [Field("Thang", "Tháng", required=True), Field("Phong", "Phòng"),
            Field("HoTen", "Học sinh", required=True), Field("Lop", "Lớp")]
-    for m in NT.MUC:
-        cot += [Field(m, NT.TEN_MUC[m], CHOICE, MUC_DANH_GIA), Field(NT.NX[m], NT.TEN_NX[m], NOTE)]
-    cot += [Field(k, NT.TEN_LOI[k], NOTE) for k in NT.LOI]
+    cot += [Field(k, NT.TEN[k], NOTE) for k in NT.KHOAN]
     cot.append(Field("NguoiDanhGia", "Người đánh giá"))
     return ListDef(NOI_TRU_DANH_GIA.name, NOI_TRU_DANH_GIA.title, tuple(cot))
 
@@ -208,7 +206,7 @@ _HD = {
     NOI_TRU_DANH_GIA.name: [
         "4. Mỗi dòng là một học sinh trong một tháng (ghi tháng dạng 10/2026, thuộc năm học chọn "
         "lúc nhập). Học sinh phải đang ở phòng nội trú; cột Phòng để trống thì tìm trong mọi "
-        "phòng. Mức để trống = Tốt. Mỗi ô nhận xét tối đa 1000 ký tự.",
+        "phòng. Mỗi dòng cần ít nhất một mục nhận xét; mỗi ô tối đa 1000 ký tự.",
         "6. Học sinh đã có đánh giá tháng đó: ghi đè theo file, ô để trống giữ nội dung cũ."],
 }
 
