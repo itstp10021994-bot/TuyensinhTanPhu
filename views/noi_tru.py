@@ -50,8 +50,9 @@ if loi:
         else:
             st.warning("Chưa đọc được list nội trú trên SharePoint (lỗi kết nối hoặc quyền).",
                        icon=":material/warning:")
-        with st.expander("Chi tiết kỹ thuật"):
-            st.code(loi, language=None, wrap_lines=True)
+        if quan_ly:
+            with st.expander("Chi tiết kỹ thuật"):
+                st.code(ui.an_bi_mat(loi), language=None, wrap_lines=True)
         if quan_ly and st.button("Tạo list nội trú", type="primary",
                                  icon=":material/playlist_add:"):
             with st.status("Đang tạo list…", expanded=True) as stt:

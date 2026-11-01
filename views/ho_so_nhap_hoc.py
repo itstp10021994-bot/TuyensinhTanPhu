@@ -249,6 +249,10 @@ def rut_dialog(rec: dict):
 
 @ui.dialog("Xóa hồ sơ nhập học")
 def delete_dialog(rec: dict):
+    if not ui.duoc_xoa(ui.XOA_NH):
+        st.error("Chỉ **Quản trị / Giáo vụ** được xóa hồ sơ. Học sinh nghỉ: dùng **Rút hồ sơ**.",
+                 icon=":material/lock:")
+        return
     st.write(f"Xóa vĩnh viễn hồ sơ của **{rec.get('HoTen')}**?")
     st.caption("Không thể hoàn tác.")
     c1, c2 = st.columns(2)
@@ -406,8 +410,8 @@ def card(r: dict, selected: bool):
             if tt != "Rút hồ sơ" and st.button("Rút hồ sơ…", key=f"rut_{rid}", width="stretch",
                                                 icon=":material/block:"):
                 rut_dialog(r)
-            if st.button("Xóa hồ sơ…", key=f"xoa_{rid}", width="stretch",
-                         icon=":material/delete:"):
+            if ui.duoc_xoa(ui.XOA_NH) and st.button("Xóa hồ sơ…", key=f"xoa_{rid}",
+                                                    width="stretch", icon=":material/delete:"):
                 delete_dialog(r)
 
 
@@ -725,11 +729,12 @@ def doi_chieu_dialog():
                                         "Chọn": st.column_config.CheckboxColumn(width="small")},
                          key=f"dc_ed_{up.file_id}_{ui.data_version()}")
     chon = sua[sua["Chọn"]]
-    cach = st.radio("Cách xử lý", ["Xóa hẳn hồ sơ", "Giữ hồ sơ, đánh dấu \"Không học tiếp\""],
+    cach = st.radio("Cách xử lý", (["Xóa hẳn hồ sơ"] if ui.duoc_xoa(ui.XOA_NH) else [])
+                    + ["Giữ hồ sơ, đánh dấu \"Không học tiếp\""],
                     horizontal=True, key="dc_cach",
                     help="Đánh dấu Không học tiếp: hồ sơ ẩn khỏi danh sách đang học và báo cáo, "
                          "vẫn xem lại được. Xóa hẳn: không khôi phục được.")
-    ngung = not cach.startswith("Xóa")
+    ngung = not cach.startswith("Xóa") or not ui.duoc_xoa(ui.XOA_NH)  # kiểm tra lại quyền
     ui.download_excel(f"Tải danh sách {len(chon)} em (lưu lại trước khi xử lý)",
                       chon.drop(columns=["Chọn", "id"]), f"KhongCoTrongVEMIS_{nam_hoc}.xlsx",
                       key="dc_tai")

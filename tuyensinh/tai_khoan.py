@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import threading
 import time
 
 from .schema import QUYEN_MAC_DINH, TAI_KHOAN, TRANG, VAI_TRO
@@ -29,6 +30,35 @@ def dung_mat_khau(mat_khau: str, chuoi_bam: str) -> bool:
         return hmac.compare_digest(tinh.hex(), h)
     except (ValueError, TypeError):
         return False
+
+
+# ---------------------------------------------------------------- chống dò mật khẩu
+SAI_TOI_DA = 5          # số lần sai liên tiếp
+KHOA_GIAY = 300         # khóa tạm 5 phút
+_SAI: dict[str, list[float]] = {}
+_SAI_LOCK = threading.Lock()
+
+
+def con_khoa(ten_dang_nhap: str) -> int:
+    """Số giây còn bị khóa đăng nhập (0 = không khóa). Dùng chung mọi phiên trên máy chủ."""
+    k = _ten(ten_dang_nhap) or "?"
+    now = time.monotonic()
+    with _SAI_LOCK:
+        ds = [t for t in _SAI.get(k, []) if now - t < KHOA_GIAY]
+        _SAI[k] = ds
+        if len(ds) >= SAI_TOI_DA:
+            return int(KHOA_GIAY - (now - ds[-SAI_TOI_DA])) + 1
+    return 0
+
+
+def ghi_sai(ten_dang_nhap: str):
+    with _SAI_LOCK:
+        _SAI.setdefault(_ten(ten_dang_nhap) or "?", []).append(time.monotonic())
+
+
+def xoa_sai(ten_dang_nhap: str):
+    with _SAI_LOCK:
+        _SAI.pop(_ten(ten_dang_nhap) or "?", None)
 
 
 def _ten(v) -> str:

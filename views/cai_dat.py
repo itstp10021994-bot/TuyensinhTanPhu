@@ -6,7 +6,7 @@ import streamlit as st
 
 from tuyensinh import config, importer, services, tai_khoan, ui
 from tuyensinh import noi_tru as NT
-from tuyensinh.schema import (ALL_LISTS, GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, NOI_TRU_DANH_GIA,
+from tuyensinh.schema import (ALL_LISTS, NHAP_DUOC, NHAT_KY, GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, NOI_TRU_DANH_GIA,
                               NOI_TRU_PHONG, QUYEN_MAC_DINH, TAI_KHOAN, TRANG, TUYEN_SINH, VAI_TRO)
 from tuyensinh.ui_noi_tru import nhap_phan_phong
 
@@ -25,9 +25,14 @@ if pw and not S.get("_admin_ok") and not ui.is_admin():
     with ui.section("Cần quyền quản trị"):
         entered = st.text_input("Mật khẩu quản trị", type="password")
         if st.button("Mở khóa", type="primary", icon=":material/lock_open:"):
-            if hmac.compare_digest(entered, str(pw)):
+            if tai_khoan.con_khoa("__admin__"):
+                st.error("Sai mật khẩu quá nhiều lần — thử lại sau ít phút.")
+                st.stop()
+            if hmac.compare_digest(entered.encode(), str(pw).encode()):
+                tai_khoan.xoa_sai("__admin__")
                 S["_admin_ok"] = True
                 st.rerun()
+            tai_khoan.ghi_sai("__admin__")
             st.error("Sai mật khẩu.")
     st.stop()
 
@@ -143,7 +148,7 @@ def render_giay_to():
                  "app tạm dùng danh mục mặc định. Bấm ⟳ trên thanh menu để thử lại.",
                  icon=":material/cloud_off:")
         with st.expander("Chi tiết lỗi"):
-            st.code(err[:1500], language=None)
+            st.code(ui.an_bi_mat(err[:1500]), language=None)
     elif err:
         c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
         c1.warning(f"Chưa có list **{ten_list}** trên SharePoint — app đang dùng danh mục mặc "
@@ -237,11 +242,65 @@ with _k[3]:
               width="stretch", help="Đọc lại toàn bộ list từ SharePoint")
     st.caption("Sửa thẳng trên SharePoint sẽ hiện lên app sau tối đa 10 phút, hoặc bấm nút này.")
 
-tab_tk, tab_dl, tab_dm, tab_kn = st.tabs([":material/manage_accounts: Tài khoản & phân quyền",
-                                         ":material/swap_vert: Nhập / xuất dữ liệu",
-                                         ":material/checklist: Danh mục",
-                                         ":material/cloud_sync: Kết nối SharePoint"],
+tab_tk, tab_dl, tab_dm, tab_nk, tab_kn = st.tabs([
+    ":material/manage_accounts: Tài khoản & phân quyền", ":material/swap_vert: Nhập / xuất dữ liệu",
+    ":material/checklist: Danh mục", ":material/history: Nhật ký hoạt động",
+    ":material/cloud_sync: Kết nối SharePoint"],
                                         key="cd_tab", on_change="rerun")
+
+# ------------------------------------------------------------------ nhật ký hoạt động
+def render_nhat_ky():
+    """Ai làm gì, lúc nào: mỗi thao tác ghi thành công và mỗi lần đăng nhập (app tự ghi)."""
+    items = ui.records(NHAT_KY, optional=True)
+    err = ui.list_error(NHAT_KY)
+    if err and ("does not exist" in err or "404" in err or not items):
+        with ui.section("Nhật ký hoạt động"):
+            st.info("Cần tạo list **NhatKy_HoatDong** trên SharePoint (một lần) để app bắt đầu "
+                    "ghi nhật ký.", icon=":material/info:")
+            if st.button("Tạo list nhật ký", type="primary", icon=":material/playlist_add:",
+                         key="nk_tao"):
+                with st.status("Đang tạo list…", expanded=True) as stt:
+                    try:
+                        importer.setup_lists(storage, log=stt.write, lists=[NHAT_KY])
+                        stt.update(label="Đã tạo list", state="complete")
+                    except Exception as e:
+                        stt.update(label="Không tạo được list", state="error")
+                        ui.error_state(e, compact=True)
+                        return
+                ui.refresh()
+                st.rerun()
+        return
+    df = pd.DataFrame(items, columns=["ThoiGian", "NguoiDung", "VaiTro", "HanhDong", "Trang",
+                                      "ChiTiet"]).fillna("")
+    df = df.sort_values("ThoiGian", ascending=False)
+    with ui.section("Nhật ký hoạt động", f"{len(df)} dòng · mới nhất trước. App tự ghi khi lưu / "
+                    "sửa / xóa / nhập dữ liệu và khi đăng nhập."):
+        c1, c2, c3 = st.columns([1.2, 1.2, 2], vertical_alignment="bottom")
+        ai = c1.selectbox("Người thao tác", ["Tất cả", *sorted(set(df["NguoiDung"]) - {""})],
+                          key="nk_ai")
+        loai = c2.selectbox("Loại", ["Tất cả", "Đăng nhập", "Xóa", "Lưu / sửa", "Nhập dữ liệu"],
+                            key="nk_loai")
+        tim = c3.text_input("Tìm", key="nk_tim", placeholder="Hành động, trang, chi tiết…")
+        x = df
+        if ai != "Tất cả":
+            x = x[x["NguoiDung"] == ai]
+        hd = x["HanhDong"].str.lower()
+        if loai == "Đăng nhập":
+            x = x[hd.str.contains("đăng nhập")]
+        elif loai == "Xóa":
+            x = x[hd.str.contains("xóa")]
+        elif loai == "Nhập dữ liệu":
+            x = x[hd.str.contains("nhập|tạo") & ~hd.str.contains("đăng nhập")]
+        elif loai == "Lưu / sửa":
+            x = x[hd.str.contains("lưu|cập nhật|đổi|chuyển|xếp")]
+        if tim:
+            x = x[x.apply(lambda r: tim.lower() in " ".join(map(str, r.values)).lower(), axis=1)]
+        st.dataframe(x.head(1000).rename(columns={
+            "ThoiGian": "Thời gian", "NguoiDung": "Người thao tác", "VaiTro": "Vai trò",
+            "HanhDong": "Hành động", "ChiTiet": "Chi tiết"}), hide_index=True, width="stretch",
+            height=min(38 + 35 * max(len(x.head(1000)), 1), 560))
+        ui.download_excel("Tải nhật ký (Excel)", x, "NhatKyHoatDong.xlsx", key="nk_tai")
+
 
 # ------------------------------------------------------------------ nhập Excel
 TEN_MAU = {TUYEN_SINH.name: "Data tuyển sinh", NHAP_HOC.name: "Hồ sơ nhập học",
@@ -265,9 +324,9 @@ def render_nhap(up):
         sheets = []
     c1, c2, c3 = st.columns(3)
     guess = importer.guess_list(sheets)
-    ld = c1.selectbox("Nhập vào list", ALL_LISTS, index=ALL_LISTS.index(guess),
+    ld = c1.selectbox("Nhập vào list", NHAP_DUOC, index=NHAP_DUOC.index(guess),
                       format_func=lambda x: f"{TEN_MAU[x.name]} ({config.list_name(x.name)})")
-    ld = next(x for x in ALL_LISTS if x.name == ld.name)  # selectbox trả bản sao, không phải chính đối tượng
+    ld = next(x for x in NHAP_DUOC if x.name == ld.name)  # selectbox trả bản sao, không phải chính đối tượng
     co_nam = ld not in (GIAY_TO, TAI_KHOAN)
     nam = c3.selectbox("Năm học" + (" cho dòng để trống" if ld in (TUYEN_SINH, NHAP_HOC) else ""),
                        config.school_years(), disabled=not co_nam,
@@ -369,6 +428,10 @@ with tab_tk:
 with tab_dm:
     render_giay_to()
 
+# ------------------------------------------------------------------ nhật ký
+with tab_nk:
+    render_nhat_ky()
+
 # ------------------------------------------------------------------ nhập / xuất
 with tab_dl:
     with ui.section("Việc dữ liệu ở các trang khác"):
@@ -383,7 +446,7 @@ with tab_dl:
                     "qua."):
         st.markdown("**Bước 1 — Tải file mẫu** của list cần nhập")
         g = st.columns(3)
-        for i, ld_mau in enumerate(ALL_LISTS):
+        for i, ld_mau in enumerate(NHAP_DUOC):
             g[i % 3].download_button(
                 TEN_MAU[ld_mau.name], lambda ld_mau=ld_mau: importer.file_mau(ld_mau),
                 file_name=f"Mau_{ld_mau.name}.xlsx", mime=ui.XLSX, on_click="ignore",

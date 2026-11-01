@@ -148,8 +148,8 @@ def _dien(ld, rows):
 
 
 def test_mau_du_cho_moi_list():
-    from tuyensinh.schema import ALL_LISTS
-    for ld in ALL_LISTS:
+    from tuyensinh.schema import NHAP_DUOC
+    for ld in NHAP_DUOC:
         buf, hdr = _dien(ld, [])
         assert importer.guess_list([ld.name]) is ld
         # không có cột app tự quản lý

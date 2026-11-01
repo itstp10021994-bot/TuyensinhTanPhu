@@ -95,36 +95,53 @@ if not _has_auth() and not S.get("tk"):
 
     try:
         _items = ui.records(TAI_KHOAN, optional=True)
-    except Exception:
-        _items = []
+        _loi_tk = ui.list_error(TAI_KHOAN)
+    except Exception as _e:
+        _items, _loi_tk = [], str(_e) or "lỗi kết nối"
     _tks = tai_khoan.dang_hoat_dong(_items)
+    # Không đọc được list tài khoản (lỗi mạng / flow): KHÔNG mở cửa — vẫn bắt đăng nhập.
+    # Chỉ khi list chưa được tạo (lần cài đặt đầu tiên) mới chạy chế độ không tài khoản.
+    _loi_doc_tk = bool(_loi_tk) and "does not exist" not in _loi_tk
     if _tks:
         # Mã ghi nhớ do trình duyệt gửi về (lần chạy đầu là None). Không chờ: vẫn hiện ô đăng
         # nhập, mã tới sau sẽ tự đăng nhập — trình duyệt chặn bộ nhớ cũng không bị kẹt.
         _ma = ui.ghi_nho("ghi_nho_doc", "" if S.pop("_xoa_ghi_nho", False) else None)
         if _ma and not S.get("_da_dang_xuat"):
             S["tk"] = tai_khoan.tu_ma_ghi_nho(_items, _ma, ui.cookie_secret())
-    if _tks and not S.get("tk"):
+    if (_tks or _loi_doc_tk) and not S.get("tk"):
         _, mid, _ = st.columns([1, 1.1, 1])
         with mid, st.container(border=True):
             st.image(_logo, width=260)
             st.markdown("### Đăng nhập")
+            if _loi_doc_tk:
+                st.warning("Chưa đọc được danh sách tài khoản từ SharePoint (lỗi kết nối). Bấm "
+                           "**Thử lại** sau ít phút, hoặc đăng nhập bằng mật khẩu quản trị.",
+                           icon=":material/cloud_off:")
+                st.button("Thử lại", icon=":material/refresh:", on_click=ui.refresh)
             with st.form("dang_nhap", border=False):
                 _u = st.text_input("Tên đăng nhập", autocomplete="username")
                 _p = st.text_input("Mật khẩu", type="password", autocomplete="current-password")
                 _nho = st.checkbox("Ghi nhớ đăng nhập trên máy này (30 ngày)", value=True)
                 _ok = st.form_submit_button("Đăng nhập", type="primary", icon=":material/login:",
                                             width="stretch")
-            if _ok:
+            _khoa = tai_khoan.con_khoa(_u) if _ok else 0
+            if _khoa:
+                st.error(f"Sai mật khẩu quá {tai_khoan.SAI_TOI_DA} lần — tài khoản tạm khóa, thử "
+                         f"lại sau {(_khoa + 59) // 60} phút.", icon=":material/lock_clock:")
+            elif _ok:
                 _tk = tai_khoan.dang_nhap(_tks, _u, _p)
                 if _tk:
+                    tai_khoan.xoa_sai(_u)
                     S["tk"] = _tk
+                    ui.ghi_nhat_ky("Đăng nhập", _tk.get("TenDangNhap", ""))
                     S["_vua_dang_nhap"] = True
                     S.pop("_da_dang_xuat", None)
                     _t = next(t for t in _items if str(t.get("id")) == _tk["id"])
                     # không tích ghi nhớ -> xóa mã cũ (nếu có) trên máy này
                     S["_ghi_nho"] = tai_khoan.tao_ma_ghi_nho(_t, ui.cookie_secret()) if _nho else ""
                     st.rerun()
+                tai_khoan.ghi_sai(_u)
+                ui.ghi_nhat_ky("Đăng nhập sai", f"tên đăng nhập: {str(_u)[:60]}")
                 st.error("Sai tên đăng nhập hoặc mật khẩu.", icon=":material/error:")
             st.caption("Chưa có tài khoản hoặc quên mật khẩu: liên hệ người quản trị app.")
             # Lối vào dự phòng khi chưa có / quên tài khoản Quản trị: mật khẩu ADMIN_PASSWORD
@@ -144,11 +161,18 @@ if not _has_auth() and not S.get("tk"):
                         _mk = st.text_input("Mật khẩu quản trị", type="password")
                         _ok2 = st.form_submit_button("Vào bằng quyền quản trị",
                                                      icon=":material/admin_panel_settings:")
-                    if _ok2:
+                    _khoa2 = tai_khoan.con_khoa("__admin__") if _ok2 else 0
+                    if _khoa2:
+                        st.error(f"Sai mật khẩu quản trị quá {tai_khoan.SAI_TOI_DA} lần — thử lại "
+                                 f"sau {(_khoa2 + 59) // 60} phút.", icon=":material/lock_clock:")
+                    elif _ok2:
                         if hmac.compare_digest(_mk.encode(), str(_pw).encode()):
+                            tai_khoan.xoa_sai("__admin__")
                             S["tk"] = tai_khoan.phien_quan_tri()
+                            ui.ghi_nhat_ky("Đăng nhập bằng mật khẩu quản trị")
                             S.pop("_da_dang_xuat", None)
                             st.rerun()
+                        tai_khoan.ghi_sai("__admin__")
                         st.error("Sai mật khẩu quản trị.", icon=":material/error:")
         _dung_lai()
 if "_ghi_nho" in S:  # lưu mã ghi nhớ sau khi đăng nhập; giữ đến khi trình duyệt xác nhận

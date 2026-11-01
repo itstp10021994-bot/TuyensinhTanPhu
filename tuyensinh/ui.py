@@ -510,6 +510,7 @@ def refresh():
     store = _data_store()
     with store["lock"]:
         store["lists"].clear()
+    store.pop("nhat_ky_tat", None)
     invalidate()
     st.toast("Đã tải lại dữ liệu mới nhất từ SharePoint", icon=":material/refresh:")
 
@@ -643,9 +644,49 @@ def doi_giao_dien(theme: str, slugs: list[str]) -> None:
     _giao_dien(key="ts_giao_dien", data={"theme": theme, "slugs": slugs}, height=0)
 
 
+XOA_TS = ("Quản trị",)                  # được xóa liên hệ Data tuyển sinh
+XOA_NH = ("Quản trị", "Giáo vụ")       # được xóa hồ sơ nhập học
+
+
+def duoc_xoa(vai_tro: tuple) -> bool:
+    """Quyền xóa vĩnh viễn theo vai trò (app chưa dùng tài khoản: không giới hạn). Kiểm tra cả
+    lúc hiện nút và ngay trước khi xóa — không chỉ ẩn nút."""
+    tk = st.session_state.get("tk")
+    return not tk or tk.get("VaiTro") in vai_tro
+
+
 def is_admin() -> bool:
     tk = st.session_state.get("tk")
     return bool(tk and tk.get("VaiTro") == "Quản trị")
+
+
+def ghi_nhat_ky(hanh_dong: str, chi_tiet: str = ""):
+    """Ghi một dòng nhật ký hoạt động (chạy nền, lỗi không ảnh hưởng thao tác chính). List
+    NhatKy_HoatDong chưa tạo thì bỏ qua cho đến khi tải lại dữ liệu."""
+    from .schema import NHAT_KY
+
+    store = _data_store()
+    if store.get("nhat_ky_tat"):
+        return
+    tk = st.session_state.get("tk") or {}
+    try:
+        from urllib.parse import urlparse
+        trang = urlparse(st.context.url or "").path.strip("/").rsplit("/", 1)[-1] or "tong-quan"
+    except Exception:
+        trang = ""
+    dong = {"ThoiGian": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "NguoiDung": current_user() or "(không đăng nhập)",
+            "VaiTro": tk.get("VaiTro", ""), "HanhDong": str(hanh_dong)[:250],
+            "Trang": trang[:100], "ChiTiet": an_bi_mat(chi_tiet)[:1000]}
+
+    def ghi():
+        try:
+            _base_storage().create_item(NHAT_KY.name, dong)
+        except Exception as e:  # list chưa có: tắt ghi nhật ký tới lần tải lại
+            if "does not exist" in str(e) or "no such" in str(e).lower():
+                store["nhat_ky_tat"] = True
+
+    threading.Thread(target=ghi, daemon=True).start()
 
 
 def mutate(fn, *args, success: str | None = None, **kwargs):
@@ -660,6 +701,9 @@ def mutate(fn, *args, success: str | None = None, **kwargs):
         error_state(e, compact=True)
         return None
     invalidate()
+    ghi_nhat_ky(success or getattr(fn, "__name__", "Ghi dữ liệu"),
+                getattr(fn, "__name__", "") + (f" · {args[1]}" if len(args) > 1
+                                               and isinstance(args[1], str) else ""))
     if success:
         st.toast(success, icon=":material/check_circle:")
     return res
@@ -813,11 +857,35 @@ def _sp_message(msg: str) -> str:
     return m.group(1).replace("\\'", "'") if m else ""
 
 
+def an_bi_mat(text: str) -> str:
+    """Che khóa / chữ ký / token trong thông báo lỗi (URL flow Power Automate có `sig=`)."""
+    import re
+
+    text = re.sub(r"(?i)([?&](?:sig|sv|sp|code|key|token|access_token|client_secret|api-key)=)"
+                  r"[^&\s'\"]+", r"\1***", str(text))
+    text = re.sub(r'(?i)("(?:key|token|password|secret|client_secret)"\s*:\s*")[^"]*"',
+                  r'\1***"', text)
+    text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._\-]+", r"\1***", text)
+    return re.sub(r"(?i)(/workflows/)[0-9a-f]{20,}", r"\1***", text)
+
+
+def _xem_chi_tiet_loi() -> bool:
+    """Chi tiết kỹ thuật của lỗi: chỉ Quản trị (hoặc khi app chưa có tài khoản — cài đặt ban đầu)."""
+    if is_admin():
+        return True
+    if st.session_state.get("tk"):
+        return False
+    try:
+        return not st.user.is_logged_in
+    except Exception:
+        return True
+
+
 def error_state(err: Exception, compact: bool = False):
-    msg = str(err)
+    msg = an_bi_mat(str(err))
     if not _is_connection_error(err):
-        friendly = "Đã xảy ra lỗi không mong muốn. Thử tải lại trang; nếu vẫn lỗi, gửi phần " \
-                   "chi tiết kỹ thuật bên dưới cho người quản trị."
+        friendly = "Đã xảy ra lỗi không mong muốn. Thử tải lại trang; nếu vẫn lỗi, báo người " \
+                   "quản trị."
     elif "Thiếu cấu hình" in msg:
         friendly = msg
     elif "quá thời gian chờ" in msg or "timed out" in msg.lower():
@@ -840,8 +908,11 @@ def error_state(err: Exception, compact: bool = False):
     if not compact:
         st.markdown("### Không tải được trang")
     st.error(friendly, icon=icon)
-    with st.expander("Chi tiết kỹ thuật"):
-        st.code(msg if compact else traceback.format_exc(), language=None)
+    if _xem_chi_tiet_loi():
+        with st.expander("Chi tiết kỹ thuật"):
+            st.code(msg if compact else an_bi_mat(traceback.format_exc()), language=None)
+    else:
+        st.caption("Nếu lỗi lặp lại, báo người quản trị (thời điểm và thao tác vừa làm).")
     if "Cài đặt" in friendly:
         page_link("views/cai_dat.py", label="Mở Cài đặt & đồng bộ", icon=":material/settings:")
     if not compact:

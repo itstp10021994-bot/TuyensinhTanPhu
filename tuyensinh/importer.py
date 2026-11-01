@@ -10,7 +10,7 @@ import pandas as pd
 
 from . import config, danh_muc, services
 from .export_vemis import COLUMNS, HEADER_ROW
-from .schema import (ALL_LISTS, BOOL, CHOICE, DATE, GIAY_TO, MUC_DANH_GIA, NHAP_HOC, NOI_TRU_DANH_GIA,
+from .schema import (ALL_LISTS, NHAP_DUOC, BOOL, CHOICE, DATE, GIAY_TO, MUC_DANH_GIA, NHAP_HOC, NOI_TRU_DANH_GIA,
                      NOI_TRU_PHONG, NOTE, NUMBER, TAI_KHOAN, TUYEN_SINH, VAI_TRO, Field, ListDef)
 from .storage.base import Storage
 from .storage.convert import ColumnMap
@@ -99,7 +99,7 @@ def guess_list(sheet_names: list[str]) -> ListDef:
     """Nhận list theo tên sheet (file mẫu đặt tên sheet = tên list)."""
     if TUYEN_SINH.name in sheet_names:
         return TUYEN_SINH
-    for ld in ALL_LISTS:
+    for ld in NHAP_DUOC:
         if ld.name in sheet_names:
             return ld
     if "DSHS" in sheet_names:  # file danh sách nội trú của Tổ quản nhiệm

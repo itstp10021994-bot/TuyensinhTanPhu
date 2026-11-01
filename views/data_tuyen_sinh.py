@@ -118,6 +118,10 @@ def withdraw_dialog(rec: dict):
 
 @ui.dialog("Xóa liên hệ")
 def delete_dialog(rec: dict):
+    if not ui.duoc_xoa(ui.XOA_TS):
+        st.error("Chỉ **Quản trị** được xóa liên hệ. Học sinh không theo học nữa: dùng **Rút hồ "
+                 "sơ**.", icon=":material/lock:")
+        return
     st.write(f"Xóa vĩnh viễn **{rec['HoTenHS']}** ({rec['SDT']}) khỏi Data tuyển sinh?")
     st.caption("Không thể hoàn tác. Nếu học sinh chỉ không theo học nữa, hãy dùng **Rút hồ sơ**.")
     c1, c2 = st.columns(2)
@@ -167,8 +171,8 @@ def card(r: dict, selected: bool):
             if step != "Rút hồ sơ" and st.button("Rút hồ sơ…", key=f"rut_{rid}",
                                                   width="stretch", icon=":material/block:"):
                 withdraw_dialog(r)
-            if st.button("Xóa liên hệ…", key=f"xoa_{rid}", width="stretch",
-                         icon=":material/delete:"):
+            if ui.duoc_xoa(ui.XOA_TS) and st.button("Xóa liên hệ…", key=f"xoa_{rid}",
+                                                    width="stretch", icon=":material/delete:"):
                 delete_dialog(r)
 
 
@@ -245,7 +249,8 @@ def render_right(item_id: str | None):
                 ui.mo_sau(withdraw_dialog, rec)
                 back_to_list()
                 st.rerun()
-            if st.button("Xóa liên hệ…", icon=":material/delete:", width="stretch"):
+            if ui.duoc_xoa(ui.XOA_TS) and st.button("Xóa liên hệ…", icon=":material/delete:",
+                                                    width="stretch"):
                 ui.mo_sau(delete_dialog, rec)
                 back_to_list()
                 st.rerun()

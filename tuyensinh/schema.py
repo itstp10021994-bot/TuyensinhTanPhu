@@ -354,7 +354,23 @@ TAI_KHOAN = ListDef(
     ),
 )
 
-ALL_LISTS = (TUYEN_SINH, NHAP_HOC, GIAY_TO, TAI_KHOAN, NOI_TRU_PHONG, NOI_TRU_DANH_GIA)
+# Nhật ký hoạt động: mỗi thao tác ghi thành công / đăng nhập một dòng (chỉ Quản trị xem)
+NHAT_KY = ListDef(
+    name="NhatKy_HoatDong",
+    title="Nhật ký hoạt động (ai làm gì, lúc nào)",
+    fields=(
+        Field("ThoiGian", "Thời gian"),
+        Field("NguoiDung", "Người thao tác"),
+        Field("VaiTro", "Vai trò"),
+        Field("HanhDong", "Hành động"),
+        Field("Trang", "Trang"),
+        Field("ChiTiet", "Chi tiết", NOTE),
+    ),
+)
+
+# list có file mẫu nhập Excel (nhật ký do app tự ghi, không nhập tay)
+NHAP_DUOC = (TUYEN_SINH, NHAP_HOC, GIAY_TO, TAI_KHOAN, NOI_TRU_PHONG, NOI_TRU_DANH_GIA)
+ALL_LISTS = NHAP_DUOC + (NHAT_KY,)
 
 
 # Cột của Data_NhapHoc không có trong biểu mẫu VEMIS (chỉ dùng trong app / SharePoint)
