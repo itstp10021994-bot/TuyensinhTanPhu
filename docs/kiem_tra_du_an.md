@@ -95,3 +95,19 @@ Dự án **đã tách lớp khá rõ**, tương đương cấu trúc đề xuấ
 | **F. Responsive & QA** | Kiểm tra 1920/1440/1366/1024/768/390, sửa vỡ bố cục; dọn lint | Không |
 | **G. Triển khai** | Hướng dẫn secrets, biến môi trường, sao lưu / khôi phục | Không |
 | *Cần duyệt* | Giới hạn quyền Xóa theo vai trò (#4); Nhật ký hoạt động — thêm list SharePoint (#5) | Đổi quy trình / thêm list |
+
+---
+
+## 7. Trạng thái thực hiện (01/11/2026)
+
+| Bước | Trạng thái | Commit |
+|---|---|---|
+| A. Bảo mật: fail-closed khi lỗi đọc tài khoản (#1), che bí mật + chi tiết lỗi chỉ Quản trị (#2), khóa tạm sau 5 lần sai (#3), quyền xóa theo vai trò (#4), nhật ký hoạt động (#5) | ✅ Xong | `dfe10cc` |
+| B. Design system: `static/styles/tokens.css` (+ tối), CSS tách khỏi Python, màu ngữ nghĩa | ✅ Xong | `246a702` |
+| C. Khung ứng dụng: tiêu đề + breadcrumb thống nhất, chân thanh bên người dùng + phiên bản | ✅ Xong | `a6cc209` |
+| D. Bảng dữ liệu: chế độ Bảng, thanh lọc gọn, chọn nhiều dòng + thao tác hàng loạt | ✅ Xong | `6bdc010` |
+| E. Biểu mẫu: gợi ý mẫu nhập, cảnh báo định dạng tại ô (không đổi quy tắc lưu) | ✅ Xong | `0f44f59` |
+| F. QA 6 cỡ màn hình × 7 trang, lint (#13), điểm dạng chữ (#14) | ✅ Xong | `d0227e5` |
+| G. Tài liệu triển khai / sao lưu / khôi phục | ✅ Xong | `docs/trien_khai.md` |
+| #15 Bảng tra phường mới → quận cũ | ⏳ Chờ danh sách đối chiếu chính thức | — |
+| Chuyển Altair → Plotly | ❌ Không làm (giữ Altair, tránh thêm phụ thuộc) | — |
