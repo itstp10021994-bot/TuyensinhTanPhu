@@ -283,3 +283,5 @@ section[data-testid="stSidebar"] {border-right: 1px solid var(--border);}
 .tp-side-ver {font-size: .7rem; color: var(--text-3); margin: .2rem .2rem 0;}
 /* thanh lọc gọn (tìm kiếm · Bộ lọc · Thẻ/Bảng): chừa chỗ cho thanh công cụ nổi của bảng */
 .st-key-ts_loc, .st-key-nh_loc {margin-bottom: 1.9rem !important;}
+/* ô nhập: chiều cao thống nhất */
+.stApp [data-baseweb="input"], .stApp [data-baseweb="select"] > div {min-height: 2.5rem;}

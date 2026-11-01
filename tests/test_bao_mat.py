@@ -30,3 +30,14 @@ def test_khoa_tam_khi_sai_nhieu_lan():
     assert tai_khoan.con_khoa("KIEM_TRA_KHOA ") > 0  # không phân biệt hoa thường / khoảng trắng
     tai_khoan.xoa_sai(ten)
     assert tai_khoan.con_khoa(ten) == 0
+
+
+def test_kiem_tra_o_nhap():
+    from tuyensinh.ui import kiem_tra_o, loai_o_nhap
+    assert loai_o_nhap("DienThoaiMe") == "sdt" and loai_o_nhap("KhanCap_SDT") == "sdt"
+    assert loai_o_nhap("EmailCha") == "email" and loai_o_nhap("CanCuocNGH") == "can_cuoc"
+    assert loai_o_nhap("HoTen") == ""
+    assert kiem_tra_o("sdt", "0901 234 567") == "" and kiem_tra_o("sdt", "12345")
+    assert kiem_tra_o("email", "a@b.vn") == "" and kiem_tra_o("email", "ab.vn")
+    assert kiem_tra_o("can_cuoc", "079 215 016 553") == "" and kiem_tra_o("can_cuoc", "123")
+    assert kiem_tra_o("sdt", "") == ""

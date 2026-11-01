@@ -831,7 +831,44 @@ def field_input(f: Field, record: dict, prefix: str, container=st, label: str | 
         return container.text_area(label, value=str(v or ""), key=key, height=96, disabled=ro)
     if f.type == CHOICE:
         return _choice_input(f, record, prefix, container, label, key, v)
-    return container.text_input(label, value=str(v or ""), key=key, disabled=ro)
+    loai = loai_o_nhap(f.key)
+    val = container.text_input(label, value=str(v or ""), key=key, disabled=ro,
+                               placeholder=GOI_Y_NHAP.get(loai, ""))
+    canh_bao = "" if ro else kiem_tra_o(loai, val)
+    if canh_bao:  # báo ngay tại ô (chỉ nhắc — không chặn lưu, quy tắc lưu giữ nguyên)
+        container.caption(f":orange[:material/warning: {canh_bao}]")
+    return val
+
+
+GOI_Y_NHAP = {"sdt": "vd 0901 234 567", "email": "ten@email.com", "can_cuoc": "12 chữ số"}
+
+
+def loai_o_nhap(key: str) -> str:
+    """Loại ô nhập theo tên trường: số điện thoại / email / căn cước (gợi ý + kiểm tra tại ô)."""
+    k = key.lower()
+    if "dienthoai" in k or k.endswith("sdt") or k == "sdt":
+        return "sdt"
+    if "email" in k:
+        return "email"
+    if k.startswith("cancuoc"):
+        return "can_cuoc"
+    return ""
+
+
+def kiem_tra_o(loai: str, val: str) -> str:
+    """Thông báo định dạng chưa đúng ("" = đúng hoặc trống)."""
+    import re
+
+    v = str(val or "").strip()
+    if not v or not loai:
+        return ""
+    if loai == "sdt" and not re.fullmatch(r"0\d{9,10}", services.normalize_phone(v)):
+        return "SĐT chưa đúng: 10–11 số, bắt đầu bằng 0"
+    if loai == "email" and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v):
+        return "Email chưa đúng định dạng"
+    if loai == "can_cuoc" and not re.fullmatch(r"\d{9}|\d{12}", re.sub(r"\s", "", v)):
+        return "Căn cước: 12 chữ số (CMND cũ: 9 số)"
+    return ""
 
 
 @st.cache_data(show_spinner=False)
