@@ -124,12 +124,13 @@ DASH_CFG = {
         "panels": ["xnh_tongquan", "xnh_khoi", "xnh_chedo", "xnh_doichieu", "xnh_diaban",
                    "xnh_truongcu"]},
 }
-H_O = 188  # chiều cao biểu đồ trong ô: dải chỉ số + 2 hàng ô vừa một màn hình
+H_O = 150  # chiều cao biểu đồ trong ô: dải chỉ số + 2 hàng ô vừa một màn hình
 H_TC = 300  # trình chiếu: vừa màn hình 1920×1080 (16:9) khi bấm F11
 # Trình chiếu: ẩn menu trái, thanh trên, bộ lọc, ô chọn mẫu; nội dung dùng hết bề ngang
 TRINH_CHIEU_CSS = """<style>
 section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
 header[data-testid="stHeader"], .st-key-tp_toolbar, .st-key-tp_ai, .st-key-bc_loc,
+.st-key-tp_page_head,
 .st-key-bc_rep {display: none !important;}
 .block-container {padding: .9rem 1.6rem 1rem !important; max-width: none !important;}
 .bi-o b {font-size: 2.1rem;} .bi-o em {font-size: .86rem;} .bi-o {padding: .75rem 1.1rem .8rem;}
@@ -232,7 +233,7 @@ def dashboard(ds: list, ctx, sel_khoi, lon: bool = False):
 
 
 # ------------------------------------------------------------------ trang
-# trang gọn: không khối tiêu đề lớn — tên trang đã có ở thanh bên trái
+_hanh_dong = ui.page_header("Báo cáo", eyebrow="Phân tích")  # gọn: dashboard vừa một màn hình
 
 # chọn nhóm (thanh ngang) + mẫu báo cáo (ô chọn) + bộ lọc chung — cùng một hàng
 groups = list(dict.fromkeys(r.group for r in reports.REPORTS))
@@ -244,8 +245,10 @@ if tc:
     st.html(f'<div class="bi-banner"><b>BÁO CÁO {escape(str(S.get("bc_grp", "")).upper())}</b>'
             f'<span>Trường TH, THCS và THPT Tân Phú · Năm học {nam_hoc} · cập nhật '
             f'{date.today():%d/%m/%Y}</span></div>')
-r1, r2, r3 = st.columns([3, 1.5, .62], vertical_alignment="bottom", gap="small")
-all_slot = r3.container(horizontal=True, gap="small", horizontal_alignment="right")
+r1, r2 = st.columns([3, 1.4], vertical_alignment="bottom", gap="small")
+# nút tải tất cả + trình chiếu: ở tiêu đề trang (khi trình chiếu tiêu đề ẩn -> đưa xuống hàng chọn)
+all_slot = (r2.container(horizontal=True, gap="small", horizontal_alignment="right") if tc
+            else _hanh_dong)
 grp = r1.segmented_control("Nhóm báo cáo", groups, key="bc_grp", required=True,
                            label_visibility="collapsed")
 in_grp = [r for r in reports.REPORTS if r.group == grp]
@@ -348,9 +351,9 @@ def _all_reports() -> bytes:
     return reports.excel(items, SCHOOL, nam_hoc)
 
 
-all_slot.download_button("", _all_reports, icon=":material/folder_zip:",
+all_slot.download_button("Tải tất cả", _all_reports, icon=":material/folder_zip:",
                          file_name=f"BaoCao_TongHop_{nam_hoc}_{date.today():%Y%m%d}.xlsx",
-                         mime=ui.XLSX, on_click="ignore", width="stretch",
+                         mime=ui.XLSX, on_click="ignore",
                          help="Tải tất cả báo cáo: một file Excel, mỗi báo cáo một sheet (theo "
                               "bộ lọc hiện tại)")
 if rid == DASH:

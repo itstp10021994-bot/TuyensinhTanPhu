@@ -758,7 +758,8 @@ def doi_chieu_dialog():
 
 
 def render_page():
-    actions = ui.page_header("Hồ sơ nhập học", f"Năm học {nam_hoc}")
+    actions = ui.page_header("Hồ sơ nhập học", f"Hồ sơ học sinh, giấy tờ, xếp lớp · năm học {nam_hoc}",
+                             eyebrow="Tuyển sinh")
     view_all = nh
     # Việc ít dùng gom vào "Công cụ"; nút chính để riêng
     cong_cu = actions.popover("Công cụ", icon=":material/construction:")

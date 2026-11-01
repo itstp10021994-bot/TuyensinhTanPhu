@@ -21,7 +21,8 @@ def with_money(frame):
     return frame.assign(SoTienXacNhan=frame["SoTienXacNhan"].map(ui.money))
 
 
-actions = ui.page_header("Kế toán", f"Xác nhận giữ chỗ và hoàn phí · năm học {nam_hoc}")
+actions = ui.page_header("Kế toán", f"Xác nhận giữ chỗ và hoàn phí · năm học {nam_hoc}",
+                         eyebrow="Tài chính")
 export_slot = actions.container(width="content")
 
 giu = ts[ts["GiuCho"] == "Đã giữ chỗ"]

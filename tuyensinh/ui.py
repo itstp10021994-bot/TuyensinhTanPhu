@@ -560,18 +560,34 @@ def inject_css():
     st.session_state["_dlg_mo"] = False  # chưa mở hộp thoại nào trong lần chạy này
 
 
+def chan_thanh_ben():
+    """Chân thanh bên: người đang dùng (chữ cái đầu, họ tên, vai trò) + phiên bản app."""
+    from . import __version__
+
+    tk = st.session_state.get("tk") or {}
+    ten = current_user() or "Chưa đăng nhập"
+    vai = tk.get("VaiTro") or ("Microsoft 365" if ten != "Chưa đăng nhập" else "")
+    chu = "".join(w[0] for w in ten.split()[-2:]).upper() or "?"
+    with st.sidebar:
+        st.html(f'<div class="tp-side-user"><span class="av" aria-hidden="true">{escape(chu)}'
+                f'</span><span class="ten"><b>{escape(ten)}</b><em>{escape(vai)}</em></span></div>'
+                f'<p class="tp-side-ver">Quản lý tuyển sinh · phiên bản {__version__}</p>')
+
+
 def page_header(title: str, subtitle: str | None = None, eyebrow: str | None = None):
-    """Tiêu đề trang; trả về container bên phải để đặt nút hành động."""
-    left, right = st.columns([3, 2], vertical_alignment="bottom", gap="medium")
+    """Tiêu đề trang thống nhất: nhóm chức năng (breadcrumb) · tiêu đề · mô tả ngắn; trả về
+    vùng bên phải để đặt nút hành động chính."""
+    khung = st.container(key="tp_page_head")
+    left, right = khung.columns([3, 2], vertical_alignment="bottom", gap="medium")
     html = ""
     if eyebrow:
-        html += f'<p class="tp-eyebrow">{escape(eyebrow)}</p>'
+        html += (f'<p class="tp-eyebrow"><span>{escape(eyebrow)}</span>'
+                 f'<span aria-hidden="true"> › </span>{escape(title)}</p>')
     html += f'<h1 class="tp-title">{escape(title)}</h1>'
     if subtitle:
         html += f'<p class="tp-sub">{escape(subtitle)}</p>'
     left.html(html)
     actions = right.container(horizontal=True, horizontal_alignment="right", gap="small")
-    st.space("small")
     return actions
 
 

@@ -379,7 +379,8 @@ def filters(step: str):
 
 
 def render_page():
-    actions = ui.page_header("Data tuyển sinh", f"Năm học {nam_hoc}")
+    actions = ui.page_header("Data tuyển sinh", f"Liên hệ, tư vấn và hồ sơ tuyển sinh · năm học {nam_hoc}",
+                             eyebrow="Tuyển sinh")
     export_slot = actions.container(width="content")
     add = actions.button("Thêm liên hệ", icon=":material/person_add:", type="primary")
     if add:

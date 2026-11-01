@@ -28,7 +28,7 @@ MAU = BD.MUC_MAU
 NGAN = {"Tốt": "T", "Khá": "K", "Trung bình": "TB", "Chưa tốt": "CT"}
 
 actions = ui.page_header("Nội trú", f"Đánh giá hằng ngày: nề nếp, học tập, sức khỏe - tâm lý "
-                                    f"và nhận xét · năm học {nam_hoc}")
+                                    f"và nhận xét · năm học {nam_hoc}", eyebrow="Học sinh")
 
 # ------------------------------------------------------------------ dữ liệu
 phongs_all = ui.records(NOI_TRU_PHONG, optional=True)

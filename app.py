@@ -206,6 +206,7 @@ for _ten, _ks in _NHOM:
     if _ds:
         _nav[_ten] = _ds
 pg = st.navigation(_nav, position="sidebar", expanded=True)
+ui.chan_thanh_ben()
 # Vừa đăng nhập: mở trang chính của vai trò (vd Kế toán -> Kế toán, GV quản nhiệm -> Nội trú)
 _TRANG_VAI_TRO = {"Tuyển sinh": "ts", "Kế toán": "kt", "Giáo vụ": "nh", "GV quản nhiệm": "nt",
                   "Tổ trưởng quản nhiệm": "nt", "Chỉ xem báo cáo": "bc"}

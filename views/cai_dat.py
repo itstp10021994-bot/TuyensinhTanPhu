@@ -11,8 +11,8 @@ from tuyensinh.schema import (ALL_LISTS, NHAP_DUOC, NHAT_KY, GIAY_TO, GIAY_TO_NH
 from tuyensinh.ui_noi_tru import nhap_phan_phong
 
 S = st.session_state
-ui.page_header("Cài đặt & đồng bộ", "Tài khoản · nhập / xuất dữ liệu · danh mục · kết nối "
-               "SharePoint")
+ui.page_header("Cài đặt & đồng bộ", "Tài khoản · nhập / xuất dữ liệu · danh mục · nhật ký · "
+               "kết nối SharePoint", eyebrow="Hệ thống")
 
 # Bảo vệ trang bằng mật khẩu quản trị (ADMIN_PASSWORD trong Secrets), nếu có đặt
 pw = config.get("ADMIN_PASSWORD")
