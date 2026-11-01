@@ -248,6 +248,89 @@ tab_tk, tab_dl, tab_dm, tab_nk, tab_kn = st.tabs([
     ":material/cloud_sync: Kết nối SharePoint"],
                                         key="cd_tab", on_change="rerun")
 
+# ------------------------------------------------------------------ chuẩn hóa địa giới
+NHAN_COT = {f.key: f.label for ld in (TUYEN_SINH, NHAP_HOC) for f in ld.fields}
+
+
+def render_dia_gioi():
+    """Kiểm tra + chuẩn hóa tỉnh / phường-xã của Data tuyển sinh và Hồ sơ nhập học (mọi năm)
+    về danh mục địa giới MỚI (34 tỉnh, 3.321 phường/xã — không còn quận/huyện)."""
+    from tuyensinh import dia_gioi as DG
+    with ui.section("Chuẩn hóa địa giới hành chính mới",
+                    "Đưa Tỉnh/Thành và Phường/Xã của mọi hồ sơ (mọi năm học) về đúng tên trong "
+                    "danh mục mới sau sáp nhập (34 tỉnh, 3.321 phường/xã) — giống danh mục VEMIS. "
+                    "Tên tắt / tỉnh cũ tự đổi; ô không khớp chắc chắn được liệt kê để chọn tay."):
+        if not st.toggle("Kiểm tra dữ liệu", key="dg_bat",
+                         help="Đọc toàn bộ Data tuyển sinh và Hồ sơ nhập học để so với danh mục"):
+            return
+        for ld, ten in ((NHAP_HOC, "Hồ sơ nhập học"), (TUYEN_SINH, "Data tuyển sinh")):
+            items = ui.records(ld)
+            thay, khong = DG.kiem_tra(items, ld.name)
+            so_o = sum(len(t["cot"]) for t in thay)
+            st.markdown(f"**{ten}** · {len(items)} hồ sơ")
+            k = st.columns(3)
+            ui.kpi(k[0], "Hồ sơ cần chuẩn hóa", len(thay), f"{so_o} ô")
+            ui.kpi(k[1], "Ô không khớp (chọn tay)", sum(khong.values()),
+                   f"{len(khong)} giá trị khác nhau")
+            ui.kpi(k[2], "Đã đúng danh mục", len(items) - len(thay))
+            if thay:
+                mau = pd.DataFrame([{"Học sinh": t["ten"], "Cột": NHAN_COT.get(c, c),
+                                     "Hiện tại": cu or "(trống)", "Chuẩn mới": moi}
+                                    for t in thay for c, (cu, moi) in t["cot"].items()])
+                st.dataframe(mau.head(300), hide_index=True, width="stretch",
+                             height=min(38 + 35 * min(len(mau), 300), 320))
+                if len(mau) > 300:
+                    st.caption(f"Hiện 300 / {len(mau)} ô sẽ đổi.")
+                if st.button(f"Chuẩn hóa {len(thay)} hồ sơ ({so_o} ô)", type="primary",
+                             icon=":material/auto_fix_high:", key=f"dg_go_{ld.name}",
+                             help="Nên tải bản sao lưu (mục Sao lưu dữ liệu) trước"):
+                    bar = st.progress(0.0, text="Đang ghi lên SharePoint…")
+                    if ui.mutate(DG.ghi, storage, ld.name, thay,
+                                 progress=lambda d, t: bar.progress(d / max(t, 1),
+                                                                    text=f"Đã ghi {d}/{t}"),
+                                 success=f"Đã chuẩn hóa địa giới {len(thay)} hồ sơ "
+                                         f"{ten}") is not None:
+                        st.rerun()
+            if khong:
+                with st.expander(f"{sum(khong.values())} ô không khớp — chọn phường/xã mới",
+                                 expanded=not thay):
+                    st.caption("Thường là phường/xã cũ trước sáp nhập (vd \"Phường 14\") hoặc "
+                               "viết sai. Chọn phường/xã mới tương ứng; để trống = giữ nguyên.")
+                    ds = sorted(khong.items(), key=lambda kv: -kv[1])
+                    xa_dung = sorted({x for (_, t, _x), _n in ds for x in _xa_moi(t)})
+                    bang = pd.DataFrame([{"Cột": NHAN_COT.get(c, c), "Tỉnh/Thành": t or "(?)",
+                                          "Giá trị hiện tại": x or "(tỉnh không nhận ra)",
+                                          "Số ô": n, "Phường/Xã mới": None}
+                                         for (c, t, x), n in ds])
+                    sua = st.data_editor(
+                        bang, hide_index=True, width="stretch", key=f"dg_ax_{ld.name}",
+                        disabled=["Cột", "Tỉnh/Thành", "Giá trị hiện tại", "Số ô"],
+                        column_config={"Phường/Xã mới": st.column_config.SelectboxColumn(
+                            options=xa_dung, help="Chọn trong danh mục mới của tỉnh đó")})
+                    anh_xa = {(c, t, x): moi for ((c, t, x), _n), moi in
+                              zip(ds, sua["Phường/Xã mới"]) if moi and x}
+                    sai_tinh = [moi for ((c, t, x), _n), moi in zip(ds, sua["Phường/Xã mới"])
+                                if moi and moi not in _xa_moi(t)]
+                    if sai_tinh:
+                        st.warning("Có phường/xã đã chọn không thuộc tỉnh của dòng đó: "
+                                   + ", ".join(sai_tinh[:5]), icon=":material/warning:")
+                    elif anh_xa and st.button(f"Áp dụng {len(anh_xa)} lựa chọn",
+                                              icon=":material/done_all:",
+                                              key=f"dg_ax_go_{ld.name}"):
+                        thay2 = DG.ap_dung_anh_xa(items, ld.name, anh_xa)
+                        if ui.mutate(DG.ghi, storage, ld.name, thay2,
+                                     success=f"Đã cập nhật {len(thay2)} hồ sơ") is not None:
+                            st.rerun()
+            if not thay and not khong:
+                st.success(f"{ten}: mọi địa chỉ đã đúng danh mục mới.",
+                           icon=":material/check_circle:")
+
+
+def _xa_moi(tinh: str) -> list[str]:
+    from tuyensinh import danh_muc
+    return danh_muc.xa_of(tinh) if tinh else []
+
+
 # ------------------------------------------------------------------ nhật ký hoạt động
 def render_nhat_ky():
     """Ai làm gì, lúc nào: mỗi thao tác ghi thành công và mỗi lần đăng nhập (app tự ghi)."""
@@ -434,6 +517,7 @@ with tab_nk:
 
 # ------------------------------------------------------------------ nhập / xuất
 with tab_dl:
+    render_dia_gioi()
     with ui.section("Việc dữ liệu ở các trang khác"):
         st.markdown("- **Chuyển học sinh cũ sang năm mới**: Hồ sơ nhập học → *Công cụ* → "
                     "*Lên lớp từ năm trước*.\n"

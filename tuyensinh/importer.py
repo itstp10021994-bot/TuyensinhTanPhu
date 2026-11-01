@@ -92,7 +92,8 @@ def read_vemis(src) -> pd.DataFrame:
         raw[k] = raw[k].fillna("").str.strip().str.lower().eq("x")
     for k in ("NgaySinh", "NgayVaoTruong", "NgayCapCanCuoc"):
         raw[k] = pd.to_datetime(raw[k], dayfirst=True, errors="coerce").dt.date
-    return raw.drop(columns=["STT"])
+    from .dia_gioi import chuan_bang  # "TP. Hồ Chí Minh" -> "Thành phố Hồ Chí Minh"…
+    return chuan_bang(raw.drop(columns=["STT"]))
 
 
 def guess_list(sheet_names: list[str]) -> ListDef:
