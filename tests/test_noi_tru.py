@@ -1,4 +1,4 @@
-"""Phân hệ nội trú: phòng, quyền nhập, lưu đánh giá theo phòng-ngày, báo cáo."""
+"""Phân hệ nội trú: phòng, quyền nhập, lưu đánh giá theo học sinh-tháng, báo cáo."""
 import sys
 from datetime import date
 from pathlib import Path
@@ -38,58 +38,74 @@ def test_phong_va_quyen(st_):
     assert NT.la_quan_ly(TT) and not NT.la_quan_ly(GV1) and NT.la_quan_ly(None)
 
 
-def test_luu_danh_gia_ghi_de_va_bao_cao(st_):
-    p = NT.luu_phong(st_, [], NAM, "P101", "", GV1, ["1", "2"])
-    ngay = date(2026, 10, 19)  # thứ Hai
-    dong = [{"id": "1", "ten": "An", "lop": "6A1", "NeNep": "Tốt", "HocTap": "Chưa tốt",
-             "HocTap_NX": "Ngủ gật khi học bài", "SucKhoe": "Khá",
-             "DiemSang": "Giúp bạn dọn phòng", "DinhHuong": "Nhắc giờ ngủ"},
-            {"id": "2", "ten": "Bình", "lop": "6A1"}]  # để trống = Tốt
-    NT.luu_danh_gia(st_, [], NAM, ngay, p, dong, "Cô Hoa")
-    dg = st_.list_items(NOI_TRU_DANH_GIA.name)
-    assert len(dg) == 1 and dg[0]["SoChuaTot"] == 1
-    # lưu lại cùng phòng, cùng ngày -> ghi đè, không tạo bản ghi mới
-    dong[0]["HocTap"] = "Khá"
-    NT.luu_danh_gia(st_, dg, NAM, ngay, p, dong, "Cô Hoa")
-    NT.luu_danh_gia(st_, st_.list_items(NOI_TRU_DANH_GIA.name), NAM, date(2026, 10, 20), p,
-                    [dict(dong[0], NeNep="Trung bình", HocTap="Chưa tốt"), dong[1]], "Cô Hoa")
+def test_thang_cua_nam_va_doc_thang():
+    ds = NT.thang_cua_nam(NAM)
+    assert ds[0] == "2026-08" and ds[-1] == "2027-07" and len(ds) == 12
+    assert NT.thang_mac_dinh(NAM, date(2026, 11, 3)) == "2026-11"
+    assert NT.thang_mac_dinh(NAM, date(2028, 1, 1)) == "2027-07"
+    assert NT.thang_mac_dinh(NAM, date(2025, 1, 1)) == "2026-08"
+    assert NT.ten_thang("2026-10") == "Tháng 10/2026"
+    for v in ("10/2026", "Tháng 10/2026", "2026-10", "15/10/2026", date(2026, 10, 5),
+              "2026-10-01 00:00:00"):
+        assert NT.chuan_thang(v) == "2026-10", v
+    assert NT.chuan_thang("13/2026") == "" and NT.chuan_thang("") == ""
+
+
+def test_luu_danh_gia_thang_ghi_de_va_bao_cao(st_):
+    p = NT.luu_phong(st_, [], NAM, "P101", "", GV1, ["1", "2", "3"])
+    an, binh = {"id": "1", "ten": "An", "lop": "6A1"}, {"id": "2", "ten": "Bình", "lop": "6A1"}
+    NT.luu_danh_gia_thang(st_, [], NAM, "2026-10", an, p,
+                          {"NeNep": "Tốt", "HocTap": "Chưa tốt",
+                           "HocTap_NX": "Chưa thuộc bài", "SucKhoe": "Khá",
+                           "DiemSang": "Giúp bạn dọn phòng", "DinhHuong": "Nhắc giờ ngủ"},
+                          "Cô Hoa")
+    NT.luu_danh_gia_thang(st_, st_.list_items(NOI_TRU_DANH_GIA.name), NAM, "2026-10", binh, p,
+                          {}, "Cô Hoa")  # để trống = Tốt
     dg = st_.list_items(NOI_TRU_DANH_GIA.name)
     assert len(dg) == 2
-    long = NT.bang_dai(dg, NAM)
-    assert len(long) == 4
-    an = long[(long["Ngày"] == ngay) & (long["Học sinh"] == "An")].iloc[0]
-    assert an["Học tập"] == "Khá" and an["Sức khỏe - Tâm lý"] == "Khá"
-    assert an["Điểm sáng trong tháng"] == "Giúp bạn dọn phòng"
-    assert an["Nhận xét học tập"] == "Ngủ gật khi học bài"
+    r = NT.tim_danh_gia(dg, "1", "2026-10", NAM)
+    assert r["HocTap"] == "Chưa tốt" and r["Phong"] == "P101" and NT.can_chu_y(r)
+    assert r["NgayDanhGia"][:10] == date.today().isoformat()
+    # lưu lại cùng em, cùng tháng -> ghi đè, không tạo bản ghi mới
+    NT.luu_danh_gia_thang(st_, dg, NAM, "2026-10", an, p,
+                          {"HocTap": "Khá", "HocTap_NX": "Đã tiến bộ"}, "Cô Hoa")
+    NT.luu_danh_gia_thang(st_, st_.list_items(NOI_TRU_DANH_GIA.name), NAM, "2026-09", an, p,
+                          {"NeNep": "Trung bình"}, "Cô Hoa")
+    dg = st_.list_items(NOI_TRU_DANH_GIA.name)
+    assert len(dg) == 3
+    long = NT.bang_thang(dg, NAM)
+    an10 = long[(long["Tháng"] == "2026-10") & (long["Học sinh"] == "An")].iloc[0]
+    assert an10["Học tập"] == "Khá" and an10["Nhận xét học tập"] == "Đã tiến bộ"
+    assert an10["Điểm sáng trong tháng"] == ""  # ghi đè cả bản ghi theo cửa sổ đánh giá
     with pytest.raises(ValueError, match="không hợp lệ"):
-        NT.luu_danh_gia(st_, dg, NAM, ngay, p, [{"id": "1", "NeNep": "Xuất sắc"}], "x")
+        NT.luu_danh_gia_thang(st_, dg, NAM, "2026-10", an, p, {"NeNep": "Xuất sắc"}, "x")
     with pytest.raises(ValueError, match="quá dài"):
-        NT.luu_danh_gia(st_, dg, NAM, ngay, p, [{"id": "1", "DiemSang": "x" * 301}], "x")
+        NT.luu_danh_gia_thang(st_, dg, NAM, "2026-10", an, p,
+                              {"DiemSang": "x" * (NT.MAX_LOI + 1)}, "x")
+    with pytest.raises(ValueError, match="không thuộc năm học"):
+        NT.luu_danh_gia_thang(st_, dg, NAM, "2027-09", an, p, {}, "x")
 
-    ngays = NT.ngay_trong_khoang(date(2026, 10, 19), date(2026, 10, 25), [0, 1, 2, 3, 4])
-    assert len(ngays) == 5
-    th = NT.tong_hop_phong(long, [p], ngays).iloc[0]
-    assert th["Ngày đã nhập"] == 2 and th["Ngày chưa nhập"] == 3
-    assert th["Nề nếp Tốt (%)"] == 75.0 and th["Lượt học tập TB/CT"] == 1
+    x = long[long["Tháng"] == "2026-10"]
+    th = NT.tong_hop_phong(x, [p], {"1", "2", "3"}).iloc[0]
+    assert th["Số HS"] == 3 and th["Đã đánh giá"] == 2 and th["Chưa đánh giá"] == 1
+    assert th["Hoàn thành (%)"] == 66.7 and th["Học tập Tốt (%)"] == 50.0
+    assert th["Em cần chú ý"] == 0
     assert NT._ty_le_tot(long.iloc[0:0]["Nề nếp"]) is None  # chưa đánh giá: "—", không phải 0%
-    cc = NT.hoc_sinh_can_chu_y(long, 2)
-    assert cc["Học sinh"].tolist() == ["An"] and cc.iloc[0]["Tổng lượt"] == 2
-    assert cc.iloc[0]["Nhận xét gần nhất"] == "Ngủ gật khi học bài"
-    assert len(NT.nhan_xet(long)) == 2  # 2 ngày của An có lời nhận xét
-    assert set(NT.theo_ngay(long)["Mục"]) == set(NT.COT_MUC)
-    tn = NT.tinh_hinh_nhap(long, [p], ngays[:3])
-    assert tn.iloc[0][["19/10", "20/10", "21/10"]].tolist() == ["✓", "✓", "✗"]
-
-
-def test_doc_du_lieu_cu_hai_muc():
-    """Bản ghi cũ (Nề nếp + Học bài tối + Ghi chú) vẫn hiện đúng ở mục Học tập."""
-    import json
-    r = {"NamHoc": NAM, "Ngay": "2026-10-01", "PhongID": "1", "Phong": "P1",
-         "DuLieu": json.dumps([{"id": "1", "ten": "An", "NeNep": "Khá", "HocBaiToi": "Chưa tốt",
-                                "GhiChu": "Ồn ào"}])}
-    row = NT.bang_dai([r], NAM).iloc[0]
-    assert row["Nề nếp"] == "Khá" and row["Học tập"] == "Chưa tốt"
-    assert row["Nhận xét nề nếp"] == "Ồn ào" and row["Sức khỏe - Tâm lý"] == ""
+    cc = NT.hoc_sinh_can_chu_y(long)
+    assert cc["Học sinh"].tolist() == ["An"] and cc.iloc[0]["Tháng"] == "Tháng 9/2026"
+    assert len(NT.nhan_xet(x)) == 1
+    xh = NT.xu_huong(long, NT.thang_cua_nam(NAM))
+    assert xh["Tháng"].unique().tolist() == ["9/2026", "10/2026"]
+    assert xh[(xh["Tháng"] == "9/2026") & (xh["Mục"] == "Nề nếp")].iloc[0]["Tỷ lệ Tốt (%)"] == 0
+    pb = NT.phan_bo_muc(x)
+    assert pb[(pb["Mục"] == "Học tập") & (pb["Mức"] == "Khá")].iloc[0]["Số HS"] == 1
+    # đánh giá nhanh: chỉ em chưa có đánh giá tháng đó
+    n = NT.danh_gia_nhanh(st_, dg, NAM, "2026-10",
+                          [(an, p), (binh, p), ({"id": "3", "ten": "Chi"}, p)], "Cô Hoa")
+    assert n == 1
+    dg = st_.list_items(NOI_TRU_DANH_GIA.name)
+    assert NT.tim_danh_gia(dg, "3", "2026-10")["NeNep"] == "Tốt"
+    assert NT.tim_danh_gia(dg, "1", "2026-10")["HocTap"] == "Khá"
 
 
 def test_nhap_phan_phong_tu_excel(st_, tmp_path):
@@ -144,7 +160,7 @@ def test_nhap_phan_phong_tu_excel(st_, tmp_path):
 
 
 def test_nhap_danh_gia_tu_file_mau(st_):
-    """File mẫu đánh giá: ghép học sinh trong phòng theo tên, gộp với đánh giá đã có."""
+    """File mẫu đánh giá tháng: ghép học sinh theo tên (trong phòng hoặc mọi phòng)."""
     from tuyensinh import importer
     from tuyensinh.schema import NHAP_HOC
     from tests.test_importer import _dien
@@ -152,39 +168,46 @@ def test_nhap_danh_gia_tu_file_mau(st_):
     a = st_.create_item(NHAP_HOC.name, {"HoTen": "Trần An", "LopHoc": "6.1", "NamHoc": NAM})
     b = st_.create_item(NHAP_HOC.name, {"HoTen": "Lê Bình", "LopHoc": "6.1", "NamHoc": NAM})
     p = NT.luu_phong(st_, [], NAM, "507", "", GV1, [str(a["id"]), str(b["id"])])
-    ngay = date(2026, 10, 19)
-    NT.luu_danh_gia(st_, [], NAM, ngay, p, [{"id": str(a["id"]), "ten": "Trần An"},
-                                            {"id": str(b["id"]), "ten": "Lê Bình",
-                                             "NeNep": "Khá"}], "Cô Hoa")
-    hdr_ngay, hdr_hoc = "Ngày", NT.TEN_MUC["HocTap"]
+    NT.luu_danh_gia_thang(st_, [], NAM, "2026-10", {"id": str(b["id"]), "ten": "Lê Bình"}, p,
+                          {"NeNep": "Khá", "DiemSang": "Chăm chỉ"}, "Cô Hoa")
+    hdr_hoc = NT.TEN_MUC["HocTap"]
     buf, hdr = _dien(NOI_TRU_DANH_GIA, [
-        {hdr_ngay: "19/10/2026", "Phòng": 507, "Học sinh": "trần an", hdr_hoc: "Chưa tốt",
+        {"Tháng": "10/2026", "Phòng": 507, "Học sinh": "trần an", hdr_hoc: "Chưa tốt",
          NT.TEN_NX["HocTap"]: "Chưa thuộc bài"},
-        {hdr_ngay: "20/10/2026", "Phòng": "507", "Học sinh": "Lê Bình"},
-        {hdr_ngay: "20/10/2026", "Phòng": "999", "Học sinh": "Lê Bình"},
-        {hdr_ngay: "20/10/2026", "Phòng": "507", "Học sinh": "Võ C"},
-        {hdr_ngay: "20/10/2026", "Phòng": "507", "Học sinh": "Trần An", hdr_hoc: "Giỏi"}])
-    assert "Người đánh giá" in hdr
+        {"Tháng": "10/2026", "Học sinh": "Lê Bình", hdr_hoc: "Khá"},  # không ghi phòng
+        {"Tháng": "10/2026", "Phòng": "999", "Học sinh": "Lê Bình"},
+        {"Tháng": "10/2026", "Phòng": "507", "Học sinh": "Võ C"},
+        {"Tháng": "10/2026", "Phòng": "507", "Học sinh": "Trần An", hdr_hoc: "Giỏi"},
+        {"Tháng": "10/2027", "Phòng": "507", "Học sinh": "Trần An"}])
+    assert "Người đánh giá" in hdr and "Tháng" in hdr
     df, skipped = importer.read_frame(buf, NOI_TRU_DANH_GIA)
     assert not skipped
     res = NT.nhap_danh_gia(st_, df, st_.list_items(NOI_TRU_PHONG.name),
                            st_.list_items(NOI_TRU_DANH_GIA.name), NAM,
                            st_.list_items(NHAP_HOC.name), "Admin")
-    assert res["ok"] == 2 and res["ban_ghi"] == 2 and [e["Dòng"] for e in res["errors"]] == [4, 5, 6]
-    long = NT.bang_dai(st_.list_items(NOI_TRU_DANH_GIA.name), NAM)
-    ngay1 = long[long["Ngày"] == ngay].set_index("Học sinh")
-    assert ngay1.loc["Trần An", "Học tập"] == "Chưa tốt"
-    assert ngay1.loc["Lê Bình", "Nề nếp"] == "Khá"  # em không có trong file: giữ nguyên
-    assert ngay1.loc["Trần An", "Người đánh giá"] == "Cô Hoa"
-    assert len(long) == 3
-    # file tải từ trang Nội trú (Xem → Tải Excel) nhập lại được
-    xuat = long.drop(columns=["PhongID", "HocSinhID"])
+    assert res["ok"] == 2 and [e["Dòng"] for e in res["errors"]] == [4, 5, 6, 7]
+    long = NT.bang_thang(st_.list_items(NOI_TRU_DANH_GIA.name), NAM).set_index("Học sinh")
+    assert len(long) == 2
+    assert long.loc["Trần An", "Học tập"] == "Chưa tốt"
+    assert long.loc["Trần An", "Người đánh giá"] == "Admin"
+    assert long.loc["Trần An", "Phòng"] == "507"
+    # em đã có đánh giá: cột có trong file ghi đè, ô trống giữ nội dung cũ
+    assert long.loc["Lê Bình", "Học tập"] == "Khá" and long.loc["Lê Bình", "Nề nếp"] == "Khá"
+    assert long.loc["Lê Bình", "Điểm sáng trong tháng"] == "Chăm chỉ"
+    # file báo cáo (Tháng dạng "Tháng 10/2026") nhập lại được
+    xuat = long.reset_index().drop(columns=["PhongID", "HocSinhID", "Ngày đánh giá"])
+    xuat["Tháng"] = xuat["Tháng"].map(NT.ten_thang)
     import io
     bio = io.BytesIO()
     xuat.to_excel(bio, index=False, sheet_name=NOI_TRU_DANH_GIA.name)
     bio.seek(0)
     df2, skipped = importer.read_frame(bio, NOI_TRU_DANH_GIA)
-    assert not skipped and len(df2) == 3
+    assert not skipped and len(df2) == 2
+    res = NT.nhap_danh_gia(st_, df2, st_.list_items(NOI_TRU_PHONG.name),
+                           st_.list_items(NOI_TRU_DANH_GIA.name), NAM,
+                           st_.list_items(NHAP_HOC.name), "Admin")
+    assert res["ok"] == 2 and not res["errors"]
+    assert len(st_.list_items(NOI_TRU_DANH_GIA.name)) == 2
 
 
 def test_mau_phan_phong_doc_duoc():
@@ -231,12 +254,12 @@ def test_theo_ho_so_ten_lop_hien_tai_bo_hs_da_xoa(st_):
     a = st_.create_item(NHAP_HOC.name, {"HoTen": "An", "Khoi": "6", "NamHoc": NAM})
     b = st_.create_item(NHAP_HOC.name, {"HoTen": "Bình", "Khoi": "9", "NamHoc": NAM})
     p = NT.luu_phong(st_, [], NAM, "308", "", GV1, [str(a["id"]), str(b["id"])])
-    NT.luu_danh_gia(st_, [], NAM, date(2026, 10, 30), p,
-                    [{"id": str(a["id"]), "ten": "An", "lop": "Khối 6"},
-                     {"id": str(b["id"]), "ten": "Bình", "lop": "Khối 9"}], "x")
+    for h in ({"id": str(a["id"]), "ten": "An", "lop": "Khối 6"},
+              {"id": str(b["id"]), "ten": "Bình", "lop": "Khối 9"}):
+        NT.luu_danh_gia_thang(st_, [], NAM, "2026-10", h, p, {}, "x")
     st_.update_item(NHAP_HOC.name, a["id"], {"LopHoc": "6.2"})
     st_.delete_item(NHAP_HOC.name, b["id"])
-    long = NT.theo_ho_so(NT.bang_dai(st_.list_items(NOI_TRU_DANH_GIA.name), NAM),
+    long = NT.theo_ho_so(NT.bang_thang(st_.list_items(NOI_TRU_DANH_GIA.name), NAM),
                          st_.list_items(NHAP_HOC.name))
     assert long[["Học sinh", "Lớp"]].values.tolist() == [["An", "6.2"]]
 

@@ -33,6 +33,9 @@ Tạo chuỗi ngẫu nhiên cho `COOKIE_SECRET`: `python -c "import secrets; pri
 2. Kiểm tra **Tài khoản & phân quyền**: có ít nhất một tài khoản **Quản trị**. Bản 2.0 chỉ cho
    *Quản trị* xóa liên hệ Data tuyển sinh, *Quản trị / Giáo vụ* xóa hồ sơ nhập học.
 3. (Khuyến nghị) đặt `COOKIE_SECRET` trong Secrets (mục 2).
+4. **Đánh giá nội trú theo tháng:** mở **Nội trú** bằng tài khoản Quản trị / Tổ trưởng quản nhiệm →
+   bấm **Tạo list nội trú** (tạo list `NoiTru_DanhGiaThang`: mỗi học sinh mỗi tháng một dòng, mỗi
+   mục một cột). List theo ngày cũ `NoiTru_DanhGia` không bị xóa hay sửa, app không dùng nữa.
 
 ## 4. Hành vi bảo mật mới (bản 2.0)
 
@@ -72,4 +75,4 @@ nên có thể quay lại từng phần:
       (dashboard + Trình chiếu), Cài đặt mở bình thường.
 - [ ] Lưu thử một hồ sơ → Cài đặt → Nhật ký hoạt động có dòng mới.
 - [ ] Tài khoản không phải Quản trị không thấy nút **Xóa liên hệ**.
-- [ ] `pytest` chạy đủ (108 bài) trước khi đẩy mã mới.
+- [ ] `pytest` chạy đủ (112 bài) trước khi đẩy mã mới.

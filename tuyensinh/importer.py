@@ -151,7 +151,7 @@ BO_QUA_MAU = {"TuyenSinhID"}  # trường app tự quản lý, không cho nhập
 
 def _mau_danh_gia() -> ListDef:
     from . import noi_tru as NT
-    cot = [Field("Ngay", "Ngày", DATE, required=True), Field("Phong", "Phòng", required=True),
+    cot = [Field("Thang", "Tháng", required=True), Field("Phong", "Phòng"),
            Field("HoTen", "Học sinh", required=True), Field("Lop", "Lớp")]
     for m in NT.MUC:
         cot += [Field(m, NT.TEN_MUC[m], CHOICE, MUC_DANH_GIA), Field(NT.NX[m], NT.TEN_NX[m], NOTE)]
@@ -206,10 +206,10 @@ _HD = {
         "lý = họ tên giáo viên quản nhiệm (trùng họ tên tài khoản thì tự gắn tài khoản).",
         "6. Nhập lại an toàn: phòng trùng tên trong năm được cập nhật theo file, không tạo trùng."],
     NOI_TRU_DANH_GIA.name: [
-        "4. Mỗi dòng là một học sinh trong một ngày; học sinh phải đang ở phòng ghi ở cột Phòng "
-        "(năm học chọn lúc nhập). Mức để trống = Tốt. Mỗi ô nhận xét tối đa 300 ký tự. File tải "
-        "ở Nội trú → Xem → Tải Excel cũng nhập lại được.",
-        "6. Phòng + ngày đã có đánh giá: em có trong file được cập nhật, các em khác giữ nguyên."],
+        "4. Mỗi dòng là một học sinh trong một tháng (ghi tháng dạng 10/2026, thuộc năm học chọn "
+        "lúc nhập). Học sinh phải đang ở phòng nội trú; cột Phòng để trống thì tìm trong mọi "
+        "phòng. Mức để trống = Tốt. Mỗi ô nhận xét tối đa 1000 ký tự.",
+        "6. Học sinh đã có đánh giá tháng đó: ghi đè theo file, ô để trống giữ nội dung cũ."],
 }
 
 

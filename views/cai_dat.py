@@ -388,7 +388,7 @@ def render_nhat_ky():
 # ------------------------------------------------------------------ nhập Excel
 TEN_MAU = {TUYEN_SINH.name: "Data tuyển sinh", NHAP_HOC.name: "Hồ sơ nhập học",
            GIAY_TO.name: "Danh mục giấy tờ", TAI_KHOAN.name: "Tài khoản đăng nhập",
-           NOI_TRU_PHONG.name: "Nội trú: phân phòng", NOI_TRU_DANH_GIA.name: "Nội trú: đánh giá"}
+           NOI_TRU_PHONG.name: "Nội trú: phân phòng", NOI_TRU_DANH_GIA.name: "Nội trú: đánh giá tháng"}
 
 
 def _bao_loi(errors: list[dict]):
@@ -482,7 +482,7 @@ def render_nhap(up):
             res = NT.nhap_danh_gia(storage, df, ui.records(NOI_TRU_PHONG, optional=True),
                                    ui.records(NOI_TRU_DANH_GIA, optional=True), nam,
                                    ui.records(NHAP_HOC), ui.current_user(), progress=prog)
-            msg = (f"Đã ghi đánh giá **{res['ok']}** lượt học sinh ({res['ban_ghi']} phòng-ngày)"
+            msg = (f"Đã ghi đánh giá tháng của **{res['ok']}** lượt học sinh"
                    f" · lỗi **{len(res['errors'])}**")
         else:
             res = importer.import_rows(storage, ld, df, nam, keep_all=keep_all or not du_lieu,

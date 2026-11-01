@@ -25,7 +25,7 @@ class FakeFlow:
                       "lists/GetByTitle('DanhMuc_GiayTo')": {"cols": [], "items": {}},
                       "lists/GetByTitle('DanhMuc_TaiKhoan')": {"cols": [], "items": {}},
                       "lists/GetByTitle('NoiTru_Phong')": {"cols": [], "items": {}},
-                      "lists/GetByTitle('NoiTru_DanhGia')": {"cols": [], "items": {}},
+                      "lists/GetByTitle('NoiTru_DanhGiaThang')": {"cols": [], "items": {}},
                       "lists/GetByTitle('NhatKy_HoatDong')": {"cols": [], "items": {}}}
         self.next_id = 1
         self.calls = []

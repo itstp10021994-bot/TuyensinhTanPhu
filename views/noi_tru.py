@@ -1,34 +1,40 @@
-"""Nội trú: giáo viên quản nhiệm phòng đánh giá nề nếp và học bài tối của từng học sinh mỗi ngày.
+"""Nội trú: giáo viên quản nhiệm phòng đánh giá THEO THÁNG từng học sinh — mỗi em một cửa sổ
+đánh giá (nề nếp, học tập, sức khỏe - tâm lý kèm nhận xét; điểm sáng, trao đổi, định hướng).
 
-- Nhập đánh giá: giáo viên quản nhiệm (phòng mình); Tổ trưởng quản nhiệm, Quản trị (mọi phòng).
-  Mặc định mọi em "Tốt", chỉ sửa em có vấn đề.
-- Xem đánh giá: mọi người vào được trang.
+- Đánh giá tháng: lưới thẻ học sinh như Data tuyển sinh; bấm tên em -> cửa sổ đánh giá.
+  Giáo viên quản nhiệm: em trong phòng mình; Tổ trưởng quản nhiệm, Quản trị: mọi em nội trú.
+  Người khác: chỉ xem.
 - Báo cáo, Phòng & giáo viên: Tổ trưởng quản nhiệm và Quản trị.
 """
-from datetime import date, timedelta
+from datetime import date
+from html import escape
 
 import pandas as pd
 import streamlit as st
 
 from tuyensinh import bieu_do as BD
 from tuyensinh import importer, ui
+from tuyensinh.danh_muc import fold
 from tuyensinh.ui_noi_tru import nhap_phan_phong
 from tuyensinh import noi_tru as NT
 from tuyensinh.schema import (MUC_DANH_GIA, NHAP_HOC, NOI_TRU_DANH_GIA, NOI_TRU_PHONG,
                               TAI_KHOAN, TUYEN_SINH)
 
 S = st.session_state
+qp = st.query_params
 nam_hoc = ui.nam_hoc()
 storage = ui.storage()
 tk = S.get("tk")
 quan_ly = NT.la_quan_ly(tk)
 hom_nay = date.today()
-THU = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
 MAU = BD.MUC_MAU
 NGAN = {"Tốt": "T", "Khá": "K", "Trung bình": "TB", "Chưa tốt": "CT"}
+NGAN_MUC = {"NeNep": "Nề nếp", "HocTap": "Học tập", "SucKhoe": "Sức khỏe"}
+CHUA_XEP = "— Chưa xếp phòng"
 
-actions = ui.page_header("Nội trú", f"Đánh giá hằng ngày: nề nếp, học tập, sức khỏe - tâm lý "
-                                    f"và nhận xét · năm học {nam_hoc}", eyebrow="Học sinh")
+actions = ui.page_header("Nội trú", f"Đánh giá hằng tháng từng học sinh: nề nếp, học tập, sức "
+                                    f"khỏe - tâm lý và nhận xét · năm học {nam_hoc}",
+                         eyebrow="Học sinh")
 
 # ------------------------------------------------------------------ dữ liệu
 phongs_all = ui.records(NOI_TRU_PHONG, optional=True)
@@ -38,12 +44,13 @@ if loi:
     chua_tao = "does not exist" in loi or "404" in loi
     with ui.section("Thiết lập phân hệ Nội trú" if chua_tao else "Không đọc được dữ liệu nội trú"):
         if chua_tao:
-            st.info("Phân hệ Nội trú cần **2 list mới trên SharePoint** (NoiTru_Phong, "
-                    "NoiTru_DanhGia) nhưng chưa được tạo. Đây là bước làm **một lần**.",
-                    icon=":material/info:")
+            st.info("Phân hệ Nội trú cần list **NoiTru_Phong** (phòng) và **NoiTru_DanhGiaThang** "
+                    "(đánh giá theo tháng — mỗi học sinh mỗi tháng một dòng) trên SharePoint nhưng "
+                    "chưa đủ. Đây là bước làm **một lần**; list đánh giá theo ngày cũ được giữ "
+                    "nguyên.", icon=":material/info:")
             if quan_ly:
-                st.markdown("Bấm **Tạo list nội trú** bên dưới — app tự tạo list và các cột "
-                            "(khoảng 30 giây).")
+                st.markdown("Bấm **Tạo list nội trú** bên dưới — app tự tạo list còn thiếu và các "
+                            "cột (khoảng 30 giây).")
             else:
                 st.markdown("Nhờ **Quản trị** hoặc **Tổ trưởng quản nhiệm** mở trang này và bấm "
                             "**Tạo list nội trú**.")
@@ -68,10 +75,12 @@ if loi:
             st.rerun()
     st.stop()
 
-phongs = NT.phong_nam(phongs_all, nam_hoc)
+phongs = sorted(NT.phong_nam(phongs_all, nam_hoc),
+                key=lambda p: NT._so_tu_nhien(str(p.get("TenPhong") or "")))
 nh = ui.df(NHAP_HOC, nam_hoc)
+dg = [r for r in dg_all if NT._s(r.get("NamHoc")) == nam_hoc]
 # tên, lớp theo hồ sơ hiện tại; học sinh đã xóa hồ sơ không còn hiện trong đánh giá / báo cáo
-long = NT.theo_ho_so(NT.bang_dai(dg_all, nam_hoc), ui.records(NHAP_HOC))
+long = NT.theo_ho_so(NT.bang_thang(dg, nam_hoc), ui.records(NHAP_HOC))
 nt = nh[nh["NoiTruBanTru"].str.startswith("Nội trú")
         & ~nh["TinhTrangHS"].isin(["Rút hồ sơ", "Không học tiếp"])]
 HS = {str(r["id"]): {"ten": r["HoTen"] or "(Chưa có tên)",
@@ -86,20 +95,60 @@ def ten_hs(i: str) -> str:
     return f"{h['ten']} · {h['lop']}" if h and h["lop"] else (h["ten"] if h else f"(HS {i})")
 
 
-# ------------------------------------------------------------------ chỉ số hôm nay
-hn = long[long["Ngày"] == hom_nay]
-k = ui.kpi_row(4, key="nt_kpis")
-ui.kpi(k[0], "Phòng nội trú", len(phongs))
-ui.kpi(k[1], "Học sinh nội trú", len(HS), f"{len(set(o_phong) & set(HS))} em đã xếp phòng")
-ui.kpi(k[2], "Phòng đã đánh giá hôm nay", f"{hn['PhongID'].nunique()}/{len(phongs)}")
-ui.kpi(k[3], "Lượt TB / Chưa tốt hôm nay",
-       int(sum(hn[c].isin(NT.CAN_CHU_Y).sum() for c in NT.COT_MUC)))
+# ------------------------------------------------------------------ tháng đang xem
+THANG = NT.thang_cua_nam(nam_hoc)
+if "nt_thang" in S and S["nt_thang"] not in THANG:  # đổi năm học: về tháng mặc định
+    del S["nt_thang"]
+thang = actions.selectbox("Tháng đánh giá", THANG, key="nt_thang", format_func=NT.ten_thang,
+                          index=THANG.index(NT.thang_mac_dinh(nam_hoc, hom_nay)),
+                          width=190, label_visibility="collapsed")
+x_thang = long[long["Tháng"] == thang]
+da_dg = {str(r.get("HocSinhID")): r for r in dg if NT._s(r.get("Thang")) == thang}
 
 phong_cua_toi = [p for p in phongs if NT.duoc_nhap(p, tk)]  # GV: phòng mình; quản lý: mọi phòng
-ten_tab = []
-if phong_cua_toi or quan_ly:  # quản lý luôn thấy tab (chưa có phòng: hướng dẫn tạo phòng)
-    ten_tab.append(":material/edit_note: Nhập đánh giá")
-ten_tab.append(":material/visibility: Xem đánh giá")
+sua_duoc = {str(p["id"]) for p in phong_cua_toi}
+# phạm vi lưới: quản lý -> mọi em nội trú (kể cả chưa xếp phòng); GV -> em phòng mình;
+# người khác -> xem mọi phòng
+pham_vi = phongs if quan_ly or not phong_cua_toi else phong_cua_toi
+HS_XEM = [(i, p) for p in pham_vi for i in NT.hs_ids(p) if i in HS]
+if quan_ly:
+    HS_XEM += [(i, None) for i in HS if i not in o_phong]
+
+
+def duoc_sua_hs(p: dict | None) -> bool:
+    return quan_ly or (p is not None and str(p.get("id")) in sua_duoc)
+
+
+def _bang_xem() -> pd.DataFrame:
+    rows = []
+    for i, p in HS_XEM:
+        r = da_dg.get(i)
+        h = HS[i]
+        rows.append({"id": i, "Học sinh": h["ten"], "Lớp": h["lop"],
+                     "Phòng": (p or {}).get("TenPhong") or CHUA_XEP,
+                     "PhongID": str((p or {}).get("id") or ""),
+                     "GV": (p or {}).get("GiaoVien") or "",
+                     "Đã": r is not None, "Chú ý": bool(r) and NT.can_chu_y(r),
+                     **{m: NT._s((r or {}).get(m)) for m in NT.MUC},
+                     "Người": NT._s((r or {}).get("NguoiDanhGia"))})
+    return pd.DataFrame(rows, columns=["id", "Học sinh", "Lớp", "Phòng", "PhongID", "GV", "Đã",
+                                       "Chú ý", *NT.MUC, "Người"])
+
+
+BANG = _bang_xem()
+
+# ------------------------------------------------------------------ chỉ số tháng
+k = ui.kpi_row(4, key="nt_kpis")
+n_da = int(BANG["Đã"].sum())
+ui.kpi(k[0], "Học sinh nội trú", len(BANG),
+       f"{len(phongs)} phòng · {sum(1 for _, p in HS_XEM if p is None)} em chưa xếp phòng"
+       if quan_ly else f"{len(pham_vi)} phòng")
+ui.kpi(k[1], f"Đã đánh giá {NT.ten_thang(thang).lower()}", n_da,
+       f"{n_da / len(BANG):.0%} học sinh" if len(BANG) else None)
+ui.kpi(k[2], "Chưa đánh giá", len(BANG) - n_da)
+ui.kpi(k[3], "Cần chú ý", int(BANG["Chú ý"].sum()), "có mục Trung bình / Chưa tốt")
+
+ten_tab = [":material/fact_check: Đánh giá tháng"]
 if quan_ly:
     ten_tab += [":material/monitoring: Báo cáo", ":material/meeting_room: Phòng & giáo viên"]
 # key + on_change="rerun": giữ đúng tab đang mở sau mỗi thao tác, chỉ vẽ tab đang mở
@@ -113,247 +162,251 @@ def _to_mau(v):
     return f"color: {m}; font-weight: 600" if m else ""
 
 
-# ------------------------------------------------------------------ nhập đánh giá
-def render_nhap():
-    if not phong_cua_toi:
-        ui.empty_state("meeting_room", "Chưa có phòng nội trú",
-                       f"Năm học {nam_hoc} chưa có phòng. Vào tab Phòng & giáo viên để tạo phòng, "
-                       "chọn giáo viên quản nhiệm và xếp học sinh — sau đó nhập đánh giá ở đây.")
+# ------------------------------------------------------------------ lưới thẻ học sinh
+def mo_hs(hid: str):
+    qp.clear()
+    qp["hs"] = hid
+
+
+def card(r: dict, selected: bool):
+    rid = r["id"]
+    with ui.card_box(rid, selected):
+        menu = ui.card_head(r["Học sinh"], rid, mo_hs)
+        if r["Đã"]:
+            tt = ui.pill("Cần chú ý", ui.TOKENS["danger"]) if r["Chú ý"] else \
+                ui.pill("Đã đánh giá", ui.TOKENS["success"])
+            muc = " ".join(f'<span style="color:{MAU.get(r[m], "#6B7280")}"><b>'
+                           f'{NGAN_MUC[m]}</b> {NGAN.get(r[m], "—")}</span>' for m in NT.MUC)
+        else:
+            tt = ui.pill("Chưa đánh giá", ui.TOKENS["warning"])
+            muc = '<span class="k">Bấm tên để đánh giá</span>'
+        st.html(f'<p class="tp-card">Lớp <b>{escape(r["Lớp"] or "—")}</b> · '
+                f'{escape(r["Phòng"])}<br>{tt} &nbsp;{muc}</p>')
+        with menu:
+            st.button("Mở đánh giá", key=f"mo_{rid}", width="stretch", on_click=mo_hs,
+                      args=(rid,), icon=":material/open_in_new:")
+            p = next((q for q in phongs if str(q.get("id")) == r["PhongID"]), None)
+            if not r["Đã"] and duoc_sua_hs(p) and st.button(
+                    "Đánh giá nhanh: Tốt cả 3 mục", key=f"nhanh_{rid}", width="stretch",
+                    icon=":material/done_all:"):
+                if ui.mutate(NT.luu_danh_gia_thang, storage, dg, nam_hoc, thang,
+                             {"id": rid, "ten": r["Học sinh"], "lop": r["Lớp"]}, p, {},
+                             ui.current_user(), success=f"Đã đánh giá {r['Học sinh']}"):
+                    st.rerun()
+
+
+def render_danh_gia():
+    if BANG.empty:
+        if quan_ly:
+            ui.empty_state("meeting_room", "Chưa có học sinh nội trú",
+                           f"Năm học {nam_hoc} chưa có học sinh nội trú. Đặt N.trú, B.trú = Nội "
+                           "trú trong Hồ sơ nhập học, rồi xếp phòng ở tab Phòng & giáo viên.")
+        else:
+            ui.empty_state("meeting_room", "Bạn chưa có phòng nội trú",
+                           "Liên hệ Tổ trưởng quản nhiệm để được phân công phòng.")
         return
-    the = st.container(key="the_noi_nhap")  # cả khung nhập trong một thẻ nổi
-    c1, c2, c3 = the.columns([1, 2.2, 1.6], vertical_alignment="bottom")
-    ngay = c1.date_input("Ngày", hom_nay, max_value=hom_nay, format="DD/MM/YYYY",
-                         key="nt_ngay")
-    phong = c2.selectbox("Phòng", phong_cua_toi, key="nt_phong",
-                         format_func=lambda p: f"{p['TenPhong']}"
-                         + (f" · {p['Khu']}" if p.get("Khu") else "")
-                         + f" · {len(NT.hs_ids(p))} học sinh"
-                         + (f" · GV {p['GiaoVien']}" if quan_ly and p.get("GiaoVien") else ""))
-    ids = [i for i in NT.hs_ids(phong) if i in HS]  # bỏ em đã xóa hồ sơ / không còn nội trú
-    if not ids:
-        with the:
-            ui.empty_state("group_off", "Phòng chưa có học sinh",
-                           "Tổ trưởng quản nhiệm xếp học sinh vào phòng ở tab Phòng & giáo viên.")
+    c1, c2, c3 = st.columns([1.6, 1.2, 2.2], vertical_alignment="bottom")
+    q = c1.text_input("Tìm học sinh", key="nt_q", icon=":material/search:",
+                      placeholder="Tên học sinh / lớp", label_visibility="collapsed")
+    ten_p = list(dict.fromkeys(BANG["Phòng"]))
+    chon_p = c2.selectbox("Phòng", ["Tất cả phòng", *ten_p], key="nt_loc_phong",
+                          label_visibility="collapsed")
+    loc = c3.segmented_control("Trạng thái", ["Tất cả", "Chưa đánh giá", "Đã đánh giá",
+                                              "Cần chú ý"], default="Tất cả", required=True,
+                               key="nt_loc_tt", label_visibility="collapsed")
+    v = BANG
+    if q.strip():
+        v = v[[fold(q) in fold(f"{a} {b}") for a, b in zip(v["Học sinh"], v["Lớp"])]]
+    if chon_p != "Tất cả phòng":
+        v = v[v["Phòng"] == chon_p]
+    if loc == "Chưa đánh giá":
+        v = v[~v["Đã"]]
+    elif loc == "Đã đánh giá":
+        v = v[v["Đã"]]
+    elif loc == "Cần chú ý":
+        v = v[v["Chú ý"]]
+    S["nt_thu_tu"] = v["id"].tolist()  # để "Lưu & em tiếp theo" đi đúng thứ tự đang xem
+    ui.card_list(v, "nt", card, qp.get("hs"), filter_state=(q, chon_p, loc, thang), cols=3,
+                 height=620)
+    con = v[~v["Đã"]]
+    ds = [({"id": r["id"], "ten": r["Học sinh"], "lop": r["Lớp"]},
+           next((p for p in phongs if str(p.get("id")) == r["PhongID"]), None))
+          for _, r in con.iterrows()]
+    ds = [(h, p) for h, p in ds if duoc_sua_hs(p)]
+    if ds:
+        c1, c2 = st.columns([3.2, 1.4], vertical_alignment="center")
+        c1.caption(f":material/info: Mỗi em một cửa sổ đánh giá — bấm tên em. Em không có vấn đề "
+                   f"gì: dùng nút bên phải để đánh giá **Tốt** cả 3 mục cho {len(ds)} em chưa "
+                   "đánh giá đang hiện (sửa lại từng em sau vẫn được).")
+        if c2.button(f"Tốt cả 3 mục cho {len(ds)} em", icon=":material/done_all:",
+                     width="stretch", key="nt_nhanh_all"):
+            if ui.mutate(NT.danh_gia_nhanh, storage, dg, nam_hoc, thang, ds, ui.current_user(),
+                         success=f"Đã đánh giá {len(ds)} học sinh") is not None:
+                st.rerun()
+
+
+# ------------------------------------------------------------------ cửa sổ đánh giá một em
+def _dong_hs():
+    qp.clear()
+
+
+def _ke_tiep(hid: str) -> str | None:
+    ds = S.get("nt_thu_tu") or [i for i, _ in HS_XEM]
+    sau = ds[ds.index(hid) + 1:] + ds[:ds.index(hid)] if hid in ds else ds
+    return next((i for i in sau if i not in da_dg), None) or (sau[0] if sau else None)
+
+
+@ui.dialog("Đánh giá nội trú theo tháng", width="large", on_dismiss=_dong_hs)
+def danh_gia_dialog(hid: str):
+    h = HS.get(hid)
+    if h is None:
+        st.warning("Học sinh này không còn trong danh sách nội trú năm học đang chọn.",
+                   icon=":material/warning:")
         return
-    cu = NT.tim_ban_ghi(dg_all, phong["id"], ngay)
-    da = {d.get("id"): d for d in NT.doc_du_lieu(cu)} if cu else {}
-    with c3:  # trạng thái ngày đang chọn
+    p = o_phong.get(hid)
+    sua = duoc_sua_hs(p)
+    cu = da_dg.get(hid) or {}
+    c1, c2 = st.columns([3, 1.4], vertical_alignment="center")
+    c1.html(f'<p class="tp-card" style="font-size:1rem"><b style="font-size:1.15rem">'
+            f'{escape(h["ten"])}</b><br>Lớp <b>{escape(h["lop"] or "—")}</b> · '
+            f'{escape((p or {}).get("TenPhong") or CHUA_XEP)}'
+            + (f' · GV {escape(p["GiaoVien"])}' if p and p.get("GiaoVien") else "")
+            + f' · <b>{NT.ten_thang(thang)}</b></p>')
+    with c2:
         if cu:
-            st.badge(f"Đã lưu · {cu.get('NguoiDanhGia') or '—'}", icon=":material/check_circle:",
+            st.badge(f"Đã lưu · {cu.get('NguoiDanhGia') or '—'} · "
+                     f"{ui.fmt_date(cu.get('NgayDanhGia'))}", icon=":material/check_circle:",
                      color="green", width="stretch")
         else:
-            st.badge("Chưa nhập — mặc định Tốt", icon=":material/edit_note:", color="blue",
+            st.badge("Chưa đánh giá — mặc định Tốt", icon=":material/edit_note:", color="blue",
                      width="stretch")
-    if len(ids) < len(NT.hs_ids(phong)):
-        the.caption(f":material/info: {len(NT.hs_ids(phong)) - len(ids)} em trong phòng không "
-                    "còn là học sinh nội trú nên không hiện — Tổ trưởng bỏ các em khỏi phòng ở tab "
-                    "Phòng & giáo viên.")
-    rows = []
-    for i in ids:
-        d = da.get(i, {})
-        h = HS.get(i, {"ten": d.get("ten") or f"(HS {i})", "lop": d.get("lop", "")})
-        r = {"id": i, "Học sinh": h["ten"], "Lớp": h["lop"]}
+    if not sua:
+        st.caption(":material/lock: Bạn chỉ xem được — giáo viên quản nhiệm của phòng, Tổ trưởng "
+                   "quản nhiệm và Quản trị mới sửa được.")
+    truoc = long[(long["HocSinhID"] == hid) & (long["Tháng"] < thang)].sort_values("Tháng")
+    if len(truoc):
+        with st.expander(f"Các tháng trước ({len(truoc)})", icon=":material/history:"):
+            t = truoc.assign(Tháng=truoc["Tháng"].map(NT.ten_thang))[
+                ["Tháng", *NT.COT_MUC, *NT.COT_LOI]]
+            st.dataframe(t.style.map(_to_mau, subset=NT.COT_MUC), hide_index=True,
+                         width="stretch", height=min(38 + 35 * len(t), 260))
+    kk = f"nt_dg_{hid}_{thang}_{ui.data_version()}"
+    with st.form(kk, border=False):
+        vals = {}
         for m in NT.MUC:
-            r[NT.TEN_MUC[m]] = d.get(m) or d.get(NT.CU.get(m, "")) or "Tốt"
-        for m in NT.MUC:
-            r[NT.TEN_NX[m]] = d.get(NT.NX[m]) or (d.get("GhiChu", "") if m == "NeNep" else "")
-        for kk in NT.LOI:
-            r[NT.TEN_LOI[kk]] = d.get(kk, "")
-        rows.append(r)
-    bang = pd.DataFrame(rows)
-    # tên cột ngắn để bảng vừa bề ngang (không kéo qua lại)
-    NGAN_MUC = {"NeNep": "Nề nếp", "HocTap": "Học tập", "SucKhoe": "Sức khỏe"}
-    doi = {**{NT.TEN_MUC[m]: NGAN_MUC[m] for m in NT.MUC},
-           **{NT.TEN_NX[m]: f"NX {NGAN_MUC[m].lower()}" for m in NT.MUC}}
-    cot_ngay = ["Học sinh", "Lớp"] + [NT.TEN_MUC[m] for m in NT.MUC] + \
-        [NT.TEN_NX[m] for m in NT.MUC]
-    cot_loi = ["Học sinh"] + [NT.TEN_LOI[k] for k in NT.LOI]
-    cao = 36 + 31 * len(bang)  # đủ mọi em, không cuộn trong bảng
-    cfg = {"id": None, "Học sinh": st.column_config.TextColumn(width=165, pinned=True),
-           "Lớp": st.column_config.TextColumn(width=52)}
-    for m in NT.MUC:
-        cfg[doi[NT.TEN_MUC[m]]] = st.column_config.SelectboxColumn(
-            options=list(MUC_DANH_GIA), required=True, width=98, help=NT.TEN_MUC[m])
-    for m in NT.MUC:
-        cfg[doi[NT.TEN_NX[m]]] = st.column_config.TextColumn(max_chars=NT.MAX_LOI,
-                                                            help=NT.TEN_NX[m])
-    n_loi = int(bang[[NT.TEN_LOI[k] for k in NT.LOI]].fillna("").ne("").any(axis=1).sum())
-    t1, t2 = the.tabs(["Đánh giá hằng ngày",
-                       "Điểm sáng · Trao đổi · Định hướng" + (f" ({n_loi})" if n_loi else "")],
-                      key="nt_nhap_tab")
-    khoa = f"{phong['id']}_{ngay}_{ui.data_version()}"
-    with t1:
-        sua1 = st.data_editor(
-            bang[["id"] + cot_ngay].rename(columns=doi), hide_index=True, width="stretch",
-            disabled=["Học sinh", "Lớp"], height=cao, row_height=31, column_config=cfg,
-            key=f"nt_ed_{khoa}").rename(columns={v: k for k, v in doi.items()})
-    with t2:
-        st.caption("Viết lời khi có — thường cuối tuần / cuối tháng. Mỗi ô tối đa "
-                   f"{NT.MAX_LOI} ký tự.")
-        sua2 = st.data_editor(
-            bang[["id"] + cot_loi], hide_index=True, width="stretch", disabled=["Học sinh"],
-            height=cao, row_height=31, key=f"nt_ed2_{khoa}",
-            column_config={"id": None,
-                           "Học sinh": st.column_config.TextColumn(width=190, pinned=True),
-                           **{NT.TEN_LOI[k]: st.column_config.TextColumn(max_chars=NT.MAX_LOI)
-                              for k in NT.LOI}})
-    sua = sua1.merge(sua2.drop(columns=["Học sinh"]), on="id", how="left")
-    can = int(sum(sua[c].isin(NT.CAN_CHU_Y).sum() for c in NT.COT_MUC))
-    co_loi = int(sua[NT.COT_LOI].fillna("").ne("").any(axis=1).sum())
-    b1, b2 = the.columns([3, 1.4], vertical_alignment="center")
-    b2.caption(f"{len(sua)} học sinh · {can} lượt TB/Chưa tốt · {co_loi} em có nhận xét")
-    if b1.button(f"Lưu đánh giá phòng {phong['TenPhong']} ngày {ngay:%d/%m/%Y}", type="primary",
-                 icon=":material/save:", width="stretch"):
-        dong = []
-        for r in sua.fillna("").to_dict("records"):
-            x = {"id": r["id"], "ten": r["Học sinh"], "lop": r["Lớp"]}
-            for m in NT.MUC:
-                x[m] = r[NT.TEN_MUC[m]]
-                x[NT.NX[m]] = r[NT.TEN_NX[m]]
-            for kk in NT.LOI:
-                x[kk] = r[NT.TEN_LOI[kk]]
-            dong.append(x)
-        if ui.mutate(NT.luu_danh_gia, storage, dg_all, nam_hoc, ngay, phong, dong,
-                     ui.current_user(), success=f"Đã lưu đánh giá phòng {phong['TenPhong']}"):
+            a, b = st.columns([1.25, 2], vertical_alignment="top")
+            vals[m] = a.segmented_control(
+                NT.TEN_MUC[m], list(MUC_DANH_GIA), default=NT._s(cu.get(m)) or "Tốt",
+                required=True, key=f"{kk}_{m}", disabled=not sua)
+            vals[NT.NX[m]] = b.text_area(
+                NT.TEN_NX[m], NT._s(cu.get(NT.NX[m])), key=f"{kk}_{m}_nx", height=76,
+                max_chars=NT.MAX_LOI, disabled=not sua,
+                placeholder="Không bắt buộc — ghi khi em có điểm cần lưu ý")
+        for kk2 in NT.LOI:
+            vals[kk2] = st.text_area(NT.TEN_LOI[kk2], NT._s(cu.get(kk2)), key=f"{kk}_{kk2}",
+                                     height=76, max_chars=NT.MAX_LOI, disabled=not sua)
+        if not sua:
+            st.form_submit_button("Đóng", width="stretch")
+            return
+        b1, b2 = st.columns(2)
+        luu = b1.form_submit_button("Lưu đánh giá", type="primary", icon=":material/save:",
+                                    width="stretch")
+        tiep = b2.form_submit_button("Lưu & em tiếp theo", icon=":material/skip_next:",
+                                     width="stretch")
+    if luu or tiep:
+        if ui.mutate(NT.luu_danh_gia_thang, storage, dg, nam_hoc, thang,
+                     {"id": hid, "ten": h["ten"], "lop": h["lop"]}, p, vals, ui.current_user(),
+                     success=f"Đã lưu đánh giá {h['ten']}") is not None:
+            nxt = _ke_tiep(hid) if tiep else None
+            qp.clear()
+            if nxt and nxt != hid:
+                qp["hs"] = nxt
             st.rerun()
-
-
-# ------------------------------------------------------------------ xem đánh giá
-def _loc_khoang(key: str, mac_dinh_ngay: int):
-    v = st.date_input("Khoảng ngày", (hom_nay - timedelta(days=mac_dinh_ngay), hom_nay),
-                      format="DD/MM/YYYY", key=key)
-    if isinstance(v, (tuple, list)) and len(v) == 2:
-        return v[0], v[1]
-    d = v[0] if isinstance(v, (tuple, list)) and v else (v or hom_nay)
-    return d, d
-
-
-def render_xem():
-    c1, c2, c3 = st.columns([1.3, 1.6, 1.6], vertical_alignment="bottom")
-    with c1:
-        tu, den = _loc_khoang("nt_xem_kh", 6)
-    ten_p = [p["TenPhong"] for p in phongs]
-    chon = c2.multiselect("Phòng", ten_p, key="nt_xem_phong", placeholder="Tất cả phòng")
-    q = c3.text_input("Tìm học sinh", key="nt_xem_q", icon=":material/search:",
-                      placeholder="Tên học sinh")
-    x = long[(long["Ngày"] >= tu) & (long["Ngày"] <= den)]
-    if chon:
-        x = x[x["Phòng"].isin(chon)]
-    if q.strip():
-        x = x[x["Học sinh"].str.lower().str.contains(q.strip().lower(), regex=False)]
-    if x.empty:
-        ui.empty_state("event_busy", "Chưa có đánh giá",
-                       f"Không có đánh giá nào từ {tu:%d/%m} đến {den:%d/%m/%Y} theo bộ lọc.")
-        return
-    kieu = st.segmented_control("Hiển thị", ["Bảng theo ngày", "Nhận xét", "Danh sách chi tiết"],
-                                default="Bảng theo ngày", required=True, key="nt_xem_kieu",
-                                label_visibility="collapsed")
-    if kieu == "Bảng theo ngày":
-        muc = st.segmented_control("Mục", NT.COT_MUC, default=NT.COT_MUC[0],
-                                   required=True, key="nt_xem_muc")
-        p = x.assign(_v=x[muc].map(NGAN).fillna(""), _c=x["Ngày"].map(lambda d: f"{d:%d/%m}")) \
-            .pivot_table(index=["Phòng", "Học sinh", "Lớp"], columns="_c", values="_v",
-                         aggfunc="last", fill_value="")
-        p = p[sorted(p.columns, key=lambda s: (s[3:], s[:2]))].reset_index()
-        st.dataframe(p.style.map(_to_mau, subset=[c for c in p.columns
-                                                  if c not in ("Phòng", "Học sinh", "Lớp")]),
-                     hide_index=True, width="stretch", height=min(38 + 35 * len(p), 640))
-        st.caption("T = Tốt · K = Khá · TB = Trung bình · CT = Chưa tốt · ô trống = chưa đánh giá")
-    elif kieu == "Nhận xét":
-        d = NT.nhan_xet(x).sort_values(["Ngày", "Phòng", "Học sinh"],
-                                       ascending=[False, True, True])
-        if d.empty:
-            ui.empty_state("notes", "Chưa có lời nhận xét",
-                           "Các em trong khoảng đã chọn chỉ được chấm mức, chưa có lời nhận xét.")
-        else:
-            st.dataframe(d, hide_index=True, width="stretch",
-                         height=min(38 + 35 * len(d), 640), column_config={
-                             "Ngày": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                             **{c: st.column_config.TextColumn(width="medium")
-                                for c in NT.COT_LOI}})
-            st.caption(f"{len(d)} lượt có nhận xét · bấm vào ô để đọc đầy đủ")
-    else:
-        d = x.sort_values(["Ngày", "Phòng", "Học sinh"], ascending=[False, True, True])
-        d = d.drop(columns=["PhongID", "HocSinhID"])
-        st.dataframe(d.style.map(_to_mau, subset=NT.COT_MUC), hide_index=True,
-                     width="stretch", height=min(38 + 35 * len(d), 640),
-                     column_config={"Ngày": st.column_config.DateColumn(format="DD/MM/YYYY")})
-    ui.download_excel("Tải Excel", x.drop(columns=["PhongID", "HocSinhID"]),
-                      f"DanhGiaNoiTru_{tu:%Y%m%d}_{den:%Y%m%d}.xlsx", key="nt_xem_xls")
 
 
 # ------------------------------------------------------------------ báo cáo
 def render_bao_cao():
-    c1, c2, c3 = st.columns([1.3, 2, 1], vertical_alignment="bottom")
-    with c1:
-        tu, den = _loc_khoang("nt_bc_kh", 29)
-    thu = c2.pills("Ngày có đánh giá", THU, selection_mode="multi", default=THU[:5],
-                   key="nt_bc_thu", help="Dùng để tính số ngày chưa nhập của từng phòng")
-    nguong = c3.number_input("Cần chú ý từ (lượt)", 1, 50, 2, key="nt_bc_nguong")
-    ngays = NT.ngay_trong_khoang(tu, min(den, hom_nay), [THU.index(t) for t in thu or THU[:5]])
-    x = long[(long["Ngày"] >= tu) & (long["Ngày"] <= den)]
-    th = NT.tong_hop_phong(x, phongs, ngays)
-    cc = NT.hoc_sinh_can_chu_y(x, nguong)
+    dang_nt = set(HS)
+    th = NT.tong_hop_phong(x_thang, phongs, dang_nt)
+    x = x_thang[x_thang["HocSinhID"].isin(dang_nt)]
+    cc = NT.hoc_sinh_can_chu_y(x)
+    i = THANG.index(thang)
+    x_truoc = long[(long["Tháng"] == THANG[i - 1]) & long["HocSinhID"].isin(dang_nt)] \
+        if i else long.iloc[0:0]
     k = ui.kpi_row(5, key="nt_bc_kpis")
-    for col, ten in zip(k, NT.COT_MUC):
-        v = NT._ty_le_tot(x[ten])
-        ui.kpi(col, f"{ten} Tốt", "—" if v is None else f"{v}%")
-    ui.kpi(k[3], "Phòng còn thiếu ngày", int((th["Ngày chưa nhập"] > 0).sum()) if len(th) else 0,
-           f"trên {len(ngays)} ngày cần đánh giá")
-    ui.kpi(k[4], "Học sinh cần chú ý", len(cc), f"từ {nguong} lượt TB/Chưa tốt")
+    n = len(dang_nt)
+    ui.kpi(k[0], "Hoàn thành đánh giá", f"{x['HocSinhID'].nunique() / n:.0%}" if n else "—",
+           f"{x['HocSinhID'].nunique()}/{n} học sinh")
+    for col, ten in zip(k[1:4], NT.COT_MUC):
+        v, v0 = NT._ty_le_tot(x[ten]), NT._ty_le_tot(x_truoc[ten])
+        ui.kpi(col, f"{ten} Tốt", "—" if v is None else f"{v:g}%",
+               f"{v - v0:+.1f} điểm so với tháng trước" if v is not None and v0 is not None
+               else None)
+    ui.kpi(k[4], "Học sinh cần chú ý", len(cc), "có mục Trung bình / Chưa tốt")
 
-    with ui.section("Tổng hợp theo phòng",
-                    f"Từ {tu:%d/%m} đến {den:%d/%m/%Y} · tỷ lệ Tốt và số ngày đã nhập"):
+    c1, c2, c3 = st.columns([1.2, 1, 1], gap="small")
+    with c1, ui.section("Xu hướng tỷ lệ Tốt", "Theo tháng trong năm học, từng mục"):
+        xh = NT.xu_huong(long[long["HocSinhID"].isin(dang_nt)], THANG[:i + 1])
+        if xh.empty:
+            ui.empty_state("show_chart", "Chưa có dữ liệu")
+        else:
+            BD.ve({"kind": "line_cat", "data": xh, "x": "Tháng", "y": "Tỷ lệ Tốt (%)",
+                   "color": "Mục", "pct": True}, height=200, gon=True, key="nt_bc_xh")
+    with c2, ui.section("Phân bố mức đánh giá", NT.ten_thang(thang)):
+        pb = NT.phan_bo_muc(x)
+        if pb["Số HS"].sum() == 0:
+            ui.empty_state("bar_chart", "Chưa có dữ liệu")
+        else:
+            pb = pb.assign(**{"Tỷ lệ (%)": pb["Số HS"] / pb.groupby("Mục")["Số HS"]
+                              .transform("sum").clip(lower=1) * 100})
+            BD.ve({"kind": "stack_cat", "horizontal": True, "data": pb, "x": "Mục",
+                   "y": "Tỷ lệ (%)", "color": "Mức", "pct": True}, height=200, gon=True,
+                  key="nt_bc_pb")
+    with c3, ui.section("Tiến độ đánh giá", "Số học sinh đã được đánh giá mỗi tháng"):
+        td = NT.tien_do_thang(long[long["HocSinhID"].isin(dang_nt)], THANG[:i + 1], n)
+        if td["Đã đánh giá"].sum() == 0:
+            ui.empty_state("bar_chart", "Chưa có dữ liệu")
+        else:
+            BD.ve({"kind": "bar", "data": td, "x": "Tháng", "y": "Đã đánh giá",
+                   "giu_thu_tu": True}, height=200, gon=True, key="nt_bc_td")
+
+    left, right = st.columns([1.25, 1], gap="small")
+    with left, ui.section("Tổng hợp theo phòng", f"{NT.ten_thang(thang)} · nhắc phòng còn em "
+                                                 "chưa đánh giá"):
         if th.empty:
             ui.empty_state("meeting_room", "Chưa có phòng")
         else:
             st.dataframe(th, hide_index=True, width="stretch",
-                         height=min(38 + 35 * len(th), 520), column_config={
-                             c: st.column_config.ProgressColumn(format="%.1f%%", min_value=0,
+                         height=min(38 + 35 * len(th), 420), column_config={
+                             c: st.column_config.ProgressColumn(format="%.0f%%", min_value=0,
                                                                 max_value=100)
-                             for c in (f"{m} Tốt (%)" for m in NT.COT_MUC)})
-    with ui.section("Học sinh cần chú ý",
-                    f"Có từ {nguong} lượt Trung bình / Chưa tốt (cộng 3 mục chấm mức)"):
+                             for c in ["Hoàn thành (%)",
+                                       *(f"{m} Tốt (%)" for m in NT.COT_MUC)]})
+    with right, ui.section("Học sinh cần chú ý", f"{NT.ten_thang(thang)} · có mục Trung bình / "
+                                                 "Chưa tốt"):
         if cc.empty:
             ui.empty_state("sentiment_satisfied", "Không có học sinh cần chú ý")
         else:
-            st.dataframe(cc, hide_index=True, width="stretch",
-                         height=min(38 + 35 * len(cc), 520))
-    left, right = st.columns(2, gap="medium")
-    with left, ui.section("Tỷ lệ Tốt theo ngày"):
-        td = NT.theo_ngay(x)
-        if td.empty:
-            ui.empty_state("show_chart", "Chưa có dữ liệu")
+            st.dataframe(cc.drop(columns=["Tháng"]).style.map(_to_mau, subset=NT.COT_MUC),
+                         hide_index=True, width="stretch", height=min(38 + 35 * len(cc), 420))
+    nx = NT.nhan_xet(x)
+    with st.expander(f"Nhận xét trong {NT.ten_thang(thang).lower()} ({len(nx)} em)",
+                     icon=":material/notes:"):
+        if nx.empty:
+            st.caption("Chưa có lời nhận xét nào trong tháng.")
         else:
-            BD.ve({"kind": "line", "data": td, "x": "Ngày", "y": "Tỷ lệ Tốt (%)",
-                   "color": "Mục", "fmt": "%d/%m", "pct": True}, height=260, key="nt_bc_td")
-    with right, ui.section("Phân bố mức đánh giá"):
-        pb = NT.phan_bo_muc(x)
-        if pb["Số lượt"].sum() == 0:
-            ui.empty_state("bar_chart", "Chưa có dữ liệu")
-        else:
-            pb = pb.assign(**{"Tỷ lệ (%)": pb["Số lượt"] / pb.groupby("Mục")["Số lượt"]
-                              .transform("sum").clip(lower=1) * 100})
-            BD.ve({"kind": "stack_cat", "horizontal": True, "data": pb, "x": "Mục",
-                   "y": "Tỷ lệ (%)", "color": "Mức", "pct": True}, height=190,
-                  key="nt_bc_pb")
-    with ui.section("Tình hình nhập đánh giá",
-                    "✓ đã nhập · ✗ chưa nhập — để nhắc giáo viên quản nhiệm"):
-        ng = ngays[-31:]
-        tn = NT.tinh_hinh_nhap(x, phongs, ng)
-        if tn.empty or not ng:
-            ui.empty_state("event_available", "Không có ngày cần đánh giá trong khoảng đã chọn")
-        else:
-            st.dataframe(tn.style.map(lambda v: "color: #FF3B30" if v == "✗" else
-                                      ("color: #34C759" if v == "✓" else "")),
-                         hide_index=True, width="stretch", height=min(38 + 35 * len(tn), 520))
-            if len(ngays) > 31:
-                st.caption("Chỉ hiện 31 ngày gần nhất; file Excel có đủ.")
+            st.dataframe(nx.drop(columns=["Tháng"]), hide_index=True, width="stretch",
+                         height=min(38 + 35 * len(nx), 520),
+                         column_config={c: st.column_config.TextColumn(width="medium")
+                                        for c in NT.COT_LOI})
+    nam = long[long["HocSinhID"].isin(dang_nt)]
     ui.download_excel("Tải báo cáo (Excel)", {
         "Tong_hop_phong": th, "Hoc_sinh_can_chu_y": cc,
-        "Tinh_hinh_nhap": NT.tinh_hinh_nhap(x, phongs, ngays),
-        "Chi_tiet": x.drop(columns=["PhongID", "HocSinhID"])},
-        f"BaoCaoNoiTru_{tu:%Y%m%d}_{den:%Y%m%d}.xlsx", primary=True, key="nt_bc_xls")
+        "Thang_nay": x.drop(columns=["PhongID", "HocSinhID"]).assign(
+            Tháng=lambda d: d["Tháng"].map(NT.ten_thang)),
+        "Ca_nam": nam.drop(columns=["PhongID", "HocSinhID"]).assign(
+            Tháng=lambda d: d["Tháng"].map(NT.ten_thang))},
+        f"BaoCaoNoiTru_{thang}.xlsx", primary=True, key="nt_bc_xls")
 
 
 # ------------------------------------------------------------------ phòng & giáo viên
@@ -523,19 +576,19 @@ def render_phong():
                         st.rerun()
 
 
+
+
 for ten, tab in tabs.items():
     if not tab.open:
         continue
     with tab:
-        if "Nhập" in ten:
-            render_nhap()
-        elif "Xem" in ten:
-            render_xem()
+        if "Đánh giá" in ten:
+            render_danh_gia()
         elif "Báo cáo" in ten:
             render_bao_cao()
         else:
             render_phong()
 
-if not phong_cua_toi and tk and not quan_ly:
-    st.caption(":material/info: Bạn chưa được phân công quản nhiệm phòng nào nên chỉ xem được "
-               "đánh giá. Liên hệ Tổ trưởng quản nhiệm để được phân phòng.")
+ui.chay_mo_sau()
+if qp.get("hs") and not ui.dialog_da_mo():  # bấm tên học sinh -> cửa sổ đánh giá, nền mờ
+    danh_gia_dialog(qp.get("hs"))

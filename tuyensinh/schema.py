@@ -310,19 +310,30 @@ NOI_TRU_PHONG = ListDef(
         Field("GhiChu", "Ghi chú", NOTE),
     ),
 )
-# Mỗi bản ghi = một phòng trong một ngày; đánh giá từng học sinh lưu dạng JSON (ghi 1 lần/phòng)
+# Đánh giá nội trú THEO THÁNG: mỗi học sinh mỗi tháng một dòng, mỗi mục một cột (đọc thẳng
+# trên SharePoint). List đánh giá theo ngày cũ (NoiTru_DanhGia) giữ nguyên, app không dùng nữa.
 NOI_TRU_DANH_GIA = ListDef(
-    name="NoiTru_DanhGia",
-    title="Đánh giá nội trú theo ngày (nề nếp, học tập, sức khỏe - tâm lý, nhận xét)",
+    name="NoiTru_DanhGiaThang",
+    title="Đánh giá nội trú theo tháng — mỗi học sinh mỗi tháng một dòng",
     fields=(
         Field("NamHoc", "Năm học", required=True),
-        Field("Ngay", "Ngày", DATE, required=True),
+        Field("Thang", "Tháng (YYYY-MM)", required=True),
+        Field("HocSinhID", "ID hồ sơ nhập học", required=True),
+        Field("HoTen", "Học sinh"),
+        Field("Lop", "Lớp"),
         Field("PhongID", "ID phòng"),
         Field("Phong", "Phòng"),
+        Field("NeNep", "Nề nếp", CHOICE, MUC_DANH_GIA),
+        Field("NeNep_NX", "Nhận xét nề nếp", NOTE),
+        Field("HocTap", "Học tập", CHOICE, MUC_DANH_GIA),
+        Field("HocTap_NX", "Nhận xét học tập", NOTE),
+        Field("SucKhoe", "Sức khỏe - Tâm lý", CHOICE, MUC_DANH_GIA),
+        Field("SucKhoe_NX", "Nhận xét sức khỏe - tâm lý", NOTE),
+        Field("DiemSang", "Điểm sáng trong tháng", NOTE),
+        Field("TraoDoi", "Quá trình trao đổi và hỗ trợ", NOTE),
+        Field("DinhHuong", "Định hướng giáo dục", NOTE),
         Field("NguoiDanhGia", "Người đánh giá"),
-        Field("DuLieu", "Đánh giá từng học sinh (JSON)", NOTE),
-        Field("SoHS", "Số học sinh", NUMBER),
-        Field("SoChuaTot", "Số lượt Trung bình / Chưa tốt", NUMBER),
+        Field("NgayDanhGia", "Ngày đánh giá", DATE),
     ),
 )
 
