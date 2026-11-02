@@ -396,8 +396,11 @@ def render_doi_che_do():
                               list(nhan), format_func=nhan.get, key=f"nt_dcd_{huong}",
                               placeholder="Gõ tên học sinh để tìm",
                               label_visibility="collapsed")
-        if st.button(f"Chuyển {len(chon)} em sang {dich}", type="primary", disabled=not chon,
-                     icon=":material/swap_horiz:", key="nt_dcd_go"):
+        ok = st.checkbox(f"Tôi xác nhận chuyển {len(chon)} em sang {dich}"
+                         + (" (các em được bỏ khỏi phòng)" if dich == "Bán trú" else ""),
+                         key=f"nt_dcd_ok_{huong}_{len(chon)}", disabled=not chon)
+        if st.button(f"Chuyển {len(chon)} em sang {dich}", type="primary",
+                     disabled=not (chon and ok), icon=":material/swap_horiz:", key="nt_dcd_go"):
             if ui.mutate(NT.doi_che_do, storage, ui.records(NHAP_HOC), ui.records(TUYEN_SINH),
                          chon, dich, phongs_all,
                          success=f"Đã chuyển {len(chon)} em sang {dich}") is not None:
@@ -453,8 +456,11 @@ def render_chua_xep():
         c1, c2 = st.columns([3.2, 1.2], vertical_alignment="center")
         c1.caption("Em không ở nội trú nữa: chuyển sang **Bán trú** — đổi cả hồ sơ nhập học "
                    "(N.trú, B.trú) và Data tuyển sinh (Chế độ); các em ra khỏi danh sách nội trú.")
+        ok_bt = c1.checkbox(f"Tôi xác nhận chuyển {len(chon)} em đã chọn sang Bán trú",
+                            key=f"nt_cx_bt_ok_{len(chon)}", disabled=not chon)
         if c2.button(f"Chuyển {len(chon)} em sang Bán trú", width="stretch",
-                     icon=":material/swap_horiz:", disabled=not chon, key="nt_cx_bt"):
+                     icon=":material/swap_horiz:", disabled=not (chon and ok_bt),
+                     key="nt_cx_bt"):
             if ui.mutate(NT.chuyen_ban_tru, storage, ui.records(NHAP_HOC),
                          ui.records(TUYEN_SINH), chon,
                          success=f"Đã chuyển {len(chon)} em sang Bán trú") is not None:

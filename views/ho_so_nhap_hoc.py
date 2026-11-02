@@ -378,6 +378,45 @@ def mon_dialog(rec: dict):
 
 
 # ================================================================== giao diện (như app cũ)
+NGOAI_TRU = "Ngoại trú (để trống)"
+
+
+@ui.dialog("Chuyển chế độ nội trú / bán trú")
+def che_do_dialog(rec: dict):
+    from tuyensinh import danh_muc
+    cu = str(rec.get("NoiTruBanTru") or "")
+    st.markdown(f"**{rec.get('HoTen')}** · {rec.get('LopHoc') or 'Khối ' + str(rec.get('Khoi') or '—')}"
+                f" · đang là **{cu or 'Ngoại trú / chưa ghi'}**")
+    lua_chon = [x for x in danh_muc.load().get("noi_tru_ban_tru", []) if x != cu]
+    lua_chon += [NGOAI_TRU] if cu else []
+    moi = st.radio("Chuyển sang", lua_chon, index=None, key=f"cd_moi_{rec['id']}")
+    if moi is None:
+        return
+    gia_tri = "" if moi == NGOAI_TRU else moi
+    het_nt, vao_nt = cu.startswith("Nội trú"), gia_tri.startswith("Nội trú")
+    hau_qua = ["Hồ sơ nhập học: **N.trú, B.trú** = " + (f"**{gia_tri}**" if gia_tri else "trống")]
+    if rec.get("TuyenSinhID"):
+        hau_qua.append("Data tuyển sinh: **Chế độ** đổi theo")
+    if het_nt and not vao_nt:
+        hau_qua.append("Nội trú: em được **bỏ khỏi phòng** và không còn trong danh sách nhận xét")
+        if rec.get("DangKyXe"):
+            hau_qua.append(f"Đăng ký xe hiện có ({rec.get('DangKyXe')}) giữ nguyên — xem lại nếu "
+                           "cần")
+    if vao_nt and not het_nt:
+        hau_qua.append("Nội trú: em hiện ở mục **chưa xếp phòng** để Tổ trưởng xếp phòng")
+    st.warning("Sau khi xác nhận:\n\n" + "\n".join(f"- {x}" for x in hau_qua),
+               icon=":material/swap_horiz:")
+    ok = st.checkbox(f"Tôi xác nhận chuyển {rec.get('HoTen')} sang {moi}",
+                     key=f"cd_ok_{rec['id']}")
+    c1, c2 = st.columns(2)
+    if c1.button("Hủy", width="stretch", key=f"cd_huy_{rec['id']}"):
+        st.rerun()
+    if c2.button("Xác nhận chuyển", type="primary", icon=":material/check:", width="stretch",
+                 disabled=not ok, key=f"cd_go_{rec['id']}"):
+        done(ui.mutate(services.cap_nhat_nhap_hoc, storage, rec["id"], {"NoiTruBanTru": gia_tri},
+                       success=f"Đã chuyển {rec.get('HoTen')} sang {moi}"))
+
+
 def card(r: dict, selected: bool):
     """Thẻ học sinh ở cột trái: thông tin + nút thao tác nhanh."""
     rid = r["id"]
@@ -406,6 +445,9 @@ def card(r: dict, selected: bool):
             if khoi >= 10 and st.button("Nhóm môn", key=f"mon_{rid}", width="stretch",
                                         icon=":material/menu_book:"):
                 mon_dialog(r)
+            if st.button("Chuyển chế độ", key=f"cd_{rid}", width="stretch",
+                         icon=":material/swap_horiz:"):
+                che_do_dialog(r)
             st.divider()
             if tt != "Rút hồ sơ" and st.button("Rút hồ sơ…", key=f"rut_{rid}", width="stretch",
                                                 icon=":material/block:"):
