@@ -108,10 +108,8 @@ def nhom_che_do(v) -> str:
 
 
 def gia_tri_nh(cu: str, nhom: str) -> str:
-    """Giá trị N.trú, B.trú mới khi đổi sang `nhom` (giữ "dân nuôi" nếu đang có)."""
-    if nhom not in ("Nội trú", "Bán trú"):
-        return ""
-    return f"{nhom} dân nuôi" if _s(cu).endswith("dân nuôi") else nhom
+    """Giá trị N.trú, B.trú mới khi đổi sang `nhom`: chỉ "Nội trú" / "Bán trú"."""
+    return nhom if nhom in ("Nội trú", "Bán trú") else ""
 
 
 def doi_che_do(storage: Storage, nh: list[dict], ts: list[dict], hoc_sinh: list[str],

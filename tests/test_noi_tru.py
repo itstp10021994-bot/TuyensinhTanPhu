@@ -274,7 +274,7 @@ def test_doi_che_do_hai_chieu_va_bo_khoi_phong(st_):
     p = NT.luu_phong(st_, [], NAM, "P1", "", GV1, [str(b["id"])])
     NT.doi_che_do(st_, st_.list_items(NHAP_HOC.name), st_.list_items(TUYEN_SINH.name),
                   [str(a["id"])], "Nội trú", st_.list_items(NOI_TRU_PHONG.name))
-    assert st_.get_item(NHAP_HOC.name, a["id"])["NoiTruBanTru"] == "Nội trú dân nuôi"
+    assert st_.get_item(NHAP_HOC.name, a["id"])["NoiTruBanTru"] == "Nội trú"
     assert st_.get_item(TUYEN_SINH.name, t["id"])["CheDo"] == "Nội trú"
     NT.doi_che_do(st_, st_.list_items(NHAP_HOC.name), st_.list_items(TUYEN_SINH.name),
                   [str(b["id"])], "Bán trú", st_.list_items(NOI_TRU_PHONG.name))
