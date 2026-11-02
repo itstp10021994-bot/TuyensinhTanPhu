@@ -293,3 +293,24 @@ def test_len_lop_sang_nam_moi(tmp_path):
     assert len(moi_rec) == 1 and moi_rec[0]["Khoi"] == "7" and moi_rec[0]["NgaySinh"] == "2014-01-01"
     again = services.ds_len_lop(st.list_items(NHAP_HOC.name), cu, moi)
     assert next(r for r in again if r["HoTen"] == "An")["_ly_do"] == f"Đã có hồ sơ {moi}"
+
+
+def test_luu_ma_tran_giay_to(storage):
+    import pandas as pd
+    from tuyensinh import ui_giay_to
+    from tuyensinh.schema import GIAY_TO
+    sua = pd.DataFrame([{"Giấy tờ": "Giấy khai sinh", "6-ESL": True, "7": True},
+                        {"Giấy tờ": "Học bạ Tiểu học", "6-ESL": True, "7": False},
+                        {"Giấy tờ": "Học bạ THCS", "6-ESL": False, "7": True}])
+    # lần đầu (SharePoint trống): ghi đủ mọi khối
+    assert ui_giay_to.luu_ma_tran(storage, sua, ["6-ESL", "7"], {}, []) == 2
+    items = storage.list_items(GIAY_TO.name)
+    bang = services.giay_to_tu_list(items)
+    assert bang == {"6-ESL": ["Giấy khai sinh", "Học bạ Tiểu học"],
+                    "7": ["Giấy khai sinh", "Học bạ THCS"]}
+    # lần sau: chỉ ghi khối thay đổi; bỏ tick hết = xóa khối
+    sua.loc[1, "6-ESL"] = False
+    sua["7"] = False
+    assert ui_giay_to.luu_ma_tran(storage, sua, ["6-ESL", "7"], bang, items) == 2
+    assert services.giay_to_tu_list(storage.list_items(GIAY_TO.name)) == {
+        "6-ESL": ["Giấy khai sinh"]}

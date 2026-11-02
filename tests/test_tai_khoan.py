@@ -49,3 +49,11 @@ def test_phan_quyen_va_ghi_nho(tmp_path):
     assert tai_khoan.tu_ma_ghi_nho(items, sai, "bi-mat") is None
     tai_khoan.doi_mat_khau(st, t["id"], "abc123", "moi4567", items)  # đổi mật khẩu -> mã hết hiệu lực
     assert tai_khoan.tu_ma_ghi_nho(st.list_items(TAI_KHOAN.name), ma, "bi-mat") is None
+
+
+def test_quyen_giay_to_can_thu_cho_tuyen_sinh_mac_dinh_cu():
+    cu = {"VaiTro": "Tuyển sinh", "Quyen": "Tổng quan;Data tuyển sinh;Hồ sơ nhập học;Báo cáo"}
+    assert tai_khoan.quyen(cu) == ["Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học",
+                                   "Giấy tờ cần thu", "Báo cáo"]
+    rieng = {"VaiTro": "Tuyển sinh", "Quyen": "Data tuyển sinh;Báo cáo"}
+    assert tai_khoan.quyen(rieng) == ["Data tuyển sinh", "Báo cáo"]

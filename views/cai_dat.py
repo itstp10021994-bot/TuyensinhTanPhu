@@ -4,9 +4,9 @@ import hmac
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import config, importer, services, tai_khoan, ui
+from tuyensinh import config, importer, tai_khoan, ui
 from tuyensinh import noi_tru as NT
-from tuyensinh.schema import (ALL_LISTS, NHAP_DUOC, NHAT_KY, GIAY_TO, GIAY_TO_NHAP_HOC, NHAP_HOC, NOI_TRU_DANH_GIA,
+from tuyensinh.schema import (ALL_LISTS, NHAP_DUOC, NHAT_KY, GIAY_TO, NHAP_HOC, NOI_TRU_DANH_GIA,
                               NOI_TRU_PHONG, QUYEN_MAC_DINH, TAI_KHOAN, TRANG, TUYEN_SINH, VAI_TRO)
 from tuyensinh.ui_noi_tru import nhap_phan_phong
 
@@ -137,97 +137,10 @@ def render_tai_khoan():
 
 
 def render_giay_to():
-    """Chỉnh danh sách giấy tờ cần nộp của từng khối — lưu trên list DanhMuc_GiayTo."""
-    items = ui.records(GIAY_TO, optional=True)
-    err = ui.list_error(GIAY_TO)
-    bang_sp = services.giay_to_tu_list(items)
-    bang = bang_sp or services.giay_to_mac_dinh()
-    ten_list = config.list_name(GIAY_TO.name)
-    if err and "does not exist" not in err and "404" not in err:
-        st.error(f"Không đọc được list **{ten_list}** (lỗi kết nối, không phải do chưa có list) — "
-                 "app tạm dùng danh mục mặc định. Bấm ⟳ trên thanh menu để thử lại.",
-                 icon=":material/cloud_off:")
-        with st.expander("Chi tiết lỗi"):
-            st.code(ui.an_bi_mat(err[:1500]), language=None)
-    elif err:
-        c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
-        c1.warning(f"Chưa có list **{ten_list}** trên SharePoint — app đang dùng danh mục mặc "
-                   "định (Book1). Bấm nút bên cạnh để tạo list và chép danh mục mặc định lên, "
-                   "sau đó chỉnh sửa tại đây.", icon=":material/info:")
-        if c2.button("Tạo list giấy tờ", type="primary", icon=":material/playlist_add:",
-                     width="stretch", disabled=backend == "local"):
-            with st.status("Đang tạo list…", expanded=True) as stt:
-                try:
-                    importer.setup_lists(storage, log=stt.write, lists=[GIAY_TO])
-                    stt.write("Chép danh mục mặc định (Book1)…")
-                    for k, v in services.giay_to_mac_dinh().items():
-                        services.luu_giay_to_khoi(storage, k, v, [])
-                    stt.update(label="Đã tạo list và chép danh mục", state="complete")
-                except Exception as e:
-                    stt.update(label="Không tạo được list", state="error")
-                    ui.error_state(e, compact=True)
-                    return
-            ui.refresh()
-            st.rerun()
-    elif not bang_sp:
-        c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
-        c1.info(f"List **{ten_list}** đang trống — app dùng danh mục mặc định (Book1). Lần lưu "
-                "đầu tiên sẽ chép toàn bộ danh mục mặc định lên SharePoint.",
-                icon=":material/info:")
-        if c2.button("Chép danh mục mặc định lên", icon=":material/cloud_upload:",
-                     width="stretch"):
-            def seed():
-                for k, ds in services.giay_to_mac_dinh().items():
-                    services.luu_giay_to_khoi(storage, k, ds, [])
-            if ui.mutate(seed, success="Đã chép danh mục mặc định lên SharePoint") is not None:
-                st.rerun()
+    """Danh mục giấy tờ cần thu theo khối (cũng có ở trang Giấy tờ cần thu của Tuyển sinh)."""
+    from tuyensinh import ui_giay_to
+    ui_giay_to.render(storage, key="cd_gt")
 
-    left, right = st.columns([1.1, 1.6], gap="medium")
-    with left, ui.section("Danh mục hiện tại", f"{len(bang)} khối · nguồn: "
-                          + ("SharePoint" if bang_sp else "mặc định (Book1)")):
-        tong = pd.DataFrame([{"Khối": k, "Số giấy tờ": len(v)} for k, v in
-                             sorted(bang.items(), key=lambda kv: _khoi_key(kv[0]))])
-        st.dataframe(tong, hide_index=True, width="stretch",
-                     height=min(520, 38 + 35 * max(len(tong), 1)))
-    with right, ui.section("Chỉnh sửa giấy tờ của một khối",
-                           "Chọn khối, thêm / bớt giấy tờ rồi bấm Lưu. Thứ tự trong ô là thứ tự "
-                           "hiện khi thu hồ sơ."):
-        khois = sorted(bang, key=_khoi_key)
-        c1, c2 = st.columns(2)
-        chon = c1.selectbox("Khối", [*khois, MOI], key="dm_khoi")
-        if chon == MOI:
-            khoi = c2.text_input("Tên khối mới", placeholder="Vd: 6, 10-IEP, 11-ESL",
-                                 key="dm_khoi_moi").strip()
-            mau = st.selectbox("Sao chép từ khối", ["(Trống)", *khois], key="dm_mau")
-            hien_tai = [] if mau == "(Trống)" else bang[mau]
-        else:
-            khoi, hien_tai = chon, bang.get(chon, [])
-            c2.caption(f"Khối **{khoi}** có **{len(hien_tai)}** giấy tờ. Ghi khối kèm phân hệ "
-                       "(10-IEP) để tách IEP/ESL; ghi số khối (7) để dùng chung.")
-        tat_ca = list(dict.fromkeys([*GIAY_TO_NHAP_HOC, *[g for v in bang.values() for g in v]]))
-        ds = st.multiselect("Giấy tờ cần nộp", tat_ca, default=hien_tai, accept_new_options=True,
-                            key=f"dm_ds_{khoi}_{ui.data_version()}",
-                            placeholder="Chọn hoặc gõ tên giấy tờ mới rồi Enter")
-        b1, b2 = st.columns(2)
-        luu = b1.button(f"Lưu khối {khoi or '…'}", type="primary", icon=":material/save:",
-                        width="stretch", disabled=bool(err) or not khoi or not ds)
-        xoa = b2.button(f"Xóa khối {khoi or '…'}", icon=":material/delete:", width="stretch",
-                        disabled=bool(err) or chon == MOI or not bang_sp)
-        if luu:
-            def save():
-                if not bang_sp:  # lần đầu: chép các khối khác từ mặc định để không bị mất
-                    for k, v in services.giay_to_mac_dinh().items():
-                        if k != khoi:
-                            services.luu_giay_to_khoi(storage, k, v, [])
-                return services.luu_giay_to_khoi(storage, khoi, ds, items)
-            if ui.mutate(save, success=f"Đã lưu {len(ds)} giấy tờ cho khối {khoi}") is not None:
-                st.rerun()
-        if xoa:
-            if ui.mutate(services.luu_giay_to_khoi, storage, khoi, [], items,
-                         success=f"Đã xóa khối {khoi}") is not None:
-                st.rerun()
-        if err:
-            st.caption("Chưa lưu được vì chưa có list trên SharePoint.")
 
 # ------------------------------------------------------------------ tình trạng chung
 _tks = tai_khoan.dang_hoat_dong(ui.records(TAI_KHOAN, optional=True))

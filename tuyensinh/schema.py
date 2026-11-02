@@ -338,11 +338,11 @@ NOI_TRU_DANH_GIA = ListDef(
 VAI_TRO = ("Quản trị", "Tuyển sinh", "Kế toán", "Giáo vụ", "Chỉ xem báo cáo",
            "GV quản nhiệm", "Tổ trưởng quản nhiệm")
 # Các trang có thể phân quyền (tên trùng tiêu đề trang trên thanh menu)
-TRANG = ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Kế toán", "Nội trú", "Báo cáo",
-         "Cài đặt & đồng bộ")
+TRANG = ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Giấy tờ cần thu", "Kế toán",
+         "Nội trú", "Báo cáo", "Cài đặt & đồng bộ")
 QUYEN_MAC_DINH = {
     "Quản trị": TRANG,
-    "Tuyển sinh": ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Báo cáo"),
+    "Tuyển sinh": ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Giấy tờ cần thu", "Báo cáo"),
     "Kế toán": ("Tổng quan", "Kế toán", "Hồ sơ nhập học", "Báo cáo"),
     "Giáo vụ": ("Tổng quan", "Hồ sơ nhập học", "Báo cáo"),
     "Chỉ xem báo cáo": ("Tổng quan", "Báo cáo"),

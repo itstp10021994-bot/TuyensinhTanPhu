@@ -55,6 +55,8 @@ P = {
                   icon=":material/person_search:", url_path="data-tuyen-sinh"),
     "nh": st.Page("views/ho_so_nhap_hoc.py", title="Hồ sơ nhập học",
                   icon=":material/assignment_ind:", url_path="ho-so-nhap-hoc"),
+    "gt": st.Page("views/giay_to.py", title="Giấy tờ cần thu", icon=":material/checklist:",
+                  url_path="giay-to"),
     "kt": st.Page("views/ke_toan.py", title="Kế toán", icon=":material/payments:",
                   url_path="ke-toan"),
     "nt": st.Page("views/noi_tru.py", title="Nội trú", icon=":material/bed:",
@@ -188,17 +190,17 @@ def _dang_xuat():
 
 # Thanh menu theo bộ phận: Tổng quan · Tuyển sinh ▾ (Data tuyển sinh, Hồ sơ nhập học) · Kế toán ·
 # Nội trú · Báo cáo · Cài đặt & đồng bộ. Phân quyền: chỉ thấy các trang được phép.
-_pages = [P["home"], P["ts"], P["nh"], P["kt"], P["nt"], P["bc"], P["cd"]]
+_pages = [P["home"], P["ts"], P["nh"], P["gt"], P["kt"], P["nt"], P["bc"], P["cd"]]
 if S.get("tk"):
     _pages = [p for p in _pages if p.title in S["tk"]["Quyen"]] or [P["home"]]
 # Trợ lý: ai cũng dùng được, câu trả lời tự giới hạn theo quyền xem của tài khoản
 _pages.insert(len(_pages) - (_pages[-1] is P["cd"]), P["tl"])
-_FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc",
+_FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc", "gt": "giay_to",
          "kt": "ke_toan", "nt": "noi_tru", "bc": "bao_cao", "tl": "tro_ly", "cd": "cai_dat"}
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
 # Thanh bên trái, nhóm theo bộ phận (nhóm không có trang được phép thì ẩn)
-_NHOM = [("", ["home"]), ("Tuyển sinh", ["ts", "nh"]), ("Kế toán", ["kt"]),
+_NHOM = [("", ["home"]), ("Tuyển sinh", ["ts", "nh", "gt"]), ("Kế toán", ["kt"]),
          ("Nội trú", ["nt"]), ("Báo cáo", ["bc", "tl"]), ("Hệ thống", ["cd"])]
 _nav = {}
 for _ten, _ks in _NHOM:

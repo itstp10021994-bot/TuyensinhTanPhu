@@ -76,6 +76,11 @@ def quyen(t: dict) -> list[str]:
     if vai == "Quản trị":
         return list(TRANG)
     ds = [x.strip() for x in str(t.get("Quyen") or "").split(";") if x.strip() in TRANG]
+    # trang "Giấy tờ cần thu" thêm ở bản sau: tài khoản Tuyển sinh đang dùng đúng quyền mặc
+    # định cũ (chưa được chỉnh riêng) tự có trang mới; quyền đã chỉnh riêng giữ nguyên
+    if vai == "Tuyển sinh" and ds == ["Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học",
+                                     "Báo cáo"]:
+        ds.insert(3, "Giấy tờ cần thu")
     return ds or list(QUYEN_MAC_DINH.get(vai, ("Tổng quan",)))
 
 
