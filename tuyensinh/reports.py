@@ -448,8 +448,10 @@ def nh_hoanthien(c: Ctx) -> Result:
 
 
 def nh_giayto(c: Ctx) -> Result:
-    """Giấy tờ theo danh sách cần nộp của từng khối (giay_to_theo_khoi.json)."""
+    """Giấy tờ theo danh sách cần nộp của từng khối — chỉ học sinh mới (học sinh cũ lên lớp
+    không phải nộp lại giấy tờ)."""
     df = _nh_dang_hoc(c)
+    df = df[~df.apply(lambda r: services.la_hs_cu(r.to_dict()), axis=1)] if len(df) else df
     tien_do = [services.tien_do_giay_to(r) for r in df.to_dict("records")]
     rows = []
     for g in GIAY_TO_NHAP_HOC:
@@ -482,8 +484,9 @@ def nh_giayto(c: Ctx) -> Result:
                       ("Chưa nộp giấy tờ nào",
                        sum(1 for _, d, _ in tien_do if not d))],
                   {"kind": "hbar", "data": t, "x": "Giấy tờ", "y": "Đã nộp"},
-                  note="Theo danh sách giấy tờ cần nộp của từng khối. Xuất Excel có thêm sheet "
-                       "tiến độ theo khối và danh sách học sinh còn thiếu.",
+                  note="Chỉ học sinh mới, theo danh sách giấy tờ cần nộp của từng khối (học sinh "
+                       "cũ lên lớp không tính). Xuất Excel có thêm sheet tiến độ theo khối và danh "
+                       "sách học sinh còn thiếu.",
                   sheets={"Thong_ke_giay_to": t, "Theo_khoi": theo_khoi,
                           "HS_thieu_giay_to": ds})
 

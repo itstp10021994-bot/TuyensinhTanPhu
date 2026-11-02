@@ -477,9 +477,22 @@ def doc_ho_so(text: str) -> tuple[date | None, dict[str, str]]:
     return ngay, docs
 
 
+def la_hs_cu(rec: dict) -> bool:
+    """Học sinh cũ (lên lớp / có sẵn từ VEMIS): hồ sơ nhập học không liên kết Data tuyển sinh."""
+    v = rec.get("TuyenSinhID")
+    return v is None or (isinstance(v, float) and v != v) or not str(v).strip()
+
+
+def giay_to_cua_hs(rec: dict) -> list[str]:
+    """Giấy tờ học sinh này cần nộp: học sinh mới theo danh mục của khối; học sinh cũ không
+    phải nộp (đã nộp từ các năm trước)."""
+    return [] if la_hs_cu(rec) else giay_to_can_nop(rec.get("Khoi"), rec.get("PhanHe"))
+
+
 def tien_do_giay_to(rec: dict) -> tuple[list[str], dict[str, str], list[str]]:
-    """(giấy tờ cần nộp theo khối, giấy tờ đã nộp {tên: bản}, giấy tờ còn thiếu)."""
-    can = giay_to_can_nop(rec.get("Khoi"), rec.get("PhanHe"))
+    """(giấy tờ cần nộp theo khối, giấy tờ đã nộp {tên: bản}, giấy tờ còn thiếu).
+    Học sinh cũ: không có giấy tờ cần nộp."""
+    can = giay_to_cua_hs(rec)
     da = doc_ho_so(rec.get("HoSoDaNop"))[1]
     return can, da, [g for g in can if g not in da]
 

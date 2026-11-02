@@ -97,9 +97,12 @@ def xep_lop_dialog(rec: dict):
 @ui.dialog("Thu hồ sơ", width="large")
 def thu_ho_so_dialog(rec: dict):
     ngay, docs = services.doc_ho_so(rec.get("HoSoDaNop"))
-    can = services.giay_to_can_nop(rec.get("Khoi"), rec.get("PhanHe"))
+    can = services.giay_to_cua_hs(rec)
     khoi = rec.get("KhoiPH") or rec.get("Khoi") or "—"
-    if can:
+    if services.la_hs_cu(rec):
+        st.info(f"**{rec.get('HoTen')}** là học sinh cũ (lên lớp) — không phải nộp lại giấy tờ. "
+                "Vẫn ghi nhận được giấy tờ nộp thêm nếu có.", icon=":material/info:")
+    elif can:
         st.markdown(f"**{rec.get('HoTen')}** · khối **{khoi}** cần nộp **{len(can)}** giấy tờ. "
                     "Tích giấy tờ đã nhận và chọn **bản gốc / bản sao**.")
     else:
@@ -340,7 +343,8 @@ def render_tab(name: str, groups: tuple, rec: dict, prefix: str) -> dict:
         with c1:
             khoi = rec.get("KhoiPH") or rec.get("Khoi") or "—"
             st.markdown(f"**Giấy tờ cần nộp — khối {khoi}**" + (
-                f" · đã nộp {len(can) - len(thieu)}/{len(can)}" if can else ""))
+                f" · đã nộp {len(can) - len(thieu)}/{len(can)}" if can else
+                " · học sinh cũ, không phải nộp lại" if services.la_hs_cu(rec) else ""))
             if can:
                 st.progress((len(can) - len(thieu)) / len(can))
                 st.markdown("  \n".join(

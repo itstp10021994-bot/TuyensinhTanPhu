@@ -637,8 +637,9 @@ def tra_cuu(c: Ctx, q_goc: str, bat_buoc: bool = True) -> TraLoi | None:
         can, da, thieu = services.tien_do_giay_to(h)
         dong += [f"- Hồ sơ nhập học: lớp **{h.get('LopHoc') or 'chưa xếp'}** · "
                  f"tình trạng {h.get('TinhTrangHS') or '—'}",
-                 f"- Giấy tờ: **{len(can) - len(thieu)}/{len(can)}**"
-                 + (f" — còn thiếu: {', '.join(thieu)}" if thieu else " — đủ")]
+                 (f"- Giấy tờ: **{len(can) - len(thieu)}/{len(can)}**" if can else
+                  "- Giấy tờ: học sinh cũ, không phải nộp lại")
+                 + ((f" — còn thiếu: {', '.join(thieu)}" if thieu else " — đủ") if can else "")]
         if c.duoc("Kế toán"):
             dong.append(f"- Học phí: đã thu {_tien(h.get('TongDaThu'))} · "
                         f"còn lại **{_tien(h.get('SoTienConLai'))}**")

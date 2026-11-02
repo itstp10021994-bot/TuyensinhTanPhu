@@ -220,9 +220,15 @@ def test_giay_to_can_nop_theo_khoi():
     can10 = services.giay_to_can_nop("10", "ESL")
     assert "Đơn xét tuyển 10" in can10 and "Phiếu đăng ký nhập học" in can10
     assert services.giay_to_can_nop("12", "") == services.giay_to_can_nop("12", "ESL")
-    can, da, thieu = services.tien_do_giay_to(
-        {"Khoi": "6", "PhanHe": "IEP", "HoSoDaNop": "Ngày đã nộp 01/07/2026\nGiấy khai sinh - Bản sao"})
-    assert da == {"Giấy khai sinh": "Bản sao"} and len(thieu) == 4
+    hs_moi = {"Khoi": "6", "PhanHe": "IEP", "TuyenSinhID": "5",
+              "HoSoDaNop": "Ngày đã nộp 01/07/2026\nGiấy khai sinh - Bản sao"}
+    can, da, thieu = services.tien_do_giay_to(hs_moi)
+    assert da == {"Giấy khai sinh": "Bản sao"} and len(can) == 5 and len(thieu) == 4
+    # học sinh cũ (không liên kết Data tuyển sinh): không phải nộp lại giấy tờ
+    for cu in ({**hs_moi, "TuyenSinhID": ""}, {**hs_moi, "TuyenSinhID": None},
+               {k: v for k, v in hs_moi.items() if k != "TuyenSinhID"}):
+        can, da, thieu = services.tien_do_giay_to(cu)
+        assert can == [] and thieu == [] and da == {"Giấy khai sinh": "Bản sao"}
 
 
 def test_danh_muc_giay_to_luu_va_doc(storage):
