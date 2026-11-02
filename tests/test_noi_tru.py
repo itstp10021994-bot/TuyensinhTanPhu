@@ -263,3 +263,51 @@ def test_chuyen_ban_tru(st_):
     assert [st_.get_item(NHAP_HOC.name, x["id"])["NoiTruBanTru"] for x in (a, b, c)] == \
         ["Bán trú", "Bán trú", "Nội trú"]
     assert st_.get_item(TUYEN_SINH.name, t["id"])["CheDo"] == "Bán trú"
+
+
+def test_doi_che_do_hai_chieu_va_bo_khoi_phong(st_):
+    from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
+    t = st_.create_item(TUYEN_SINH.name, {"HoTenHS": "An", "CheDo": "Bán trú", "NamHoc": NAM})
+    a = st_.create_item(NHAP_HOC.name, {"HoTen": "An", "NoiTruBanTru": "Bán trú dân nuôi",
+                                        "NamHoc": NAM, "TuyenSinhID": str(t["id"])})
+    b = st_.create_item(NHAP_HOC.name, {"HoTen": "Bình", "NoiTruBanTru": "Nội trú", "NamHoc": NAM})
+    p = NT.luu_phong(st_, [], NAM, "P1", "", GV1, [str(b["id"])])
+    NT.doi_che_do(st_, st_.list_items(NHAP_HOC.name), st_.list_items(TUYEN_SINH.name),
+                  [str(a["id"])], "Nội trú", st_.list_items(NOI_TRU_PHONG.name))
+    assert st_.get_item(NHAP_HOC.name, a["id"])["NoiTruBanTru"] == "Nội trú dân nuôi"
+    assert st_.get_item(TUYEN_SINH.name, t["id"])["CheDo"] == "Nội trú"
+    NT.doi_che_do(st_, st_.list_items(NHAP_HOC.name), st_.list_items(TUYEN_SINH.name),
+                  [str(b["id"])], "Bán trú", st_.list_items(NOI_TRU_PHONG.name))
+    assert st_.get_item(NHAP_HOC.name, b["id"])["NoiTruBanTru"] == "Bán trú"
+    assert NT.hs_ids(st_.get_item(NOI_TRU_PHONG.name, p["id"])) == []
+
+
+def test_sua_ho_so_dong_bo_che_do_va_phong(st_):
+    """Đổi Chế độ ở Data tuyển sinh / N.trú, B.trú ở Hồ sơ nhập học: bên kia và phòng tự theo."""
+    from tuyensinh import services
+    from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
+    t = services.save_tuyen_sinh(st_, {"HoTenHS": "An", "SDT": "0901234567", "Khoi": "6",
+                                       "NgayLienHe": "2026-10-01",
+                                       "CheDo": "Bán trú", "NamHoc": NAM,
+                                       "TrangThai": "Nhập học"})
+    nh = services.nhap_hoc_of(st_, t["id"])
+    assert nh["NoiTruBanTru"] == "Bán trú"
+    # Data tuyển sinh: Bán trú -> Nội trú => hồ sơ nhập học thành Nội trú (hiện ở Nội trú)
+    services.save_tuyen_sinh(st_, {**t, "CheDo": "Nội trú"}, t["id"])
+    assert st_.get_item(NHAP_HOC.name, nh["id"])["NoiTruBanTru"] == "Nội trú"
+    p = NT.luu_phong(st_, [], NAM, "P1", "", GV1, [str(nh["id"])])
+    # Hồ sơ nhập học: Nội trú -> Bán trú => Data tuyển sinh theo + bỏ khỏi phòng
+    services.cap_nhat_nhap_hoc(st_, nh["id"], {"NoiTruBanTru": "Bán trú"})
+    assert st_.get_item(TUYEN_SINH.name, t["id"])["CheDo"] == "Bán trú"
+    assert NT.hs_ids(st_.get_item(NOI_TRU_PHONG.name, p["id"])) == []
+    # lưu cả hồ sơ (save_nhap_hoc) đổi lại Nội trú
+    rec = st_.get_item(NHAP_HOC.name, nh["id"])
+    try:
+        services.save_nhap_hoc(st_, {**rec, "NoiTruBanTru": "Nội trú"}, nh["id"])
+    except ValueError:  # hồ sơ thử thiếu trường bắt buộc: dùng cập nhật một phần
+        services.cap_nhat_nhap_hoc(st_, nh["id"], {"NoiTruBanTru": "Nội trú"})
+    assert st_.get_item(TUYEN_SINH.name, t["id"])["CheDo"] == "Nội trú"
+    # Ngoại trú ở Data tuyển sinh -> N.trú, B.trú để trống
+    services.save_tuyen_sinh(st_, {**st_.get_item(TUYEN_SINH.name, t["id"]),
+                                   "CheDo": "Ngoại trú"}, t["id"])
+    assert not st_.get_item(NHAP_HOC.name, nh["id"]).get("NoiTruBanTru")

@@ -121,6 +121,8 @@ def save_tuyen_sinh(storage: Storage, data: dict, item_id: str | None = None) ->
     if item_id:
         old = storage.get_item(TUYEN_SINH.name, item_id) or {}
         rec = storage.update_item(TUYEN_SINH.name, item_id, clean)
+        if "CheDo" in clean and old.get("CheDo") != rec.get("CheDo"):
+            _che_do_tu_tuyen_sinh(storage, rec)
         if old.get("TrangThai") != rec.get("TrangThai"):
             rec = set_trang_thai(storage, item_id, rec["TrangThai"])
         elif rec.get("TrangThai") == "Nhập học":
@@ -296,13 +298,66 @@ def save_nhap_hoc(storage: Storage, data: dict, item_id: str | None = None) -> d
         raise ValueError("\n".join(errors))
     clean = _clean(NHAP_HOC, data)
     if item_id:
-        return storage.update_item(NHAP_HOC.name, item_id, clean)
+        old = storage.get_item(NHAP_HOC.name, item_id) or {}
+        rec = storage.update_item(NHAP_HOC.name, item_id, clean)
+        _che_do_tu_nhap_hoc(storage, old, rec)
+        return rec
     return storage.create_item(NHAP_HOC.name, clean)
 
 
 def cap_nhat_nhap_hoc(storage: Storage, item_id: str, data: dict) -> dict:
     """Cập nhật một phần hồ sơ (xếp lớp, thu hồ sơ, học phí, xe…) — không kiểm tra bắt buộc."""
-    return storage.update_item(NHAP_HOC.name, item_id, _clean(NHAP_HOC, data))
+    old = (storage.get_item(NHAP_HOC.name, item_id) or {}) if "NoiTruBanTru" in data else {}
+    rec = storage.update_item(NHAP_HOC.name, item_id, _clean(NHAP_HOC, data))
+    if "NoiTruBanTru" in data:
+        _che_do_tu_nhap_hoc(storage, old, rec)
+    return rec
+
+
+# ------------------------------------------------------------------ đồng bộ chế độ nội / bán trú
+def _bo_khoi_phong(storage: Storage, nh_id: str) -> None:
+    """Em không còn Nội trú: bỏ khỏi phòng nội trú (list phòng chưa tạo thì bỏ qua)."""
+    from . import noi_tru as NT
+    from .schema import NOI_TRU_PHONG
+    try:
+        phongs = storage.list_items(NOI_TRU_PHONG.name)
+    except Exception:  # noqa: BLE001 — chưa dùng phân hệ nội trú
+        return
+    NT.bo_khoi_phong(storage, phongs, [str(nh_id)])
+
+
+def _che_do_tu_nhap_hoc(storage: Storage, old: dict, rec: dict) -> None:
+    """Đổi N.trú, B.trú ở hồ sơ nhập học -> Chế độ của liên hệ Data tuyển sinh + phòng nội trú."""
+    from . import noi_tru as NT
+    cu, moi = NT.nhom_che_do(old.get("NoiTruBanTru")), NT.nhom_che_do(rec.get("NoiTruBanTru"))
+    if cu == moi:
+        return
+    tid = str(rec.get("TuyenSinhID") or "").strip()
+    if moi and tid:
+        ts = storage.get_item(TUYEN_SINH.name, tid)
+        if ts and ts.get("CheDo") != moi:
+            storage.update_item(TUYEN_SINH.name, tid, {"CheDo": moi})
+    if cu == "Nội trú":
+        _bo_khoi_phong(storage, rec["id"])
+
+
+def _che_do_tu_tuyen_sinh(storage: Storage, ts: dict) -> None:
+    """Đổi Chế độ ở Data tuyển sinh -> N.trú, B.trú của hồ sơ nhập học liên kết + phòng."""
+    from . import noi_tru as NT
+    nh = nhap_hoc_of(storage, ts["id"])
+    if nh is None:
+        return
+    che_do = ts.get("CheDo") or ""
+    if che_do not in ("Nội trú", "Bán trú", "Ngoại trú"):
+        return
+    cu = NT.nhom_che_do(nh.get("NoiTruBanTru"))
+    moi = che_do if che_do != "Ngoại trú" else ""
+    if cu == moi:
+        return
+    storage.update_item(NHAP_HOC.name, nh["id"],
+                        {"NoiTruBanTru": NT.gia_tri_nh(nh.get("NoiTruBanTru"), moi)})
+    if cu == "Nội trú":
+        _bo_khoi_phong(storage, nh["id"])
 
 
 _GIAY_TO_ALIAS = {"phieu dk nhap hoc": "Phiếu đăng ký nhập học",

@@ -369,6 +369,42 @@ def render_nhap_excel(tks: list[dict]):
         nhap_phan_phong(up, storage, nam_hoc, phongs_all, ui.records(NHAP_HOC), tks, "nt_up")
 
 
+def render_doi_che_do():
+    """Đổi chế độ Bán trú <-> Nội trú ngay tại đây: đổi cả hồ sơ nhập học (N.trú, B.trú) và Data
+    tuyển sinh (Chế độ); em sang Nội trú hiện ngay ở mục "chưa xếp phòng" bên dưới."""
+    with st.expander("Chuyển chế độ Bán trú ⇄ Nội trú", icon=":material/swap_horiz:"):
+        st.caption("Đổi cả **Hồ sơ nhập học** (N.trú, B.trú) và **Data tuyển sinh** (Chế độ). Em "
+                   "chuyển sang Nội trú hiện ngay ở mục *chưa xếp phòng* để xếp phòng; em chuyển "
+                   "sang Bán trú được bỏ khỏi phòng. Đổi trong hồ sơ ở hai trang kia cũng tự cập "
+                   "nhật tại đây.")
+        huong = st.segmented_control("Hướng", ["Sang Nội trú", "Sang Bán trú"],
+                                     default="Sang Nội trú", required=True, key="nt_dcd_huong",
+                                     label_visibility="collapsed")
+        if huong == "Sang Nội trú":
+            con = nh[~nh["NoiTruBanTru"].str.startswith("Nội trú")
+                     & ~nh["TinhTrangHS"].isin(["Rút hồ sơ", "Không học tiếp"])]
+            nhan = {str(r["id"]): f"{r['HoTen'] or '(Chưa có tên)'} · "
+                                  f"{r['LopHoc'] or (('Khối ' + r['Khoi']) if r['Khoi'] else '—')}"
+                                  f" · {r['NoiTruBanTru'] or 'chưa ghi chế độ'}"
+                    for _, r in con.iterrows()}
+            dich = "Nội trú"
+        else:
+            nhan = {i: f"{ten_hs(i)} · " + (f"phòng {o_phong[i]['TenPhong']}" if i in o_phong
+                                             else "chưa xếp phòng") for i in HS}
+            dich = "Bán trú"
+        chon = st.multiselect(f"Học sinh chuyển {huong.lower().removeprefix('sang ')}",
+                              list(nhan), format_func=nhan.get, key=f"nt_dcd_{huong}",
+                              placeholder="Gõ tên học sinh để tìm",
+                              label_visibility="collapsed")
+        if st.button(f"Chuyển {len(chon)} em sang {dich}", type="primary", disabled=not chon,
+                     icon=":material/swap_horiz:", key="nt_dcd_go"):
+            if ui.mutate(NT.doi_che_do, storage, ui.records(NHAP_HOC), ui.records(TUYEN_SINH),
+                         chon, dich, phongs_all,
+                         success=f"Đã chuyển {len(chon)} em sang {dich}") is not None:
+                S.pop(f"nt_dcd_{huong}", None)
+                st.rerun()
+
+
 def render_chua_xep():
     """Học sinh nội trú (hồ sơ nhập học) chưa ở phòng nào: tick chọn rồi xếp vào phòng."""
     chua = [i for i in HS if i not in o_phong]
@@ -459,6 +495,7 @@ def render_phong():
            if str(t.get("HoatDong") or "Có") != "Không"]
     tks.sort(key=lambda t: (t.get("VaiTro") != "GV quản nhiệm", str(t.get("HoTen") or "")))
     render_nhap_excel(tks)
+    render_doi_che_do()
     render_khong_con_nt()
     render_chua_xep()
     left, right = st.columns([1.4, 1.2], gap="medium")

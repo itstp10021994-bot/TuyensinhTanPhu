@@ -101,30 +101,53 @@ def luu_phong(storage: Storage, phongs: list[dict], nam_hoc: str, ten: str, khu:
     return storage.create_item(NOI_TRU_PHONG.name, data)
 
 
-def chuyen_ban_tru(storage: Storage, nh: list[dict], ts: list[dict], hoc_sinh: list[str],
-                   progress=None) -> int:
-    """Chuyển học sinh sang Bán trú: hồ sơ nhập học (N.trú, B.trú) và liên hệ Data tuyển sinh
-    liên kết (Chế độ)."""
+def nhom_che_do(v) -> str:
+    """'Nội trú dân nuôi' -> 'Nội trú'; 'Bán trú…' -> 'Bán trú'; còn lại ''."""
+    v = _s(v)
+    return "Nội trú" if v.startswith("Nội trú") else "Bán trú" if v.startswith("Bán trú") else ""
+
+
+def gia_tri_nh(cu: str, nhom: str) -> str:
+    """Giá trị N.trú, B.trú mới khi đổi sang `nhom` (giữ "dân nuôi" nếu đang có)."""
+    if nhom not in ("Nội trú", "Bán trú"):
+        return ""
+    return f"{nhom} dân nuôi" if _s(cu).endswith("dân nuôi") else nhom
+
+
+def doi_che_do(storage: Storage, nh: list[dict], ts: list[dict], hoc_sinh: list[str],
+               che_do: str, phongs: list[dict] | None = None, progress=None) -> int:
+    """Đổi chế độ (Nội trú / Bán trú) cho các hồ sơ nhập học `hoc_sinh`: N.trú, B.trú của hồ sơ
+    và Chế độ của liên hệ Data tuyển sinh liên kết. Em không còn Nội trú được bỏ khỏi phòng."""
     from concurrent.futures import ThreadPoolExecutor
 
     from .schema import NHAP_HOC, TUYEN_SINH
     chon = {str(i) for i in hoc_sinh}
-    ts_ids = {str(t.get("id")) for t in ts}
+    ts_ids = {str(t.get("id")): t for t in ts}
     viec = []
     for r in nh:
         if str(r.get("id")) not in chon:
             continue
-        viec.append((NHAP_HOC.name, r["id"], {"NoiTruBanTru": "Bán trú"}))
-        tid = _s(r.get("TuyenSinhID"))
-        if tid in ts_ids:
-            viec.append((TUYEN_SINH.name, tid, {"CheDo": "Bán trú"}))
+        if nhom_che_do(r.get("NoiTruBanTru")) != che_do:
+            viec.append((NHAP_HOC.name, r["id"],
+                         {"NoiTruBanTru": gia_tri_nh(r.get("NoiTruBanTru"), che_do)}))
+        t = ts_ids.get(_s(r.get("TuyenSinhID")))
+        if t is not None and _s(t.get("CheDo")) != che_do:
+            viec.append((TUYEN_SINH.name, t["id"], {"CheDo": che_do}))
     done = 0
     with ThreadPoolExecutor(max_workers=4) as pool:
         for _ in pool.map(lambda v: storage.update_item(*v), viec):
             done += 1
             if progress:
                 progress(done, len(viec))
+    if che_do != "Nội trú" and phongs:
+        bo_khoi_phong(storage, phongs, list(chon))
     return len(chon)
+
+
+def chuyen_ban_tru(storage: Storage, nh: list[dict], ts: list[dict], hoc_sinh: list[str],
+                   progress=None) -> int:
+    """Chuyển học sinh sang Bán trú (hồ sơ nhập học + Data tuyển sinh)."""
+    return doi_che_do(storage, nh, ts, hoc_sinh, "Bán trú", progress=progress)
 
 
 def bo_khoi_phong(storage: Storage, phongs: list[dict], hoc_sinh: list[str]) -> int:
