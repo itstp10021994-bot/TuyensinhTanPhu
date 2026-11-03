@@ -178,8 +178,8 @@ def thu_ho_so_dialog(rec: dict):
             placeholder="Chọn hoặc gõ tên giấy tờ khác rồi Enter")
         bo_sung += [g for g in them if g not in bo_sung]
     c1, c2, c3 = st.columns(3)
-    ngay = c1.date_input("Ngày nộp", ngay or ui._to_date(rec.get("NgayNhanHoSo")) or date.today(),
-                         format="DD/MM/YYYY", key=f"{p}_ngay")
+    ngay = c1.date_input("Ngày nộp", date.today(), format="DD/MM/YYYY", key=f"{p}_ngay",
+                         help="Mặc định hôm nay — ngày in trên phiếu ký nhận")
     han = c2.date_input("Bổ sung trước ngày", han0 or date.today() + timedelta(days=20),
                         format="DD/MM/YYYY", key=f"{p}_han", disabled=du or not bo_sung)
     nguoi = nguoi_ky_nhan()
