@@ -141,15 +141,37 @@ def thu_ho_so_dialog(rec: dict):
                    + (f" (dù còn {len(thieu)} giấy tờ của khối chưa tick đã nhận)." if thieu
                       else "."))
     else:
-        lua = list(dict.fromkeys([*thieu, *[g for g in bs0 if g not in chon],
-                                  *[g for g in GIAY_TO_NHAP_HOC if g not in chon]]))
-        mac_dinh = [g for g in bs0 if g in lua] if tt0 == "bo_sung" else thieu
-        bo_sung = st.multiselect(
-            "Hồ sơ cần bổ sung", lua, default=mac_dinh, accept_new_options=True,
-            key=f"{p}_bs_{hash(tuple(thieu))}",
-            placeholder="Chọn giấy tờ phụ huynh cần nộp bổ sung",
-            help="Mặc định là giấy tờ của khối chưa nhận; bỏ bớt hoặc thêm theo thực tế. Chỉ "
-                 "các giấy tờ chọn ở đây in trên phiếu và tính là còn thiếu.")
+        # gợi ý = giấy tờ của khối còn thiếu (+ giấy tờ đã chọn bổ sung lần trước); tick chọn
+        goi_y = list(dict.fromkeys([*thieu, *[g for g in bs0 if g not in chon]]))
+        da_chon = set(bs0) if tt0 == "bo_sung" else set(thieu)
+        kb = f"{p}_bs_{abs(hash(tuple(goi_y)))}"
+        st.markdown(f"**Hồ sơ cần bổ sung** · tick giấy tờ phụ huynh phải nộp bổ sung "
+                    f"({len(goi_y)} giấy tờ còn thiếu)")
+        if goi_y:
+            with st.container(border=True, key=f"{p}_bs_box"):
+                h = st.container(horizontal=True, gap="small")
+                if h.button("Chọn tất cả", key=f"{kb}_all", type="tertiary",
+                            icon=":material/select_all:"):
+                    for i in range(len(goi_y)):
+                        S[f"{kb}_{i}"] = True
+                if h.button("Bỏ chọn", key=f"{kb}_none", type="tertiary",
+                            icon=":material/deselect:"):
+                    for i in range(len(goi_y)):
+                        S[f"{kb}_{i}"] = False
+                cols = st.columns(2)
+                for i, g in enumerate(goi_y):
+                    S.setdefault(f"{kb}_{i}", g in da_chon)
+                    if cols[i % 2].checkbox(g + ("" if g in can else "  ·  ngoài danh sách"),
+                                            key=f"{kb}_{i}"):
+                        bo_sung.append(g)
+        else:
+            st.caption("Đã nhận đủ giấy tờ của khối — không còn giấy tờ gợi ý cần bổ sung.")
+        them = st.multiselect(
+            "Giấy tờ khác cần bổ sung (không bắt buộc)",
+            [g for g in GIAY_TO_NHAP_HOC if g not in chon and g not in goi_y],
+            accept_new_options=True, key=f"{kb}_them",
+            placeholder="Chọn hoặc gõ tên giấy tờ khác rồi Enter")
+        bo_sung += [g for g in them if g not in bo_sung]
     c1, c2, c3 = st.columns(3)
     ngay = c1.date_input("Ngày nộp", ngay or ui._to_date(rec.get("NgayNhanHoSo")) or date.today(),
                          format="DD/MM/YYYY", key=f"{p}_ngay")
