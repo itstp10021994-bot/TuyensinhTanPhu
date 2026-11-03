@@ -485,7 +485,7 @@ def giay_to(c: Ctx, loc: Loc) -> TraLoi:
         can, da, thieu = services.tien_do_giay_to(r.to_dict())
         if thieu:
             rows.append({"Học sinh": r.get("HoTen"), "Khối": r.get("Khoi"),
-                         "Lớp": r.get("LopHoc"), "Đã nộp": f"{len(can) - len(thieu)}/{len(can)}",
+                         "Lớp": r.get("LopHoc"), "Đã nộp": f"{sum(g in da for g in can)}/{len(can)}",
                          "Còn thiếu": "; ".join(thieu)})
     pv = f" ({loc.mo_ta()})" if loc.mo_ta() else ""
     if not rows:
@@ -637,7 +637,7 @@ def tra_cuu(c: Ctx, q_goc: str, bat_buoc: bool = True) -> TraLoi | None:
         can, da, thieu = services.tien_do_giay_to(h)
         dong += [f"- Hồ sơ nhập học: lớp **{h.get('LopHoc') or 'chưa xếp'}** · "
                  f"tình trạng {h.get('TinhTrangHS') or '—'}",
-                 (f"- Giấy tờ: **{len(can) - len(thieu)}/{len(can)}**" if can else
+                 (f"- Giấy tờ: **{sum(g in da for g in can)}/{len(can)}**" if can else
                   "- Giấy tờ: học sinh cũ, không phải nộp lại")
                  + ((f" — còn thiếu: {', '.join(thieu)}" if thieu else " — đủ") if can else "")]
         if c.duoc("Kế toán"):

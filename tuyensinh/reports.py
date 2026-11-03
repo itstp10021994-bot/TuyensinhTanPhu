@@ -473,7 +473,7 @@ def nh_giayto(c: Ctx) -> Result:
         "HS còn thiếu": ("Thieu", lambda s: int((s > 0).sum()))})
     theo_khoi = theo_khoi.reindex(_khoi_order(theo_khoi.index)).rename_axis("Khối").reset_index()
     ds = khoi[khoi["Thieu"] > 0].assign(
-        DaNop=[f"{len(cn) - len(th)}/{len(cn)}" for cn, _, th in tien_do if th],
+        DaNop=[f"{sum(g in d for g in cn)}/{len(cn)}" for cn, d, th in tien_do if th],
         ConThieu=["; ".join(th) for _, _, th in tien_do if th])
     ds = ds.sort_values(["KhoiPH", "LopHoc", "HoTen"])[
         ["HoTen", "KhoiPH", "LopHoc", "DienThoaiSLL", "DaNop", "ConThieu"]].rename(columns={

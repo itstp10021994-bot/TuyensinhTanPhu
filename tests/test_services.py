@@ -314,3 +314,23 @@ def test_luu_ma_tran_giay_to(storage):
     assert ui_giay_to.luu_ma_tran(storage, sua, ["6-ESL", "7"], bang, items) == 2
     assert services.giay_to_tu_list(storage.list_items(GIAY_TO.name)) == {
         "6-ESL": ["Giấy khai sinh"]}
+
+
+def test_ho_so_can_bo_sung_va_da_thu_du():
+    from datetime import date
+    rec = {"Khoi": "6", "PhanHe": "IEP", "TuyenSinhID": "5"}
+    can = services.giay_to_can_nop("6", "IEP")
+    # cần bổ sung: chỉ giấy tờ tuyển sinh chọn mới tính là còn thiếu
+    t = services.ghi_ho_so(date(2026, 11, 3), {"Giấy khai sinh": "Bản sao"},
+                           ["Học bạ Tiểu học"], date(2026, 11, 20))
+    assert services.doc_ho_so(t) == (date(2026, 11, 3), {"Giấy khai sinh": "Bản sao"})
+    assert services.doc_bo_sung(t) == ("bo_sung", ["Học bạ Tiểu học"], date(2026, 11, 20))
+    c, da, thieu = services.tien_do_giay_to({**rec, "HoSoDaNop": t})
+    assert c == can and thieu == ["Học bạ Tiểu học"]
+    # đã thu đủ: không còn thiếu, dù chưa tick đủ danh mục của khối
+    t = services.ghi_ho_so(date(2026, 11, 3), {"Giấy khai sinh": "Bản sao"}, du=True)
+    assert services.doc_bo_sung(t)[0] == "du" and "Đã thu đủ" not in services.doc_ho_so(t)[1]
+    assert services.tien_do_giay_to({**rec, "HoSoDaNop": t})[2] == []
+    # chưa chọn tình trạng (dữ liệu cũ): còn thiếu = danh mục khối chưa nộp
+    t = services.ghi_ho_so(None, {"Giấy khai sinh": "Bản sao"})
+    assert len(services.tien_do_giay_to({**rec, "HoSoDaNop": t})[2]) == len(can) - 1

@@ -127,13 +127,34 @@ def thu_ho_so_dialog(rec: dict):
             if nhan:
                 chon[g] = ban or "Bản gốc"
     thieu = [g for g in can if g not in chon]
-    st.caption(f"Đã nhận **{len(chon)}** giấy tờ · còn thiếu **{len(thieu)}**"
+    st.caption(f"Đã nhận **{len(chon)}** giấy tờ · khối còn thiếu **{len(thieu)}**"
                + (": " + "; ".join(thieu) if thieu else ""))
+    # Tình trạng hồ sơ: tuyển sinh chọn giấy tờ cần bổ sung, hoặc xác nhận đã thu đủ
+    tt0, bs0, han0 = services.doc_bo_sung(rec.get("HoSoDaNop"))
+    tinh = st.segmented_control(
+        "Tình trạng hồ sơ", ["Cần bổ sung", "Đã thu đủ"], required=True, key=f"{p}_tt",
+        default="Đã thu đủ" if tt0 == "du" or (not tt0 and not thieu) else "Cần bổ sung")
+    du = tinh == "Đã thu đủ"
+    bo_sung: list[str] = []
+    if du:
+        st.caption(":material/check_circle: Phiếu ký nhận **không có mục hồ sơ cần bổ sung**"
+                   + (f" (dù còn {len(thieu)} giấy tờ của khối chưa tick đã nhận)." if thieu
+                      else "."))
+    else:
+        lua = list(dict.fromkeys([*thieu, *[g for g in bs0 if g not in chon],
+                                  *[g for g in GIAY_TO_NHAP_HOC if g not in chon]]))
+        mac_dinh = [g for g in bs0 if g in lua] if tt0 == "bo_sung" else thieu
+        bo_sung = st.multiselect(
+            "Hồ sơ cần bổ sung", lua, default=mac_dinh, accept_new_options=True,
+            key=f"{p}_bs_{hash(tuple(thieu))}",
+            placeholder="Chọn giấy tờ phụ huynh cần nộp bổ sung",
+            help="Mặc định là giấy tờ của khối chưa nhận; bỏ bớt hoặc thêm theo thực tế. Chỉ "
+                 "các giấy tờ chọn ở đây in trên phiếu và tính là còn thiếu.")
     c1, c2, c3 = st.columns(3)
     ngay = c1.date_input("Ngày nộp", ngay or ui._to_date(rec.get("NgayNhanHoSo")) or date.today(),
                          format="DD/MM/YYYY", key=f"{p}_ngay")
-    han = c2.date_input("Bổ sung trước ngày", date.today() + timedelta(days=20),
-                        format="DD/MM/YYYY", key=f"{p}_han", disabled=not thieu)
+    han = c2.date_input("Bổ sung trước ngày", han0 or date.today() + timedelta(days=20),
+                        format="DD/MM/YYYY", key=f"{p}_han", disabled=du or not bo_sung)
     dang_nhap = ui.logged_in()
     nguoi = c3.text_input("Người nhận hồ sơ", ui.current_user(), key=f"{p}_nguoi",
                           disabled=dang_nhap,
@@ -144,7 +165,8 @@ def thu_ho_so_dialog(rec: dict):
                        width="stretch")
     luu = b2.button("Chỉ lưu", icon=":material/check:", width="stretch")
     if luu or luu_in:
-        upd = {"HoSoDaNop": services.ghi_ho_so(ngay, chon) if chon else "",
+        upd = {"HoSoDaNop": services.ghi_ho_so(ngay, chon, bo_sung, han, du)
+               if chon or du or bo_sung else "",
                "NgayNhanHoSo": ngay, "NguoiNhanHoSo": nguoi}
         if not rec.get("TinhTrangHS"):
             upd["TinhTrangHS"] = "Đang nhập hồ sơ"
@@ -152,7 +174,7 @@ def thu_ho_so_dialog(rec: dict):
                         success=f"Đã lưu {len(chon)} giấy tờ của {rec.get('HoTen')}")
         if res is not None:
             if luu_in:
-                S["_in_bien_nhan"] = dict(rec=rec, da_nhan=chon, thieu=thieu, han=han,
+                S["_in_bien_nhan"] = dict(rec=rec, da_nhan=chon, thieu=bo_sung, han=han,
                                           nguoi=nguoi, ngay=ngay)
             done(res)
 
@@ -175,8 +197,9 @@ def in_bien_nhan(rec: dict):
     """Mở bảng ký nhận theo giấy tờ đã lưu của hồ sơ (in lại)."""
     can, da, thieu = services.tien_do_giay_to(rec)
     ngay, _ = services.doc_ho_so(rec.get("HoSoDaNop"))
+    han = services.doc_bo_sung(rec.get("HoSoDaNop"))[2]
     bien_nhan_dialog(dict(rec=rec, da_nhan=da, thieu=thieu,
-                          han=date.today() + timedelta(days=20),
+                          han=han or date.today() + timedelta(days=20),
                           nguoi=rec.get("NguoiNhanHoSo") or ui.current_user(),
                           ngay=ngay))
 
@@ -339,18 +362,32 @@ def render_tab(name: str, groups: tuple, rec: dict, prefix: str) -> dict:
     else:  # Hồ sơ & học phí
         ngay, docs = services.doc_ho_so(rec.get("HoSoDaNop"))
         can, _, thieu = services.tien_do_giay_to(rec)
+        tt_bs, _, han_bs = services.doc_bo_sung(rec.get("HoSoDaNop"))
         c1, c2 = st.columns([2, 1])
         with c1:
             khoi = rec.get("KhoiPH") or rec.get("Khoi") or "—"
+            n_da = sum(g in docs for g in can)
             st.markdown(f"**Giấy tờ cần nộp — khối {khoi}**" + (
-                f" · đã nộp {len(can) - len(thieu)}/{len(can)}" if can else
+                f" · đã nộp {n_da}/{len(can)}" if can else
                 " · học sinh cũ, không phải nộp lại" if services.la_hs_cu(rec) else ""))
+            if tt_bs == "du":
+                st.badge("Đã thu đủ — không cần bổ sung", icon=":material/check_circle:",
+                         color="green")
+            elif thieu:
+                st.badge(f"Cần bổ sung {len(thieu)} giấy tờ"
+                         + (f" · hạn {han_bs:%d/%m/%Y}" if han_bs else ""),
+                         icon=":material/pending_actions:", color="red")
             if can:
-                st.progress((len(can) - len(thieu)) / len(can))
+                st.progress(n_da / len(can))
                 st.markdown("  \n".join(
                     f":green[:material/check_circle:] {g} — *{docs[g]}*" if g in docs
-                    else f":red[:material/radio_button_unchecked:] {g} — :red[chưa nộp]"
+                    else f":red[:material/radio_button_unchecked:] {g} — :red[cần bổ sung]"
+                    if g in thieu else
+                    f":gray[:material/remove_circle_outline:] {g} — :gray[không cần bổ sung]"
                     for g in can))
+                ngoai = [g for g in thieu if g not in can]
+                if ngoai:
+                    st.caption("Cần bổ sung thêm: " + "; ".join(ngoai))
             khac = [g for g in docs if g not in can]
             if khac:
                 st.caption("Nộp thêm: " + "; ".join(f"{g} ({docs[g]})" for g in khac))
@@ -426,9 +463,18 @@ def card(r: dict, selected: bool):
         menu = ui.card_head(r["HoTen"] or "(Chưa có tên)", rid, open_record)
         lop = f'Lớp <b>{r["LopHoc"]}</b>' if r["LopHoc"] else '<span class="red">Chưa xếp lớp</span>'
         tt = r["TinhTrangHS"]
-        can, _, thieu = services.tien_do_giay_to(r)
-        gt = (f' · Giấy tờ <b class="{"red" if thieu else ""}">{len(can) - len(thieu)}/'
-              f'{len(can)}</b>' if can else "")
+        can, da, thieu = services.tien_do_giay_to(r)
+        tt_bs = services.doc_bo_sung(r["HoSoDaNop"])[0]
+        if not can:
+            gt = ""
+        elif not thieu and (tt_bs == "du" or all(g in da for g in can)):
+            gt = ' · Giấy tờ <b>đã thu đủ</b>'
+        elif tt_bs == "bo_sung":
+            gt = (f' · Giấy tờ {sum(g in da for g in can)}/{len(can)} · '
+                  f'<b class="red">bổ sung {len(thieu)}</b>')
+        else:
+            gt = f' · Giấy tờ <b class="red">{sum(g in da for g in can)}/{len(can)}</b>'
+
         xe = f' · 🚌 {r["DangKyXe"]}' if noi_tru(r) and r["DangKyXe"] else ""
         st.html(
             f'<p class="tp-card">Khối <b>{r["KhoiPH"] or "—"}</b> · '

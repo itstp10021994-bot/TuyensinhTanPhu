@@ -451,6 +451,31 @@ def giay_to_can_nop(khoi: str | None, phan_he: str | None = None) -> list[str]:
     return list(bang[cung_khoi[0]]) if cung_khoi else []
 
 
+# Dòng ghi chú tình trạng bổ sung trong ô "Hồ sơ đã nộp" (không phải tên giấy tờ)
+_DONG_BO_SUNG = re.compile(r"^(đã thu đủ|cần bổ sung\s*:|hạn bổ sung)", re.I)
+
+
+def doc_bo_sung(text: str) -> tuple[str, list[str], date | None]:
+    """Tình trạng bổ sung ghi khi thu hồ sơ: ("du" | "bo_sung" | "", giấy tờ cần bổ sung, hạn)."""
+    tt, ds, han = "", [], None
+    for line in str(text or "").splitlines():
+        line = line.strip()
+        if re.match(r"^đã thu đủ", line, re.I):
+            tt = "du"
+        elif re.match(r"^cần bổ sung\s*:", line, re.I):
+            tt = "bo_sung"
+            ds = [x.strip() for x in line.split(":", 1)[1].split(";") if x.strip()]
+        else:
+            m = re.match(r"^hạn bổ sung\s+(\d{1,2})/(\d{1,2})/(\d{4})", line, re.I)
+            if m:
+                d, mth, y = map(int, m.groups())
+                try:
+                    han = date(y, mth, d)
+                except ValueError:
+                    pass
+    return tt, ds, han
+
+
 def doc_ho_so(text: str) -> tuple[date | None, dict[str, str]]:
     """ "Ngày đã nộp 23/06/2025\nGiấy khai sinh - Bản sao…" -> (ngày, {giấy tờ: bản gốc/sao})."""
     from . import danh_muc
@@ -467,7 +492,7 @@ def doc_ho_so(text: str) -> tuple[date | None, dict[str, str]]:
             except ValueError:
                 pass
             continue
-        if not line:
+        if not line or _DONG_BO_SUNG.match(line):
             continue
         name, _, ban = line.rpartition(" -") if " -" in line else (line, "", "")
         name = name.strip()
@@ -494,12 +519,27 @@ def tien_do_giay_to(rec: dict) -> tuple[list[str], dict[str, str], list[str]]:
     Học sinh cũ: không có giấy tờ cần nộp."""
     can = giay_to_cua_hs(rec)
     da = doc_ho_so(rec.get("HoSoDaNop"))[1]
+    tt, bo_sung, _ = doc_bo_sung(rec.get("HoSoDaNop"))
+    if tt == "du":  # tuyển sinh xác nhận đã thu đủ
+        return can, da, []
+    if tt == "bo_sung":  # chỉ những giấy tờ tuyển sinh chọn cần bổ sung
+        return can, da, [g for g in bo_sung if g not in da]
     return can, da, [g for g in can if g not in da]
 
 
-def ghi_ho_so(ngay: date | None, docs: dict[str, str]) -> str:
+def ghi_ho_so(ngay: date | None, docs: dict[str, str], bo_sung: list[str] | None = None,
+              han: date | None = None, du: bool = False) -> str:
+    """Nội dung ô "Hồ sơ đã nộp": ngày, từng giấy tờ - bản, rồi tình trạng bổ sung
+    ("Đã thu đủ" hoặc "Cần bổ sung: A; B" + "Hạn bổ sung dd/mm/yyyy")."""
     lines = [f"Ngày đã nộp {ngay:%d/%m/%Y}"] if ngay else []
-    return "\n".join(lines + [f"{g} - {ban}" for g, ban in docs.items()])
+    lines += [f"{g} - {ban}" for g, ban in docs.items()]
+    if du:
+        lines.append("Đã thu đủ")
+    elif bo_sung:
+        lines.append("Cần bổ sung: " + "; ".join(bo_sung))
+        if han:
+            lines.append(f"Hạn bổ sung {han:%d/%m/%Y}")
+    return "\n".join(lines)
 
 
 def rut_ho_so_nhap_hoc(storage: Storage, rec: dict, ly_do: str, nguoi: str = "") -> dict:

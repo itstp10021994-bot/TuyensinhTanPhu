@@ -119,9 +119,9 @@ ul {{ margin: 4px 0 0 0; padding-left: 22px; font-size: 15px; }} li {{ margin: 2
  <div class="row"><div><span class="lbl">SĐT:</span> {escape(sdt)}</div></div>
  <div class="sum">Hồ sơ đã nhận là: {len(da_nhan)} hồ sơ hợp lệ</div>
  <ul>{li_nhan}</ul>
- <div class="sum">Hồ sơ cần bổ sung là: {len(can_bo_sung)} hồ sơ</div>
- <ul>{li_thieu}</ul>
- {f'<div class="han">Bổ sung trước ngày: {_d(han_bo_sung)}</div>' if can_bo_sung and han_bo_sung else ''}
+ {(f'<div class="sum">Hồ sơ cần bổ sung là: {len(can_bo_sung)} hồ sơ</div><ul>{li_thieu}</ul>'
+   + (f'<div class="han">Bổ sung trước ngày: {_d(han_bo_sung)}</div>' if han_bo_sung else ''))
+  if can_bo_sung else '<div class="sum">Hồ sơ đã thu đủ.</div>'}
  <div class="ky">
   <div><i style="visibility:hidden">Ngày</i><b>Phụ huynh nộp hồ sơ</b><i>Ký và ghi rõ họ tên</i>
    <div class="ten">&nbsp;</div></div>
