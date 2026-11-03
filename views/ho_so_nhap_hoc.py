@@ -94,6 +94,11 @@ def xep_lop_dialog(rec: dict):
                        success=f"Đã xếp {rec.get('HoTen')} vào lớp {lop}"))
 
 
+def nguoi_ky_nhan() -> str:
+    """Người ký nhận trên phiếu: họ tên tài khoản đang thao tác (vd Lê Thị Hương Quỳnh)."""
+    return ui.current_user() if ui.logged_in() else ""
+
+
 @ui.dialog("Thu hồ sơ", width="large")
 def thu_ho_so_dialog(rec: dict):
     ngay, docs = services.doc_ho_so(rec.get("HoSoDaNop"))
@@ -177,11 +182,14 @@ def thu_ho_so_dialog(rec: dict):
                          format="DD/MM/YYYY", key=f"{p}_ngay")
     han = c2.date_input("Bổ sung trước ngày", han0 or date.today() + timedelta(days=20),
                         format="DD/MM/YYYY", key=f"{p}_han", disabled=du or not bo_sung)
-    dang_nhap = ui.logged_in()
-    nguoi = c3.text_input("Người nhận hồ sơ", ui.current_user(), key=f"{p}_nguoi",
-                          disabled=dang_nhap,
-                          help="Tên tài khoản Microsoft 365 đang đăng nhập" if dang_nhap else
-                          "Nhập tên người nhận (hoặc đăng nhập Microsoft 365 để tự điền)")
+    nguoi = nguoi_ky_nhan()
+    if nguoi:  # người ký nhận = tài khoản đang thao tác (không sửa tay)
+        c3.text_input("Người nhận hồ sơ", nguoi, disabled=True,
+                      key=f"{p}_nguoi_{abs(hash(nguoi))}",
+                      help="Tên tài khoản đang đăng nhập — in ở mục Đơn vị nhận hồ sơ trên phiếu")
+    else:  # app chưa dùng tài khoản: nhập tay
+        nguoi = c3.text_input("Người nhận hồ sơ", key=f"{p}_nguoi",
+                              placeholder="Họ tên người nhận hồ sơ")
     b1, b2 = st.columns(2)
     luu_in = b1.button("Lưu & in bảng ký nhận", type="primary", icon=":material/print:",
                        width="stretch")
@@ -222,7 +230,7 @@ def in_bien_nhan(rec: dict):
     han = services.doc_bo_sung(rec.get("HoSoDaNop"))[2]
     bien_nhan_dialog(dict(rec=rec, da_nhan=da, thieu=thieu,
                           han=han or date.today() + timedelta(days=20),
-                          nguoi=rec.get("NguoiNhanHoSo") or ui.current_user(),
+                          nguoi=nguoi_ky_nhan() or rec.get("NguoiNhanHoSo") or "",
                           ngay=ngay))
 
 
