@@ -3,6 +3,8 @@
 Lọc theo bước / khối / chế độ / giữ chỗ, tìm kiếm; học sinh đang chọn nằm ở ?id=...
 Thêm liên hệ mới bằng hộp thoại nhập nhanh (?new=1 để mở từ trang khác).
 """
+from html import escape
+
 import pandas as pd
 import streamlit as st
 
@@ -155,11 +157,11 @@ def card(r: dict, selected: bool):
     with ui.card_box(rid, selected):
         menu = ui.card_head(r["HoTenHS"] or "(Chưa có tên)", rid, open_record)
         color = STEP_COLOR.get(step, "#6B7280")
-        giu = r["GiuCho"] or "Chưa giữ chỗ"
-        khoi = (r["Khoi"] or "—") + (f'-{r["PhanHe"]}' if r["PhanHe"] else "")
+        giu = escape(r["GiuCho"] or "Chưa giữ chỗ")
+        khoi = escape((r["Khoi"] or "—") + (f'-{r["PhanHe"]}' if r["PhanHe"] else ""))
         st.html(
-            f'<p class="tp-card">Khối <b>{khoi}</b> · {r["CheDo"] or "—"} · '
-            f'{r["SDT"] or "—"}<br>{ui.pill(step, color)} &nbsp;'
+            f'<p class="tp-card">Khối <b>{khoi}</b> · {escape(r["CheDo"] or "—")} · '
+            f'{escape(r["SDT"] or "—")}<br>{ui.pill(step, color)} &nbsp;'
             f'<span class="k">Liên hệ {ui.fmt_date(r["NgayLienHe"])} · {giu}</span></p>')
         with menu:
             nxt = ui.next_step(step)

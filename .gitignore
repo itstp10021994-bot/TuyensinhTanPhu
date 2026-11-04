@@ -9,3 +9,7 @@ data_local.sqlite3
 # Dữ liệu học sinh (SĐT, số tài khoản) — không đưa lên git
 *chuan_hoa*.xlsx
 data_tuyensinh*.xlsx
+
+# File Excel / dữ liệu học sinh tải lên để xử lý — không đưa lên git
+*.xls
+/*.xlsx

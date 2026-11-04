@@ -44,6 +44,15 @@ Tạo chuỗi ngẫu nhiên cho `COOKIE_SECRET`: `python -c "import secrets; pri
 - Sai mật khẩu 5 lần → khóa tạm tên đăng nhập đó 5 phút (cả mật khẩu quản trị).
 - Thông báo lỗi che `sig=`, key, token; chi tiết kỹ thuật chỉ Quản trị xem.
 
+## 4b. Tốc độ (bản đệm dữ liệu)
+
+- App đọc mỗi list SharePoint **một lần** rồi dùng chung cho mọi người dùng; đăng nhập xong app tải
+  trước (chạy nền) các list của những trang tài khoản được vào.
+- **Lưu / thêm / xóa trong app** cập nhật thẳng dòng đó vào bản đệm — không tải lại cả list; sửa
+  một dòng qua Power Automate chỉ tốn **1 lần gọi flow**.
+- Sửa / xóa **thẳng trên SharePoint**: app hỏi SharePoint (chạy nền, 30 giây một lần) và tự tải lại
+  list đó; muộn nhất 10 phút. Nút ⟳ trên thanh menu tải lại ngay.
+
 ## 5. Sao lưu
 
 | Cách | Khi nào | Làm thế nào |
@@ -75,4 +84,4 @@ nên có thể quay lại từng phần:
       (dashboard + Trình chiếu), Cài đặt mở bình thường.
 - [ ] Lưu thử một hồ sơ → Cài đặt → Nhật ký hoạt động có dòng mới.
 - [ ] Tài khoản không phải Quản trị không thấy nút **Xóa liên hệ**.
-- [ ] `pytest` chạy đủ (112 bài) trước khi đẩy mã mới.
+- [ ] `pytest` chạy đủ (122 bài) trước khi đẩy mã mới.

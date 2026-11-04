@@ -238,3 +238,24 @@ def test_ten_cot_bat_dau_bang_gach_duoi_dung_entity_name():
     assert cm.internal["Van1"] == "OData__x0056_an1"
     assert cm.to_sp({"Van1": 8})["OData__x0056_an1"] == 8.0
     assert cm.from_sp({"OData__x0056_an1": 7.5}, 1)["Van1"] == 7.5
+
+
+def test_cap_nhat_nhanh_giong_doc_lai(pa):
+    """Ghi nhanh (PATCH + ghép bản đệm) cho đúng giá trị như đọc lại từ SharePoint, 1 lần gọi."""
+    st, flow = pa
+    lst = flow.lists[f"lists(guid'{TS_GUID}')"]
+    lst["cols"] = [{"name": "Title", "title": "Title", "type": "Text"}] + [
+        {"name": f"field_{i}", "title": f.key,
+         "type": "Number" if f.key in ("Khoi", "SoTienXacNhan") else
+         "DateTime" if f.type == "date" else "Text"}
+        for i, f in enumerate(TUYEN_SINH.fields, 1)]
+    rec = services.save_tuyen_sinh(st, dict(HS))
+    n = len(flow.calls)
+    data = {"NgaySinh": "2011-06-03", "Khoi": "11", "SoTienXacNhan": 5000000, "GhiChu": "",
+            "CheDo": "Nội trú", "KhongCoCot": "x"}
+    nhanh = st.cap_nhat_nhanh(TUYEN_SINH.name, rec["id"], data, rec)
+    assert len(flow.calls) - n == 1  # chỉ PATCH
+    doc = st.get_item(TUYEN_SINH.name, rec["id"])
+    for k in ("NgaySinh", "Khoi", "SoTienXacNhan", "GhiChu", "CheDo", "HoTenHS", "SDT"):
+        assert nhanh[k] == doc[k], k
+    assert "KhongCoCot" not in nhanh

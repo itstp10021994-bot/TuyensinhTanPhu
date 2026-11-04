@@ -14,6 +14,7 @@ import pandas as pd
 
 from . import dia_ban as DB
 from . import services
+from .excel_an_toan import chan_cong_thuc_ws
 from .schema import GIAY_TO_NHAP_HOC, TRANG_THAI
 
 G_TS, G_KT, G_NH = "Tuyển sinh", "Tài chính", "Nhập học"
@@ -1213,6 +1214,7 @@ def excel(items: list[tuple[str, str, pd.DataFrame]], school: str, nam_hoc: str)
                                           else "" if v is pd.NaT else v)
             df.to_excel(xw, sheet_name=name, index=False, startrow=4)
             ws = xw.sheets[name]
+            chan_cong_thuc_ws(ws)  # chữ "=..." do người dùng nhập không thành công thức
             ws["A1"] = school.upper()
             ws["A1"].font = Font(bold=True, size=11, color="1D4ED8")
             ws["A2"] = title.upper()

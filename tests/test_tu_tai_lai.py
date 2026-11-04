@@ -29,9 +29,66 @@ def test_bo_ban_dem_list_vua_doi():
     kho = _Kho({"A": now - timedelta(minutes=1),        # xóa dòng sau lúc tải -> tải lại
                 "B": now - timedelta(minutes=5)})       # đổi trước lúc tải -> giữ
     ui._kiem_tra_thay_doi(kho)
+    _cho_nen(store)
     assert "A" not in store["lists"] and "B" in store["lists"]
     ui._kiem_tra_thay_doi(kho)  # trong 30 giây: không hỏi lại SharePoint
     assert kho.goi == 1
+    store["lists"].clear()
+
+
+def _cho_nen(store):
+    """Chờ lần kiểm tra chạy nền xong."""
+    assert store["kt_lock"].acquire(timeout=5)
+    store["kt_lock"].release()
+
+
+def _dat(name, items):
+    import threading
+    store = ui._data_store()
+    store["lists"][name] = {"lock": threading.Lock(), "items": items, "frames": {"x": 1},
+                            "memo": {"y": 2}, "at": __import__("time").monotonic(),
+                            "luc": datetime.now(timezone.utc) - timedelta(minutes=1)}
+    return store["lists"][name]
+
+
+def test_ghi_trong_app_cap_nhat_ban_dem_khong_tai_lai():
+    store = ui._data_store()
+    store["lists"].clear()
+    e = _dat("L", [{"id": "1", "a": 1}, {"id": "2", "a": 2}])
+    ui._ghi_dem("L", {"id": "2", "a": 20}, "2")          # sửa
+    ui._ghi_dem("L", {"id": "3", "a": 3})                # thêm
+    ui._ghi_dem("L", None, "1")                          # xóa
+    assert e["items"] == [{"id": "2", "a": 20}, {"id": "3", "a": 3}]
+    assert e["frames"] == {} and e["memo"] == {} and ui._fresh(e)
+    assert ui._ban_ghi_dem("L", 3) == {"id": "3", "a": 3}
+    # SharePoint báo đổi đúng lúc app vừa ghi: không bỏ bản đệm
+    store.pop("kt_at", None)
+    ui._kiem_tra_thay_doi(_Kho({"L": e["ghi_moc"]}))
+    _cho_nen(store)
+    assert store["lists"].get("L") is e
+    # có người sửa thẳng trên SharePoint sau đó: bỏ bản đệm để tải lại
+    store.pop("kt_at", None)
+    ui._kiem_tra_thay_doi(_Kho({"L": e["ghi_moc"] + timedelta(minutes=1)}))
+    _cho_nen(store)
+    assert "L" not in store["lists"]
+    store["lists"].clear()
+
+
+def test_user_storage_ghi_qua_ban_dem(tmp_path):
+    from tuyensinh.storage.local import LocalStorage
+    base = LocalStorage(tmp_path / "x.db")
+    r = base.create_item("Data_TuyenSinh", {"HoTenHS": "A", "NamHoc": "2026-2027"})
+    store = ui._data_store()
+    store["lists"].clear()
+    e = _dat("Data_TuyenSinh", base.list_items("Data_TuyenSinh"))
+    s = ui._UserStorage(base, "Cô Quỳnh")
+    s.update_item("Data_TuyenSinh", r["id"], {"HoTenHS": "B"})
+    moi = s.create_item("Data_TuyenSinh", {"HoTenHS": "C", "NamHoc": "2026-2027"})
+    assert [x["HoTenHS"] for x in e["items"]] == ["B", "C"]
+    assert e["items"][0]["NguoiCapNhat"] == "Cô Quỳnh"
+    s.delete_item("Data_TuyenSinh", moi["id"])
+    assert [x["HoTenHS"] for x in e["items"]] == ["B"]
+    assert e["items"] == base.list_items("Data_TuyenSinh")
     store["lists"].clear()
 
 

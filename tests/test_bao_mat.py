@@ -41,3 +41,17 @@ def test_kiem_tra_o_nhap():
     assert kiem_tra_o("email", "a@b.vn") == "" and kiem_tra_o("email", "ab.vn")
     assert kiem_tra_o("can_cuoc", "079 215 016 553") == "" and kiem_tra_o("can_cuoc", "123")
     assert kiem_tra_o("sdt", "") == ""
+
+
+def test_xuat_excel_khong_chay_cong_thuc():
+    import io
+
+    import openpyxl
+    import pandas as pd
+
+    from tuyensinh import ui
+    b = ui.excel_bytes({"S": pd.DataFrame({"Ghi chú": ['=HYPERLINK("http://x","bấm")', "bình thường"],
+                                           "SĐT": ["+84901234567", "-"]})})
+    ws = openpyxl.load_workbook(io.BytesIO(b)).active
+    assert ws["A2"].data_type == "s" and ws["A2"].value.startswith("=HYPERLINK")
+    assert ws["B2"].value == "+84901234567"

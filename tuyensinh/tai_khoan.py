@@ -90,6 +90,15 @@ def _phien(t: dict) -> dict:
             "Quyen": quyen(t)}
 
 
+def kiem_lai_phien(items: list[dict], tk: dict) -> dict | None:
+    """Phiên đang đăng nhập so với list tài khoản hiện tại: tài khoản bị xóa / tắt -> None (đăng
+    xuất); đổi vai trò, quyền, họ tên -> phiên mới; phiên quản trị tạm (không id) giữ nguyên."""
+    if not tk.get("id"):
+        return tk
+    t = next((x for x in dang_hoat_dong(items) if str(x.get("id")) == str(tk["id"])), None)
+    return _phien(t) if t else None
+
+
 def phien_quan_tri() -> dict:
     """Phiên Quản trị tạm khi vào bằng ADMIN_PASSWORD (không gắn tài khoản nào)."""
     return {"id": "", "HoTen": "Quản trị", "TenDangNhap": "ADMIN_PASSWORD",

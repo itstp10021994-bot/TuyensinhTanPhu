@@ -13,6 +13,7 @@ ROOT = Path(__file__).parent
 st.set_page_config(page_title="Tuyển sinh · Tân Phú", page_icon=str(ROOT / "static/icon.svg"),
                    layout="wide", initial_sidebar_state="auto")  # máy tính: mở; điện thoại: thu gọn
 ui.inject_css()
+ui.lam_nong()  # dựng sẵn danh mục ở nền (lần mở hồ sơ đầu không phải chờ)
 _logo = ROOT / "static/logo_truong.png"
 _logo = str(_logo if _logo.exists() else ROOT / "static/logo.svg")
 st.logo(_logo, icon_image=_logo, size="large")  # menu ngang hiện icon_image
@@ -177,6 +178,23 @@ if not _has_auth() and not S.get("tk"):
                         tai_khoan.ghi_sai("__admin__")
                         st.error("Sai mật khẩu quản trị.", icon=":material/error:")
         _dung_lai()
+if S.get("tk") and not _has_auth():
+    # tài khoản bị tắt / xóa hoặc đổi quyền khi đang đăng nhập: áp dụng ngay (list tài khoản lấy
+    # từ bộ nhớ đệm, không tốn thêm lần gọi SharePoint)
+    from tuyensinh import tai_khoan as _tkm
+    from tuyensinh.schema import TAI_KHOAN as _TKL
+
+    _ds_tk = ui.records(_TKL, optional=True)
+    if not ui.list_error(_TKL):
+        _moi = _tkm.kiem_lai_phien(_ds_tk, S["tk"])
+        if _moi is None:
+            S.pop("tk", None)
+            S["_xoa_ghi_nho"] = True
+            st.warning("Tài khoản của bạn đã bị tắt hoặc xóa — vui lòng liên hệ Quản trị.",
+                       icon=":material/lock:")
+            st.stop()
+        if _moi != S["tk"]:
+            S["tk"] = _moi
 if "_ghi_nho" in S:  # lưu mã ghi nhớ sau khi đăng nhập; giữ đến khi trình duyệt xác nhận
     if ui.ghi_nho("ghi_nho_ghi", S["_ghi_nho"]) == S["_ghi_nho"]:
         S.pop("_ghi_nho")
@@ -208,6 +226,14 @@ for _ten, _ks in _NHOM:
     if _ds:
         _nav[_ten] = _ds
 pg = st.navigation(_nav, position="sidebar", expanded=True)
+# tải trước (nền) dữ liệu của các trang được vào -> chuyển trang không phải chờ SharePoint
+from tuyensinh.schema import (GIAY_TO as _GT, NHAP_HOC as _NH, NOI_TRU_DANH_GIA as _NTD,
+                              NOI_TRU_PHONG as _NTP, TUYEN_SINH as _TS)
+_can = {_TS, _NH, _GT} if any(P[k] in _pages for k in ("ts", "nh", "kt", "bc", "home", "gt")) \
+    else set()
+if P["nt"] in _pages:
+    _can |= {_NH, _NTP, _NTD}
+ui.tai_truoc(*sorted(_can, key=lambda x: x.name))
 ui.chan_thanh_ben()
 # Vừa đăng nhập: mở trang chính của vai trò (vd Kế toán -> Kế toán, GV quản nhiệm -> Nội trú)
 _TRANG_VAI_TRO = {"Tuyển sinh": "ts", "Kế toán": "kt", "Giáo vụ": "nh", "GV quản nhiệm": "nt",

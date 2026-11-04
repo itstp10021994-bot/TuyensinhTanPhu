@@ -167,6 +167,8 @@ def build_workbook(df: pd.DataFrame, school: str = "TH, THCS VÀ THPT TÂN PHÚ"
         for xa in xas:
             k += 1
             s.append([k, xa, tinh])
+    from .excel_an_toan import chan_cong_thuc
+    chan_cong_thuc(wb)  # dữ liệu "=..." không thành công thức
     return wb
 
 

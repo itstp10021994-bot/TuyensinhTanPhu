@@ -9,6 +9,8 @@ nằm ở ?id=... để giữ khi tải lại trang.
 from dataclasses import replace
 from datetime import date, timedelta
 
+from html import escape
+
 import pandas as pd
 import streamlit as st
 
@@ -491,7 +493,7 @@ def card(r: dict, selected: bool):
     rid = r["id"]
     with ui.card_box(rid, selected):
         menu = ui.card_head(r["HoTen"] or "(Chưa có tên)", rid, open_record)
-        lop = f'Lớp <b>{r["LopHoc"]}</b>' if r["LopHoc"] else '<span class="red">Chưa xếp lớp</span>'
+        lop = f'Lớp <b>{escape(r["LopHoc"])}</b>' if r["LopHoc"] else '<span class="red">Chưa xếp lớp</span>'
         tt = r["TinhTrangHS"]
         can, da, thieu = services.tien_do_giay_to(r)
         tt_bs = services.doc_bo_sung(r["HoSoDaNop"])[0]
@@ -505,12 +507,12 @@ def card(r: dict, selected: bool):
         else:
             gt = f' · Giấy tờ <b class="red">{sum(g in da for g in can)}/{len(can)}</b>'
 
-        xe = f' · 🚌 {r["DangKyXe"]}' if noi_tru(r) and r["DangKyXe"] else ""
+        xe = f' · 🚌 {escape(r["DangKyXe"])}' if noi_tru(r) and r["DangKyXe"] else ""
         st.html(
-            f'<p class="tp-card">Khối <b>{r["KhoiPH"] or "—"}</b> · '
-            f'{r["NoiTruBanTru"] or "—"} · {lop}<br>'
+            f'<p class="tp-card">Khối <b>{escape(r["KhoiPH"] or "—")}</b> · '
+            f'{escape(r["NoiTruBanTru"] or "—")} · {lop}<br>'
             + (ui.pill(tt, TT_HEX.get(tt, "#6B7280")) + " &nbsp;" if tt else "")
-            + f'<span class="k">{r["DienThoaiSLL"] or "—"}{gt}{xe}</span></p>')
+            + f'<span class="k">{escape(r["DienThoaiSLL"] or "—")}{gt}{xe}</span></p>')
         with menu:
             st.button("Mở hồ sơ", key=f"mo_{rid}", width="stretch", icon=":material/open_in_new:",
                       on_click=open_record, args=(rid,))

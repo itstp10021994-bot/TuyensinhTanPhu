@@ -57,3 +57,20 @@ def test_quyen_giay_to_can_thu_cho_tuyen_sinh_mac_dinh_cu():
                                    "Giấy tờ cần thu", "Báo cáo"]
     rieng = {"VaiTro": "Tuyển sinh", "Quyen": "Data tuyển sinh;Báo cáo"}
     assert tai_khoan.quyen(rieng) == ["Data tuyển sinh", "Báo cáo"]
+
+
+def test_kiem_lai_phien_khi_tai_khoan_doi(tmp_path):
+    st = LocalStorage(str(tmp_path / "t.db"))
+    tai_khoan.luu(st, [], "Tuyển sinh B", "ts", "Tuyển sinh", "abc123")
+    items = st.list_items(TAI_KHOAN.name)
+    phien = tai_khoan.dang_nhap(items, "ts", "abc123")
+    assert tai_khoan.kiem_lai_phien(items, phien) == phien
+    # Quản trị tắt tài khoản -> phiên đang mở bị đăng xuất
+    st.update_item(TAI_KHOAN.name, items[0]["id"], {"HoatDong": "Không"})
+    assert tai_khoan.kiem_lai_phien(st.list_items(TAI_KHOAN.name), phien) is None
+    # đổi quyền -> phiên nhận quyền mới
+    st.update_item(TAI_KHOAN.name, items[0]["id"], {"HoatDong": "Có", "Quyen": "Báo cáo"})
+    assert tai_khoan.kiem_lai_phien(st.list_items(TAI_KHOAN.name), phien)["Quyen"] == ["Báo cáo"]
+    # phiên quản trị tạm (ADMIN_PASSWORD) giữ nguyên
+    qt = tai_khoan.phien_quan_tri()
+    assert tai_khoan.kiem_lai_phien([], qt) is qt

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
@@ -174,6 +175,17 @@ class PowerAutomateStorage(Storage):
         self.call("PATCH", f"{list_path(list_name)}/items({int(item_id)})",
                   self.colmap(list_name).to_sp(data))
         return self.get_item(list_name, item_id)
+
+    def cap_nhat_nhanh(self, list_name, item_id, data, cu: dict) -> dict:
+        """Ghi một dòng rồi ghép với bản ghi đang có (`cu`, từ bộ nhớ đệm của app) thay vì đọc
+        lại từ SharePoint — bớt một lần gọi flow cho mỗi lần lưu."""
+        cm = self.colmap(list_name)
+        raw = cm.to_sp(data)
+        self.call("PATCH", f"{list_path(list_name)}/items({int(item_id)})", raw)
+        moi = cm.from_sp(raw, item_id)  # đổi về đúng dạng giá trị như khi đọc list
+        moi = {k: v for k, v in moi.items() if k in data}
+        return {**cu, **moi, "id": str(item_id),
+                "Modified": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
     def delete_item(self, list_name, item_id):
         self.call("DELETE", f"{list_path(list_name)}/items({int(item_id)})")

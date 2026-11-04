@@ -22,6 +22,7 @@ import pandas as pd
 import streamlit as st
 
 from . import config, danh_muc, services
+from .excel_an_toan import chan_cong_thuc_ws
 from .schema import BOOL, CHOICE, DATE, GIU_CHO, NOTE, NUMBER, TRANG_THAI, Field, ListDef
 from .storage import Storage, create_storage
 
@@ -132,11 +133,27 @@ class _UserStorage:
             data = {**data, "NguoiCapNhat": self._user}
         return data
 
+    # Mỗi lần ghi cập nhật luôn dòng đó trong bộ nhớ đệm (không tải lại cả list từ SharePoint)
     def create_item(self, list_name, data):
-        return self._base.create_item(list_name, self._stamp(list_name, data))
+        rec = self._base.create_item(list_name, self._stamp(list_name, data))
+        _ghi_dem(list_name, rec)
+        return rec
 
     def update_item(self, list_name, item_id, data):
-        return self._base.update_item(list_name, item_id, self._stamp(list_name, data))
+        data = self._stamp(list_name, data)
+        cu = _ban_ghi_dem(list_name, item_id)
+        if cu is not None and hasattr(self._base, "cap_nhat_nhanh"):
+            # Power Automate: ghi rồi ghép với bản đang có (bớt 1 lần đọc lại qua flow)
+            rec = self._base.cap_nhat_nhanh(list_name, item_id, data, cu)
+        else:
+            rec = self._base.update_item(list_name, item_id, data)
+        _ghi_dem(list_name, rec, item_id)
+        return rec
+
+    def delete_item(self, list_name, item_id):
+        out = self._base.delete_item(list_name, item_id)
+        _ghi_dem(list_name, None, item_id)
+        return out
 
 
 def storage() -> Storage:
@@ -145,6 +162,13 @@ def storage() -> Storage:
 
 TTL = 600  # giây: dữ liệu sửa thẳng trên SharePoint hiện lên app sau tối đa 10 phút
 KIEM_TRA = 30  # giây: hỏi SharePoint list nào vừa đổi / xóa dòng để tải lại ngay
+
+
+@st.cache_resource
+def lam_nong() -> bool:
+    """Một lần mỗi server: dựng sẵn chỉ mục danh mục (trường học, địa giới) ở luồng nền."""
+    threading.Thread(target=danh_muc.lam_nong, daemon=True).start()
+    return True
 
 
 @st.cache_resource
@@ -159,18 +183,56 @@ def _entry(name: str) -> dict:
         return store["lists"].setdefault(name, {"lock": threading.Lock()})
 
 
-def _fresh(e: dict, version: int) -> bool:
-    return e.get("version") == version and time.monotonic() - e.get("at", -1e9) < TTL
+def _fresh(e: dict, version: int | None = None) -> bool:
+    """Bản đệm còn dùng được: đã tải, chưa bị đánh dấu cũ, chưa quá TTL. (Ghi trong app cập nhật
+    thẳng bản đệm — xem _ghi_dem — nên không cần tải lại cả list sau mỗi lần lưu.)"""
+    return "items" in e and not e.get("cu") and time.monotonic() - e.get("at", -1e9) < TTL
+
+
+def _ban_ghi_dem(name: str, item_id) -> dict | None:
+    e = _data_store()["lists"].get(name) or {}
+    sid = str(item_id)
+    return next((r for r in e.get("items") or () if str(r.get("id")) == sid), None)
+
+
+def _ghi_dem(name: str, rec: dict | None, item_id=None) -> None:
+    """Cập nhật bản đệm sau khi app ghi: thêm / thay / xóa đúng một dòng; DataFrame và kết quả
+    tính sẵn của list được tính lại ở lần đọc sau."""
+    e = _data_store()["lists"].get(name)
+    if not e or "items" not in e:
+        return
+    sid = str(item_id if item_id is not None else (rec or {}).get("id", ""))
+    with e["lock"]:
+        if rec is None and item_id is None:
+            e["cu"] = True
+            return
+        items, thay = [], False
+        for r in e["items"]:
+            if str(r.get("id")) == sid:
+                if rec is not None and not thay:
+                    items.append(rec)
+                thay = True
+            else:
+                items.append(r)
+        if rec is not None and not thay:
+            items.append(rec)
+        e.update(items=items, frames={}, memo={}, ghi_moc=datetime.now(timezone.utc))
 
 
 def _kiem_tra_thay_doi(st_obj: Storage):
     """Tối đa mỗi KIEM_TRA giây (chung mọi người dùng): một lần hỏi SharePoint thời điểm đổi /
-    xóa dòng gần nhất của các list đã tải; list đổi sau lúc tải thì bỏ bản đệm để tải lại."""
+    xóa dòng gần nhất của các list đã tải; list đổi sau lúc tải thì bỏ bản đệm để tải lại.
+    Chạy nền — trang không phải chờ lần hỏi này."""
     store = _data_store()
     if time.monotonic() - store.get("kt_at", -1e9) < KIEM_TRA:
         return
     if not store.setdefault("kt_lock", threading.Lock()).acquire(blocking=False):
         return  # người khác đang kiểm tra
+    store["kt_at"] = time.monotonic()
+    threading.Thread(target=_kiem_tra_nen, args=(st_obj, store), daemon=True).start()
+
+
+def _kiem_tra_nen(st_obj: Storage, store: dict):
     try:
         store["kt_at"] = time.monotonic()
         with store["lock"]:
@@ -183,8 +245,11 @@ def _kiem_tra_thay_doi(st_obj: Storage):
             return
         for n, t in (moc or {}).items():
             e = da_tai[n]
-            # đổi sau (hoặc sát) lúc bắt đầu tải -> bản đệm có thể thiếu thay đổi đó
-            if t >= e["luc"] - timedelta(seconds=5):
+            # đổi sau (hoặc sát) lúc bắt đầu tải -> bản đệm có thể thiếu thay đổi đó; thay đổi do
+            # chính app ghi (đã cập nhật vào bản đệm, xem _ghi_dem) thì bỏ qua
+            ghi = e.get("ghi_moc")
+            if t >= e["luc"] - timedelta(seconds=5) and \
+                    not (ghi and t <= ghi + timedelta(seconds=5)):
                 with store["lock"]:
                     if store["lists"].get(n) is e:
                         store["lists"].pop(n)
@@ -205,7 +270,7 @@ def _fetch(st_obj: Storage, name: str, version: int, optional: bool = False) -> 
                     raise
                 items, err = [], str(ex)
             e.update(version=version, at=time.monotonic(), items=items, frames={}, memo={},
-                     error=err, luc=luc)
+                     error=err, luc=luc, cu=False, ghi_moc=None)
     return e
 
 
@@ -226,6 +291,31 @@ def preload(*lds: ListDef, optional: tuple = ()):
         else:
             with ThreadPoolExecutor(max_workers=len(need)) as pool:
                 list(pool.map(lambda n: _fetch(s, n, v, n in opt), need))
+
+
+def tai_truoc(*lds: ListDef) -> None:
+    """Tải trước ở luồng nền các list của những trang tài khoản được vào (chưa có / đã cũ), để
+    chuyển trang không phải chờ. Trang cần list đang tải sẽ đợi đúng lần tải đó (không tải đôi)."""
+    store = _data_store()
+    need = [ld.name for ld in lds if not _fresh(_entry(ld.name))]
+    if not need or store.get("tai_truoc"):
+        return
+    store["tai_truoc"] = True
+    s, v = storage(), data_version()
+
+    def chay():
+        def mot(n):
+            try:
+                _fetch(s, n, v)
+            except Exception:  # list chưa tạo / lỗi mạng: trang tự tải và báo lỗi như cũ
+                pass
+        try:
+            with ThreadPoolExecutor(max_workers=len(need)) as pool:
+                list(pool.map(mot, need))
+        finally:
+            store["tai_truoc"] = False
+
+    threading.Thread(target=chay, daemon=True).start()
 
 
 def list_error(ld: ListDef) -> str:
@@ -434,7 +524,7 @@ def ghi_nhat_ky(hanh_dong: str, chi_tiet: str = ""):
 
     def ghi():
         try:
-            _base_storage().create_item(NHAT_KY.name, dong)
+            _ghi_dem(NHAT_KY.name, _base_storage().create_item(NHAT_KY.name, dong))
         except Exception as e:  # list chưa có: tắt ghi nhật ký tới lần tải lại
             if "does not exist" in str(e) or "no such" in str(e).lower():
                 store["nhat_ky_tat"] = True
@@ -994,6 +1084,7 @@ def excel_bytes(frames: dict[str, pd.DataFrame]) -> bytes:
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
         for sheet, data in frames.items():
             data.to_excel(xw, index=False, sheet_name=sheet[:31])
+            chan_cong_thuc_ws(xw.sheets[sheet[:31]])  # chữ "=..." không thành công thức
     return buf.getvalue()
 
 

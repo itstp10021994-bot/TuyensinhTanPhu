@@ -37,7 +37,12 @@ def load() -> dict:
 
 def fold(s: str) -> str:
     """Chuỗi so khớp: bỏ dấu, chữ thường, gộp khoảng trắng."""
-    s = unicodedata.normalize("NFD", str(s or "").strip().lower())
+    return _fold(str(s or ""))
+
+
+@lru_cache(maxsize=1 << 16)  # cùng một chuỗi được so khớp rất nhiều lần (lọc, tìm, danh mục)
+def _fold(s: str) -> str:
+    s = unicodedata.normalize("NFD", s.strip().lower())
     s = "".join(c for c in s if unicodedata.category(c) != "Mn").replace("đ", "d")
     return re.sub(r"\s+", " ", s)
 
@@ -62,11 +67,18 @@ def _truong_cap() -> dict:
     return out
 
 
+@lru_cache(maxsize=1)
+def _truong_cap_tinh() -> dict:
+    """{(fold tỉnh, fold tên): cấp học} — tra khi không khớp đúng phường/xã."""
+    out = {}
+    for (t, _, n), c in _truong_cap().items():
+        out.setdefault((t, n), c)
+    return out
+
+
 def cap_hoc(ten: str, tinh: str = "", xa: str = "") -> str:
-    idx = _truong_cap()
     t, n = fold(normalize_tinh(tinh)), fold(ten)
-    return idx.get((t, fold(xa), n)) or next(
-        (c for (tt, _, nn), c in idx.items() if tt == t and nn == n), "")
+    return _truong_cap().get((t, fold(xa), n)) or _truong_cap_tinh().get((t, n), "")
 
 
 def cap_truoc_khoi(khoi) -> tuple[str, ...]:
@@ -87,7 +99,7 @@ def cap_truoc_khoi(khoi) -> tuple[str, ...]:
 @lru_cache(maxsize=1)
 def _truong_index() -> dict:
     """{(fold tỉnh, fold xã): [tên trường]} và {(fold tỉnh, ""): [...]} từ truong_hoc.csv."""
-    idx: dict[tuple[str, str], list[str]] = {}
+    idx: dict[tuple[str, str], dict[str, None]] = {}  # dict giữ thứ tự, tra trùng O(1)
     for row in _truong_rows():
         ten = (row.get("Tên trường") or "").strip()
         if not ten:
@@ -95,10 +107,8 @@ def _truong_index() -> dict:
         t = fold(normalize_tinh((row.get("Tỉnh/Thành phố") or "").strip()))
         x = fold(row.get("Phường/Xã") or "")
         for k in ((t, x), (t, "")):
-            idx.setdefault(k, [])
-            if ten not in idx[k]:
-                idx[k].append(ten)
-    return idx
+            idx.setdefault(k, {})[ten] = None
+    return {k: list(v) for k, v in idx.items()}
 
 
 def truong_hoc(tinh: str, xa: str = "") -> list[str]:
@@ -137,3 +147,11 @@ def parents(f: Field) -> list[str]:
         if f.options.startswith("@truong:"):
             return f.options[8:].split(",")
     return []
+
+
+def lam_nong() -> None:
+    """Dựng sẵn các chỉ mục danh mục (gọi nền lúc khởi động) để lần mở hồ sơ đầu không chờ."""
+    load()
+    _truong_cap()
+    _truong_cap_tinh()
+    _truong_index()
