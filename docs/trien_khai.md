@@ -20,7 +20,7 @@ Mẫu đầy đủ: `.streamlit/secrets.toml.example`. **Không bao giờ commit
 | `ADMIN_PASSWORD` | nên có | Mật khẩu khẩn cấp vào quyền Quản trị (khi chưa có / quên tài khoản Quản trị) |
 | `COOKIE_SECRET` | **nên đặt** | Chuỗi ngẫu nhiên dài để ký mã "ghi nhớ đăng nhập 30 ngày". Không đặt thì app dùng `ADMIN_PASSWORD` / key flow |
 | `NAM_HOC`, `NAM_HOC_MAC_DINH` | không | Danh sách năm học, năm mặc định |
-| `TIN_TUC_NGUON` | không | Nguồn tin tuyển sinh ở trang chủ (`"Tên|https://…"`); bỏ trống dùng Bộ GD&ĐT, Sở GD&ĐT TP.HCM, Báo GD&TĐ, Báo Chính phủ |
+| `TIN_TUC_NGUON` | không | Nguồn tin tuyển sinh ở trang chủ (`"Tên\|https://…"`); bỏ trống dùng Bộ GD&ĐT, Sở GD&ĐT TP.HCM, Báo GD&TĐ, Báo Chính phủ |
 | `SP_LIST_<tên list>` | không | Đổi tên / GUID list SharePoint nếu khác mặc định |
 | `[auth]` + `AUTH_DOMAIN` | không | Đăng nhập Microsoft 365, chỉ cho tên miền trường |
 
