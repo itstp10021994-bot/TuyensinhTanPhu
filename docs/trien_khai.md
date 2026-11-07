@@ -83,4 +83,4 @@ nên có thể quay lại từng phần:
       (dashboard + Trình chiếu), Cài đặt mở bình thường.
 - [ ] Lưu thử một hồ sơ → Cài đặt → Nhật ký hoạt động có dòng mới.
 - [ ] Tài khoản không phải Quản trị không thấy nút **Xóa liên hệ**.
-- [ ] `pytest` chạy đủ (98 bài) trước khi đẩy mã mới.
+- [ ] `pytest` chạy đủ (96 bài) trước khi đẩy mã mới.
