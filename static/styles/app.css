@@ -274,12 +274,3 @@ section[data-testid="stSidebar"] {border-right: 1px solid var(--border);}
     min-width: calc(33.3% - .5rem) !important; width: auto !important;}
   .bi-dai {grid-template-columns: repeat(3, minmax(0, 1fr));}
 }
-
-/* ---- Tin tuyển sinh (trang chủ) ---- */
-.tin-tuc {padding: .55rem 0; border-bottom: 1px solid var(--border, #E5E5EA);}
-.tin-tuc a {font-weight: 600; text-decoration: none; line-height: 1.4;}
-.tin-tuc a:hover {text-decoration: underline;}
-.tin-tuc p {margin: .15rem 0 0; font-size: .86rem;} .tin-tuc .k, .tin-nguon .k {opacity: .65;}
-.tin-nguon {display: flex; justify-content: space-between; gap: .5rem; padding: .4rem 0;
-  border-bottom: 1px solid var(--border, #E5E5EA); font-size: .9rem;}
-.tin-nguon a {font-weight: 600; text-decoration: none;}

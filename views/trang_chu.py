@@ -1,15 +1,14 @@
 """Tổng quan: bảng điều khiển gọn trong một màn hình — chỉ số chính, phễu, xu hướng theo tuần,
 nguồn liên hệ, liên hệ theo khối, sĩ số đang học, việc cần xử lý."""
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from html import escape
 
 import pandas as pd
 import streamlit as st
 
 from tuyensinh import bieu_do as BD
-from tuyensinh import config, services, ui
+from tuyensinh import services, ui
 from tuyensinh import du_bao as DB
-from tuyensinh import tin_tuc as TT
 from tuyensinh.schema import KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
 
 nam_hoc = ui.nam_hoc()
@@ -25,8 +24,7 @@ if ui.co_trang("views/data_tuyen_sinh.py") and \
     ui.switch_page("views/data_tuyen_sinh.py", query_params={"new": "1"})
 
 # ------------------------------------------------------------------ các tab của trang chủ
-TAB = [":material/space_dashboard: Tổng quan", ":material/trending_up: Dự báo tuyển sinh",
-       ":material/newspaper: Tin tuyển sinh"]
+TAB = [":material/space_dashboard: Tổng quan", ":material/trending_up: Dự báo tuyển sinh"]
 if st.session_state.get("tq_tab") not in TAB:
     st.session_state.pop("tq_tab", None)
 tabs = dict(zip(TAB, st.tabs(TAB, key="tq_tab", on_change="rerun")))
@@ -214,61 +212,8 @@ def render_du_bao():
                     f"- Nhập học = liên hệ dự báo × tỷ lệ liên hệ → nhập học của mùa "
                     f"{kq.nam_truoc if kq.lh_nam_truoc else kq.nam_hoc}.\n"
                     "- Dự báo chỉ dựa trên dữ liệu đã nhập vào app; càng nhiều năm dữ liệu càng "
-                    "sát. Chính sách tuyển sinh mới của Sở / Bộ (xem tab **Tin tuyển sinh**) có "
+                    "sát. Chính sách tuyển sinh mới của Sở / Bộ có "
                     "thể làm số thực tế khác dự báo.")
-
-
-# ------------------------------------------------------------------ tin tuyển sinh
-@st.cache_data(ttl=3 * 3600, show_spinner=False)
-def _doc_tin(nguon: tuple) -> tuple:
-    """Đọc tin từ nguồn chính thống (lưu đệm 3 giờ, dùng chung mọi người dùng)."""
-    tins, trang_thai = TT.lay_tin(nguon)
-    return tins, trang_thai, datetime.now()
-
-
-LOC_TIN = {"Tất cả": (), "Lớp 10": ("lop 10",), "Lớp 6": ("lop 6",),
-           "Lớp 1 · mầm non": ("lop 1 ", "lop 1,", "lop 1.", "mam non")}
-
-
-def render_tin_tuc():
-    from tuyensinh.danh_muc import fold
-
-    nguon = TT.nguon_tu_cau_hinh(config.get("TIN_TUC_NGUON"))
-    with st.spinner("Đang đọc tin từ các nguồn chính thống…"):
-        tins, trang_thai, luc = _doc_tin(nguon)
-    bar = st.container(horizontal=True, vertical_alignment="center", gap="small")
-    loc = bar.segmented_control("Lọc", list(LOC_TIN), default="Tất cả", required=True,
-                                key="tin_loc", label_visibility="collapsed")
-    bar.caption(f"Cập nhật lúc {luc:%H:%M %d/%m} · tự đọc lại sau 3 giờ")
-    if bar.button("Đọc lại ngay", icon=":material/refresh:", type="tertiary", key="tin_lai"):
-        _doc_tin.clear()
-        st.rerun()
-    if LOC_TIN[loc]:
-        tins = [t for t in tins if any(k in fold(t.tieu_de + " ") for k in LOC_TIN[loc])]
-    left, right = st.columns([2.2, 1], gap="small")
-    with left, ui.section(f"Tin tuyển sinh ({len(tins)})",
-                          "Tiêu đề và liên kết tới bài gốc trên trang chính thống"):
-        if not tins:
-            ui.empty_state("newspaper", "Chưa đọc được tin tuyển sinh",
-                           "Các nguồn chưa có tin phù hợp hoặc tạm thời không truy cập được. "
-                           "Bấm Đọc lại ngay hoặc mở trực tiếp trang nguồn ở bên phải.")
-        with st.container(height=520, border=False):
-            for t in tins:
-                ngay = f" · {t.ngay.astimezone():%d/%m/%Y}" if t.ngay else ""
-                st.html(f'<div class="tin-tuc"><a href="{escape(t.lien_ket, quote=True)}" '
-                        f'target="_blank" rel="noopener noreferrer">{escape(t.tieu_de)}</a>'
-                        f'<p class="k">{escape(t.nguon)}{ngay}</p>'
-                        + (f'<p>{escape(t.tom_tat[:220])}</p>' if t.tom_tat else "")
-                        + "</div>")
-    with right, ui.section("Nguồn chính thống", "Mở trang để xem đầy đủ thông báo"):
-        for ten, url in nguon:
-            loi = trang_thai.get(ten, "")
-            st.html(f'<div class="tin-nguon"><a href="{escape(url, quote=True)}" '
-                    f'target="_blank" rel="noopener noreferrer">{escape(ten)}</a>'
-                    f'<span class="k">{"không truy cập được lúc này" if loi else "đã đọc"}'
-                    "</span></div>")
-        st.caption("Danh sách nguồn đổi được trong Secrets (TIN_TUC_NGUON). App chỉ hiện tiêu đề, "
-                   "không lưu nội dung bài.")
 
 
 for ten, tab in tabs.items():
@@ -277,7 +222,5 @@ for ten, tab in tabs.items():
     with tab:
         if ten == TAB[0]:
             render_tong_quan()
-        elif ten == TAB[1]:
-            render_du_bao()
         else:
-            render_tin_tuc()
+            render_du_bao()
