@@ -8,6 +8,7 @@ import streamlit as st
 
 from tuyensinh import bieu_do as BD
 from tuyensinh import config, services, ui
+from tuyensinh import ai_du_bao as AI
 from tuyensinh import du_bao as DB
 from tuyensinh import tin_tuc as TT
 from tuyensinh.schema import KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
@@ -184,6 +185,7 @@ def render_du_bao():
         ui.empty_state("trending_up", "Chưa đủ dữ liệu để dự báo",
                        "Cần có liên hệ (Ngày liên hệ, Năm học) trong Data tuyển sinh.")
         return
+    render_ai(kq)
     c1, c2 = st.columns([1.45, 1], gap="small")
     with c1, ui.section("Liên hệ cộng dồn theo tuần",
                         "Mùa này (thực tế, dự báo) so với mùa trước — cùng mốc thời gian"):
@@ -216,6 +218,95 @@ def render_du_bao():
                     "- Dự báo chỉ dựa trên dữ liệu đã nhập vào app; càng nhiều năm dữ liệu càng "
                     "sát. Chính sách tuyển sinh mới của Sở / Bộ (xem tab **Tin tuyển sinh**) có "
                     "thể làm số thực tế khác dự báo.")
+
+
+# ------------------------------------------------------------------ AI đọc tin -> nhận định, dự báo
+AI_HAN = 6 * 3600  # giây: kết quả AI dùng chung mọi người dùng, phân tích lại sau 6 giờ
+
+
+@st.cache_resource
+def _ai_kho() -> dict:
+    import threading
+    return {"lock": threading.Lock(), "kq": {}}
+
+
+def _ai_khoa(tins, kq) -> str:
+    import hashlib
+    nd = "|".join(t.lien_ket for t in tins) + f"|{kq.nam_hoc}|{kq.lh_den_nay}|{kq.du_bao_lh}"
+    return hashlib.sha256(nd.encode()).hexdigest()[:16]
+
+
+TAC_DONG_MAU = {"tăng": ui.TOKENS["success"], "giảm": ui.TOKENS["danger"],
+                "trung tính": ui.TOKENS["text_3"]}
+
+
+def render_ai(kq):
+    khoa_api = str(config.get("ANTHROPIC_API_KEY", "") or "").strip()
+    with ui.section("Nhận định AI từ tin tuyển sinh",
+                    "AI đọc tin từ nguồn chính thống (tab Tin tuyển sinh) cùng số liệu của trường, "
+                    "đánh giá tác động và điều chỉnh dự báo"):
+        if not khoa_api:
+            st.info("Chưa bật AI: thêm **ANTHROPIC_API_KEY** vào Secrets của app (Streamlit Cloud "
+                    "→ Settings → Secrets). Dự báo theo xu hướng ở trên vẫn dùng bình thường.",
+                    icon=":material/key:")
+            return
+        nguon = TT.nguon_tu_cau_hinh(config.get("TIN_TUC_NGUON"))
+        with st.spinner("Đang đọc tin từ các nguồn chính thống…"):
+            tins = _doc_tin(nguon)[0]
+        kho, k = _ai_kho(), _ai_khoa(tins, kq)
+        cu = kho["kq"].get(k)
+        lam_lai = st.button("Phân tích lại", icon=":material/refresh:", type="tertiary",
+                            key="ai_lai", help="AI tự phân tích lại sau 6 giờ hoặc khi có tin mới")
+        if lam_lai or cu is None or (datetime.now() - cu.luc).total_seconds() > AI_HAN:
+            if not kho["lock"].acquire(blocking=False):
+                st.caption("Đang có người chạy phân tích AI — tải lại trang sau ít phút.")
+                if cu is None:
+                    return
+            else:
+                try:
+                    with st.spinner("AI đang đọc tin và phân tích (khoảng 20–60 giây)…"):
+                        cu = AI.phan_tich(tins, kq, khoa_api,
+                                          str(config.get("AI_MODEL", "") or AI.MO_HINH_MAC_DINH))
+                    kho["kq"] = {k: cu}
+                except Exception as e:  # noqa: BLE001 — lỗi AI không làm hỏng trang
+                    st.warning("Chưa chạy được phân tích AI: " + ui.an_bi_mat(str(e))[:300],
+                               icon=":material/error:")
+                    if cu is None:
+                        return
+                finally:
+                    kho["lock"].release()
+        nd = cu
+        k3 = ui.kpi_row(3, key="ai_kpis")
+        ui.kpi(k3[0], "Dự báo liên hệ (AI)", _so(nd.du_bao_lh),
+               f"{nd.dieu_chinh:+.0f}% so với xu hướng ({_so(kq.du_bao_lh)})")
+        ui.kpi(k3[1], "Dự báo nhập học (AI)", _so(nd.du_bao_nh),
+               f"xu hướng: {_so(kq.du_bao_nh)}")
+        ui.kpi(k3[2], "Độ tin cậy", nd.do_tin_cay.capitalize(), f"{len(tins)} tin được đọc")
+        st.markdown(f"**Tóm tắt.** {escape(nd.tom_tat)}")
+        if nd.ly_do:
+            st.markdown(f"**Vì sao điều chỉnh {nd.dieu_chinh:+.0f}%.** {escape(nd.ly_do)}")
+        c1, c2 = st.columns([1.4, 1], gap="medium")
+        with c1:
+            st.markdown("**Tác động từ tin**")
+            for d in nd.diem_tin:
+                nguon_html = " ".join(
+                    f'<a href="{escape(tins[i - 1].lien_ket, quote=True)}" target="_blank" '
+                    f'rel="noopener noreferrer">[{i}]</a>' for i in d["nguon"])
+                st.html(f'<div class="tin-tuc">{ui.pill(d["tac_dong"], TAC_DONG_MAU[d["tac_dong"]])}'
+                        f' {escape(d["noi_dung"])} <span class="k">{nguon_html}</span></div>')
+            if not nd.diem_tin:
+                st.caption("Không có tin nào tác động rõ đến trường.")
+        with c2:
+            if nd.theo_khoi:
+                st.markdown("**Theo khối**")
+                st.markdown("\n".join(f"- **Khối {escape(x['khoi'])}:** {escape(x['nhan_dinh'])}"
+                                      for x in nd.theo_khoi))
+            if nd.khuyen_nghi:
+                st.markdown("**Khuyến nghị cho ban tuyển sinh**")
+                st.markdown("\n".join(f"- {escape(x)}" for x in nd.khuyen_nghi))
+        st.caption(f"Phân tích bởi {escape(nd.mo_hinh)} lúc {nd.luc:%H:%M %d/%m} · AI có thể sai, "
+                   "chỉ dùng tham khảo · chỉ gửi tin công khai và số liệu tổng hợp, không gửi thông "
+                   "tin cá nhân học sinh.")
 
 
 # ------------------------------------------------------------------ tin tuyển sinh
