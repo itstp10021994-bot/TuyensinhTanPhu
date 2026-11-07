@@ -5,7 +5,7 @@
 ## 1. Yêu cầu
 
 - Python 3.11+, các gói trong `requirements.txt` (Streamlit ≥ 1.64, pandas, openpyxl, Altair,
-  msal, requests, xlrd, python-calamine, Authlib, anthropic — thư viện chính thức gọi AI Claude).
+  msal, requests, xlrd, python-calamine, Authlib). **Không thêm phụ thuộc mới** ở bản 2.0.
 - Chạy thử trên máy: `pip install -r requirements.txt` rồi `streamlit run app.py`
   (không có Secrets → dùng SQLite cục bộ `data_local.sqlite3`).
 
@@ -20,7 +20,6 @@ Mẫu đầy đủ: `.streamlit/secrets.toml.example`. **Không bao giờ commit
 | `ADMIN_PASSWORD` | nên có | Mật khẩu khẩn cấp vào quyền Quản trị (khi chưa có / quên tài khoản Quản trị) |
 | `COOKIE_SECRET` | **nên đặt** | Chuỗi ngẫu nhiên dài để ký mã "ghi nhớ đăng nhập 30 ngày". Không đặt thì app dùng `ADMIN_PASSWORD` / key flow |
 | `NAM_HOC`, `NAM_HOC_MAC_DINH` | không | Danh sách năm học, năm mặc định |
-| `ANTHROPIC_API_KEY`, `AI_MODEL` | không | AI đọc tin tuyển sinh → nhận định, điều chỉnh dự báo ở trang chủ (Claude; mặc định `claude-opus-5-5`). Chỉ gửi tin công khai và số liệu tổng hợp |
 | `TIN_TUC_NGUON` | không | Nguồn tin tuyển sinh ở trang chủ (`"Tên\|https://…"`); bỏ trống dùng Bộ GD&ĐT, Sở GD&ĐT TP.HCM, Báo GD&TĐ, Báo Chính phủ |
 | `SP_LIST_<tên list>` | không | Đổi tên / GUID list SharePoint nếu khác mặc định |
 | `[auth]` + `AUTH_DOMAIN` | không | Đăng nhập Microsoft 365, chỉ cho tên miền trường |
@@ -85,4 +84,4 @@ nên có thể quay lại từng phần:
       (dashboard + Trình chiếu), Cài đặt mở bình thường.
 - [ ] Lưu thử một hồ sơ → Cài đặt → Nhật ký hoạt động có dòng mới.
 - [ ] Tài khoản không phải Quản trị không thấy nút **Xóa liên hệ**.
-- [ ] `pytest` chạy đủ (105 bài) trước khi đẩy mã mới.
+- [ ] `pytest` chạy đủ (102 bài) trước khi đẩy mã mới.
