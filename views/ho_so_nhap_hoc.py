@@ -246,9 +246,6 @@ def _num(v):
 @ui.dialog("Thanh toán học phí")
 def hoc_phi_dialog(rec: dict):
     st.markdown(f"**{rec.get('HoTen')}**")
-    giu_cho = _num(rec.get("SoTienXacNhan"))
-    if giu_cho:
-        st.caption(f"Đã giữ chỗ: {ui.money(giu_cho)}")
     kw = {"min_value": 0.0, "step": 100000.0, "format": "%.0f"}
     c1, c2 = st.columns(2)
     phai = c1.number_input("Số tiền PHHS thanh toán (đ)", value=_num(rec.get("SoTienThanhToan")),
@@ -387,7 +384,7 @@ def render_tab(name: str, groups: tuple, rec: dict, prefix: str) -> dict:
                       SHORT(["KhanCap_Ten", "KhanCap_SDT", "KhanCap_QuanHe"])))
     elif name in (G_NGANHANG, G_MON):
         if name == G_NGANHANG:
-            st.caption("Tài khoản nhận hoàn phí (khi rút hồ sơ / hủy giữ chỗ).")
+            st.caption("Tài khoản nhận hoàn phí (khi rút hồ sơ).")
         else:
             st.caption("Tổ hợp môn lựa chọn (THPT), theo thứ tự ưu tiên.")
         v.update(form([f for f in NHAP_HOC.fields if f.group == name], rec, prefix, 3))
@@ -429,7 +426,7 @@ def render_tab(name: str, groups: tuple, rec: dict, prefix: str) -> dict:
         c2.markdown(ui.fmt_date(ngay or rec.get("NgayNhanHoSo")))
         st.divider()
         st.markdown("**Học phí**")
-        v.update(form([F(k) for k in ("SoTienXacNhan", "SoTienThanhToan", "TongDaThu",
+        v.update(form([F(k) for k in ("SoTienThanhToan", "TongDaThu",
                                       "SoTienConLai", "NgayDongPhi", "KeToanXacNhan")],
                       rec, prefix, 3))
         st.markdown("**Xe đưa đón**")
@@ -732,7 +729,7 @@ def len_lop_dialog():
     st.caption(f"Năm {nam_cu}: **{len(rows)}** hồ sơ · **{len(ok)}** em sẽ lên lớp · "
                f"{len(loai)} em không chuyển. Hồ sơ năm mới chép thông tin cá nhân, gia đình, "
                "địa chỉ, giấy tờ đã nộp; khối tăng 1, lớp cũ ghi vào ô Lớp cũ, tình trạng "
-               "\"Học tiếp\". Không chép học phí, tiền giữ chỗ, ghi chú.")
+               "\"Học tiếp\". Không chép học phí, ghi chú.")
     if loai:
         with st.expander(f"{len(loai)} em không chuyển (đã nghỉ, học xong khối 12, đã có hồ sơ…)"):
             st.dataframe(pd.DataFrame([{"Họ tên": r.get("HoTen"), "Khối": r["_khoi_cu"],

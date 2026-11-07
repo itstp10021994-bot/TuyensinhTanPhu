@@ -2,7 +2,7 @@
 
 ## Cách hoạt động
 
-Mỗi lần bạn **lưu, chuyển bước, xác nhận giữ chỗ…** trên app, app gửi ngay một yêu cầu tới
+Mỗi lần bạn **lưu, chuyển bước, thu hồ sơ…** trên app, app gửi ngay một yêu cầu tới
 **một flow Power Automate**. Flow ghi vào SharePoint (site `tuyensinh2`) bằng tài khoản của người
 tạo flow, rồi trả kết quả về app. Không có bước "đồng bộ" riêng: **lưu trên app = lưu trên
 SharePoint** (app chỉ báo "Đã lưu" khi SharePoint ghi thành công).
@@ -117,7 +117,7 @@ Dùng máy tính có Python thì các bước ở Bước 3 cũng làm được 
 
 Khi bật đăng nhập, mọi người phải đăng nhập bằng tài khoản Microsoft 365 của trường trước khi dùng
 app. Tên tài khoản tự ghi vào **Người cập nhật** (Data tuyển sinh, Hồ sơ nhập học), **Người nhận
-hồ sơ** (bảng ký nhận) và **Người nhận hồ sơ / Người xác nhận** (kế toán).
+hồ sơ** (bảng ký nhận).
 
 **1. Đăng ký app trên Microsoft Entra** (cần quyền quản trị Microsoft 365 của trường, hoặc nhờ IT):
 

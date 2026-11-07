@@ -32,10 +32,4 @@ for i in range(60):
     tt = random.choices(["Tư vấn", "Nộp hồ sơ", "Nhập học", "Rút hồ sơ"], [4, 3, 4, 1])[0]
     if tt != "Tư vấn":
         services.set_trang_thai(storage, rec["id"], tt, "Chuyển trường khác" if tt == "Rút hồ sơ" else None)
-    if tt in ("Nộp hồ sơ", "Nhập học"):
-        services.xac_nhan_giu_cho(storage, rec["id"], 2000000, "Kế toán")
-    elif tt == "Rút hồ sơ" and random.random() < .5:
-        services.xac_nhan_giu_cho(storage, rec["id"], 2000000, "Kế toán", "Hủy giữ chỗ",
-                                  TenChuTaiKhoan="PH", NganHang="Vietcombank",
-                                  SoTaiKhoan="0071000000000")
 print("Đã tạo dữ liệu mẫu.")

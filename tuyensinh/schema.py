@@ -52,9 +52,7 @@ class ListDef:
 TRANG_THAI = ("Tư vấn", "Nộp hồ sơ", "Nhập học", "Rút hồ sơ")
 # Cột "Tình trạng": mức độ tư vấn (theo dữ liệu thực tế của list cũ)
 TINH_TRANG = ("Cần tư vấn thêm", "Cần tham quan tư vấn tại trường", "Đang cân nhắc",
-              "Chờ HĐTS duyệt", "Đã cấp giấy tiếp nhận", "Nhập học", "Hủy giữ chỗ", "Hủy")
-# Cột "Giữ chỗ" (kế toán)
-GIU_CHO = ("Chưa giữ chỗ", "Đã giữ chỗ", "Hủy giữ chỗ", "Đã hoàn phí")
+              "Chờ HĐTS duyệt", "Đã cấp giấy tiếp nhận", "Nhập học", "Hủy")
 PHAN_HE = ("IEP", "ESL")
 KHOI = tuple(str(i) for i in range(1, 13))
 CHE_DO = ("Nội trú", "Bán trú", "Ngoại trú")
@@ -90,7 +88,7 @@ MON_HOC = (("Toan", "Toán"), ("Van", "Ngữ văn"), ("TV", "Tiếng Việt"), (
 # ---------------------------------------------------------------- Data tuyển sinh
 # Khớp với list "Data tuyển sinh" hiện có trên site tuyensinh2 (sp = tên hiển thị cột).
 G_LIENHE, G_HOCSINH, G_TRUONGCU, G_KETOAN = (
-    "Liên hệ & tư vấn", "Học sinh", "Trường cũ & kết quả học tập", "Giữ chỗ / kế toán")
+    "Liên hệ & tư vấn", "Học sinh", "Trường cũ & kết quả học tập", "Hệ thống")
 
 TUYEN_SINH = ListDef(
     name="Data_TuyenSinh",
@@ -137,13 +135,8 @@ TUYEN_SINH = ListDef(
         Field("TV2", "TV 2", NUMBER, group=G_TRUONGCU),
         Field("HanhKiem1", "Hạnh kiểm 1", CHOICE, HANH_KIEM, group=G_TRUONGCU),
         Field("HanhKiem2", "Hạnh kiểm 2", CHOICE, HANH_KIEM, group=G_TRUONGCU),
-        # --- Giữ chỗ / kế toán
-        Field("GiuCho", "Giữ chỗ", CHOICE, GIU_CHO, group=G_KETOAN),
-        Field("SoTienXacNhan", "Số tiền xác nhận", NUMBER, group=G_KETOAN),
-        Field("NguoiXacNhan", "Người xác nhận", group=G_KETOAN),
-        Field("TenChuTaiKhoan", "Tên chủ tài khoản", group=G_KETOAN),
-        Field("NganHang", "Ngân hàng", group=G_KETOAN),
-        Field("SoTaiKhoan", "Số tài khoản", group=G_KETOAN),
+        # Không còn giữ chỗ: các cột Giữ chỗ / Số tiền xác nhận / Người xác nhận / tài khoản hoàn
+        # phí vẫn nằm trên SharePoint (dữ liệu cũ giữ nguyên) nhưng app không đọc / ghi nữa.
         # Tài khoản Microsoft 365 lưu gần nhất (app tự ghi)
         Field("NguoiCapNhat", "Người cập nhật", group=G_KETOAN),
     ),
@@ -271,7 +264,6 @@ NHAP_HOC = ListDef(
         Field("LuaChon3", "Lựa chọn 3", CHOICE, TO_HOP_MON, free=True, group=G_MON),
         # --- Hồ sơ & học phí
         Field("NgayNhanHoSo", "Ngày nhận hồ sơ", DATE, group=G_HOCPHI),
-        Field("SoTienXacNhan", "Số tiền giữ chỗ", NUMBER, group=G_HOCPHI),
         Field("SoTienThanhToan", "Số tiền PHHS thanh toán", NUMBER, group=G_HOCPHI),
         Field("SoTienConLai", "Số tiền còn lại", NUMBER, group=G_HOCPHI),
         Field("TongDaThu", "Tổng số tiền đã thu", NUMBER, group=G_HOCPHI),
@@ -338,12 +330,12 @@ NOI_TRU_DANH_GIA = ListDef(
 VAI_TRO = ("Quản trị", "Tuyển sinh", "Kế toán", "Giáo vụ", "Chỉ xem báo cáo",
            "GV quản nhiệm", "Tổ trưởng quản nhiệm")
 # Các trang có thể phân quyền (tên trùng tiêu đề trang trên thanh menu)
-TRANG = ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Giấy tờ cần thu", "Kế toán",
-         "Nội trú", "Báo cáo", "Cài đặt & đồng bộ")
+TRANG = ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Giấy tờ cần thu", "Nội trú",
+         "Báo cáo", "Cài đặt & đồng bộ")
 QUYEN_MAC_DINH = {
     "Quản trị": TRANG,
     "Tuyển sinh": ("Tổng quan", "Data tuyển sinh", "Hồ sơ nhập học", "Giấy tờ cần thu", "Báo cáo"),
-    "Kế toán": ("Tổng quan", "Kế toán", "Hồ sơ nhập học", "Báo cáo"),
+    "Kế toán": ("Tổng quan", "Hồ sơ nhập học", "Báo cáo"),
     "Giáo vụ": ("Tổng quan", "Hồ sơ nhập học", "Báo cáo"),
     "Chỉ xem báo cáo": ("Tổng quan", "Báo cáo"),
     "GV quản nhiệm": ("Nội trú",),

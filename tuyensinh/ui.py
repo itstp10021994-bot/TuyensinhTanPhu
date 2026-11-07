@@ -23,7 +23,7 @@ import streamlit as st
 
 from . import config, danh_muc, services
 from .excel_an_toan import chan_cong_thuc_ws
-from .schema import BOOL, CHOICE, DATE, GIU_CHO, NOTE, NUMBER, TRANG_THAI, Field, ListDef
+from .schema import BOOL, CHOICE, DATE, NOTE, NUMBER, TRANG_THAI, Field, ListDef
 from .storage import Storage, create_storage
 
 # Biểu đồ Altair: nền trong suốt để nằm gọn trong thẻ trắng (phong cách macOS)
@@ -53,12 +53,6 @@ STATUS = {
     "Nộp hồ sơ": {"color": "orange", "hex": TOKENS["warning"], "icon": ":material/description:"},
     "Nhập học": {"color": "green", "hex": TOKENS["success"], "icon": ":material/school:"},
     "Rút hồ sơ": {"color": "gray", "hex": "#8E8E93", "icon": ":material/block:"},
-}
-GIU_CHO_COLOR = {
-    "Chưa giữ chỗ": "gray",
-    "Đã giữ chỗ": "green",
-    "Hủy giữ chỗ": "red",
-    "Đã hoàn phí": "violet",
 }
 STEPS = ("Tư vấn", "Nộp hồ sơ", "Nhập học")  # luồng chính; "Rút hồ sơ" là nhánh thoát
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -767,12 +761,6 @@ def status_badge(status: str, container=st):
         container.badge(status, color="gray")
 
 
-def giu_cho_badge(tinh_trang: str, container=st):
-    tinh_trang = tinh_trang or "Chưa giữ chỗ"
-    container.badge(tinh_trang, color=GIU_CHO_COLOR.get(tinh_trang, "gray"),
-                    icon=":material/payments:")
-
-
 def stepper(current: str):
     withdrawn = current == "Rút hồ sơ"
     idx = STEPS.index(current) if current in STEPS else -1
@@ -840,11 +828,6 @@ def status_column(label: str = "Bước"):
     return st.column_config.MultiselectColumn(
         label, options=list(TRANG_THAI), color=[STATUS[s]["color"] for s in TRANG_THAI],
         width="small")
-
-
-def giu_cho_column(label: str = "Giữ chỗ"):
-    return st.column_config.MultiselectColumn(
-        label, options=list(GIU_CHO), color=[GIU_CHO_COLOR[s] for s in GIU_CHO])
 
 
 def table_height(n: int, max_h: int = 560) -> int:

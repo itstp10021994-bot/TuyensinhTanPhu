@@ -36,7 +36,6 @@ nhap = int(counts.get("Nhập học", 0))
 ngay_lh = pd.to_datetime(ts["NgayLienHe"], errors="coerce")
 hom_nay = date.today()
 new_week = int((ngay_lh.dt.date >= hom_nay - timedelta(days=7)).sum())
-giu = ts[ts["GiuCho"] == "Đã giữ chỗ"]
 dang_hoc = nh[~nh["TinhTrangHS"].isin(NGHI)]
 hs_moi = int((dang_hoc["TuyenSinhID"].fillna("") != "").sum())
 noi_tru = int(dang_hoc["NoiTruBanTru"].fillna("").str.startswith("Nội trú").sum())
@@ -56,16 +55,15 @@ def _pct(a, b):
 
 with st.container(key="tq"):
     # -------------------------------------------------------------- hàng chỉ số
-    k = ui.kpi_row(6)
+    k = ui.kpi_row(5)
     ui.kpi(k[0], "Liên hệ", total, f"+{new_week} / 7 ngày")
     ui.kpi(k[1], "Đã nộp hồ sơ", nop, f"{_pct(nop, total)} liên hệ",
            help="Gồm cả học sinh đã nhập học")
     ui.kpi(k[2], "Nhập học", nhap, f"{_pct(nhap, total)} liên hệ",
            help=f"{_pct(nhap, nop)} số hồ sơ đã nộp")
-    ui.kpi(k[3], "Đã giữ chỗ", len(giu), ui.money(giu["SoTienXacNhan"].fillna(0).sum()))
-    ui.kpi(k[4], "Đang học", len(dang_hoc), f"{hs_moi} mới · {len(dang_hoc) - hs_moi} cũ",
+    ui.kpi(k[3], "Đang học", len(dang_hoc), f"{hs_moi} mới · {len(dang_hoc) - hs_moi} cũ",
            help="Hồ sơ nhập học năm này, không tính rút / không học tiếp")
-    ui.kpi(k[5], "Nội trú", noi_tru, f"{_pct(noi_tru, len(dang_hoc))} đang học")
+    ui.kpi(k[4], "Nội trú", noi_tru, f"{_pct(noi_tru, len(dang_hoc))} đang học")
 
     # -------------------------------------------------------------- hàng 1: phễu · xu hướng · nguồn
     c1, c2, c3 = st.columns([1, 1.25, 1], gap="small")
@@ -118,17 +116,12 @@ with st.container(key="tq"):
             BD.ve({"kind": "stack_cat", "data": s, "x": "Khối", "y": "Số HS",
                    "color": "Chế độ"}, height=H, gon=True, key="tq_siso")
     with d3, ui.section("Cần xử lý", "Việc đang chờ trong năm học"):
-        nop_chua_giu = ts[(ts["TrangThai"].isin(["Nộp hồ sơ", "Nhập học"]))
-                          & (ts["GiuCho"].isin(["", "Chưa giữ chỗ"]))]
         rut = set(ts.loc[ts["TrangThai"] == "Rút hồ sơ", "id"])
         nh_live = nh[~nh["TuyenSinhID"].isin(rut)]
         thieu = int((services.completeness(nh_live) < 1).sum()) if len(nh_live) else 0
-        hoan_phi = int((ts["GiuCho"] == "Hủy giữ chỗ").sum())
         cu = ngay_lh.dt.date < hom_nay - timedelta(days=14)
         tu_van_cu = int(((ts["TrangThai"] == "Tư vấn") & cu).sum())
-        todo = [(len(nop_chua_giu), "Đã nộp hồ sơ, chưa giữ chỗ", "views/ke_toan.py"),
-                (thieu, "Hồ sơ nhập học thiếu thông tin", "views/ho_so_nhap_hoc.py"),
-                (hoan_phi, "Hủy giữ chỗ chờ hoàn phí", "views/ke_toan.py"),
+        todo = [(thieu, "Hồ sơ nhập học thiếu thông tin", "views/ho_so_nhap_hoc.py"),
                 (tu_van_cu, "Tư vấn quá 14 ngày chưa chuyển bước", "views/data_tuyen_sinh.py")]
         pending = [t for t in todo if t[0] and ui.co_trang(t[2])]
         if not pending:

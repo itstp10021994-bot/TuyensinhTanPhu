@@ -246,16 +246,16 @@ def test_cap_nhat_nhanh_giong_doc_lai(pa):
     lst = flow.lists[f"lists(guid'{TS_GUID}')"]
     lst["cols"] = [{"name": "Title", "title": "Title", "type": "Text"}] + [
         {"name": f"field_{i}", "title": f.key,
-         "type": "Number" if f.key in ("Khoi", "SoTienXacNhan") else
+         "type": "Number" if f.key in ("Khoi", "Toan1") else
          "DateTime" if f.type == "date" else "Text"}
         for i, f in enumerate(TUYEN_SINH.fields, 1)]
     rec = services.save_tuyen_sinh(st, dict(HS))
     n = len(flow.calls)
-    data = {"NgaySinh": "2011-06-03", "Khoi": "11", "SoTienXacNhan": 5000000, "GhiChu": "",
+    data = {"NgaySinh": "2011-06-03", "Khoi": "11", "Toan1": 8.5, "GhiChu": "",
             "CheDo": "Nội trú", "KhongCoCot": "x"}
     nhanh = st.cap_nhat_nhanh(TUYEN_SINH.name, rec["id"], data, rec)
     assert len(flow.calls) - n == 1  # chỉ PATCH
     doc = st.get_item(TUYEN_SINH.name, rec["id"])
-    for k in ("NgaySinh", "Khoi", "SoTienXacNhan", "GhiChu", "CheDo", "HoTenHS", "SDT"):
+    for k in ("NgaySinh", "Khoi", "Toan1", "GhiChu", "CheDo", "HoTenHS", "SDT"):
         assert nhanh[k] == doc[k], k
     assert "KhongCoCot" not in nhanh

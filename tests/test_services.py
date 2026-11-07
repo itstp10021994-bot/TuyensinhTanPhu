@@ -64,20 +64,6 @@ def test_duplicates(storage):
     assert len(services.find_duplicates(storage, {**HS, "SDT": "0927666649"})) == 1
 
 
-def test_giu_cho(storage):
-    rec = services.save_tuyen_sinh(storage, {**HS, "TrangThai": "Nộp hồ sơ"})
-    with pytest.raises(ValueError):
-        services.xac_nhan_giu_cho(storage, rec["id"], 0, "Kế toán A")
-    services.xac_nhan_giu_cho(storage, rec["id"], 2_000_000, "Kế toán A")
-    r2 = services.save_tuyen_sinh(storage, {**HS, "HoTenHS": "B", "Khoi": "6"})
-    services.xac_nhan_giu_cho(storage, r2["id"], 2_000_000, "Kế toán A", "Hủy giữ chỗ",
-                              NganHang="Vietcombank", SoTaiKhoan="0071")
-    ts = services.load_df(storage, TUYEN_SINH, "2026-2027")
-    assert ts.set_index("id").loc[r2["id"], "NganHang"] == "Vietcombank"
-    sm = services.giu_cho_summary(ts).set_index("Khối")
-    assert sm.loc["10", "Tiền đã giữ chỗ"] == 2_000_000 and sm.loc["6", "Hủy giữ chỗ"] == 1
-
-
 def test_scores_empty_vs_zero(storage):
     rec = services.save_tuyen_sinh(storage, {**HS, "Toan1": 8.5, "Van1": 0})
     row = services.load_df(storage, TUYEN_SINH).iloc[0]
@@ -136,16 +122,16 @@ SP_COLUMNS = [{"name": "Title", "title": "Title", "type": "Text"}] + [
 
 def test_column_map_matches_existing_list_by_display_name():
     cm = ColumnMap(TUYEN_SINH.name, SP_COLUMNS)
-    assert cm.missing == ["TruongCu_DiaChiCu", "GiuCho", "NguoiCapNhat"]  # cột chỉ có ở list mới
+    assert cm.missing == ["TruongCu_DiaChiCu", "NguoiCapNhat"]  # cột chỉ có ở list mới
     by_title = {c["title"]: c["name"] for c in SP_COLUMNS}
     assert cm.internal["NamHoc"] == by_title["Nam hoc"]
     assert cm.internal["TrangThai"] == by_title["Bước"]
     assert cm.internal["TenLienHe"] == by_title["Tài khoản FB"]
-    out = cm.to_sp({"HoTenHS": "A", "NgaySinh": "2011-05-02", "Toan1": 8.0, "SoTienXacNhan": "2e6",
+    out = cm.to_sp({"HoTenHS": "A", "NgaySinh": "2011-05-02", "Toan1": 8.0, "GiuCho": "x",
                     "NguoiNhanHoSo": "x", "Created": "…", "id": "5"})
     assert out == {by_title["Họ tên HS"]: "A", by_title["Ngày sinh"]: "2011-05-02T12:00:00Z",
-                   by_title["Toán 1"]: "8", by_title["Số tiền xác nhận"]: 2_000_000.0,
-                   "Title": "A"}  # cột Người (User) không ghi
+                   by_title["Toán 1"]: "8",
+                   "Title": "A"}  # cột Người (User) và cột giữ chỗ (đã bỏ) không ghi
     back = cm.from_sp({by_title["Ngày liên hệ"]: "2025-02-10T17:00:00Z",
                        by_title["Toán 1"]: "8,5", by_title["Người nhận hồ sơ"]: {"Title": "Uyên"},
                        "OData__x0020_": 1}, 7)
@@ -159,8 +145,9 @@ def test_date_in():
 
 
 def test_to_df_types():
-    df = services.to_df(TUYEN_SINH, [{"id": "1", "SoTienXacNhan": "100", "NgaySinh": "2026-01-02"}])
-    assert df.loc[0, "SoTienXacNhan"] == 100 and str(df.loc[0, "NgaySinh"]) == "2026-01-02"
+    df = services.to_df(TUYEN_SINH, [{"id": "1", "Toan1": "8.5", "NgaySinh": "2026-01-02"}])
+    assert df.loc[0, "Toan1"] == 8.5 and str(df.loc[0, "NgaySinh"]) == "2026-01-02"
+    assert "GiuCho" not in df.columns
     assert isinstance(df, pd.DataFrame)
 
 

@@ -311,46 +311,22 @@ def ts_quahan(c: Ctx) -> Result:
 
 def ts_rut(c: Ctx) -> Result:
     df = c.ts[c.ts["TrangThai"] == "Rút hồ sơ"]
-    t = df[["HoTenHS", "Khoi", "SDT", "NgayLienHe", "GiuCho", "SoTienXacNhan", "NguoiNhanHoSo",
-            "GhiChu"]].rename(columns={
+    t = df[["HoTenHS", "Khoi", "SDT", "NgayLienHe", "NguoiNhanHoSo", "GhiChu"]].rename(columns={
         "HoTenHS": "Học sinh", "Khoi": "Khối", "SDT": "SĐT", "NgayLienHe": "Ngày liên hệ",
-        "GiuCho": "Giữ chỗ", "SoTienXacNhan": "Tiền giữ chỗ", "NguoiNhanHoSo": "Người phụ trách",
-        "GhiChu": "Lý do / nội dung trao đổi"})
+        "NguoiNhanHoSo": "Người phụ trách", "GhiChu": "Lý do / nội dung trao đổi"})
     by = _blank(df["Khoi"]).value_counts().rename_axis("Khối").reset_index(name="Số HS")
-    return Result(t, [("Rút hồ sơ", len(df)), ("Tỷ lệ trên liên hệ", f"{_pct(len(df), len(c.ts))}%"),
-                      ("Đã giữ chỗ trước khi rút",
-                       int(df["GiuCho"].isin(["Đã giữ chỗ", "Hủy giữ chỗ", "Đã hoàn phí"]).sum()))],
+    return Result(t, [("Rút hồ sơ", len(df)), ("Tỷ lệ trên liên hệ", f"{_pct(len(df), len(c.ts))}%")],
                   {"kind": "bar", "data": by, "x": "Khối", "y": "Số HS"})
 
 
 # ------------------------------------------------------------------ tài chính
-def kt_giucho(c: Ctx) -> Result:
-    df = c.ts.assign(Khoi=_blank(c.ts["Khoi"]), Giu=_blank(c.ts["GiuCho"], "Chưa giữ chỗ"),
-                     Tien=_num(c.ts["SoTienXacNhan"]))
-    t = pd.crosstab(df["Khoi"], df["Giu"])
-    t["Tiền đã xác nhận (đ)"] = df.groupby("Khoi")["Tien"].sum()
-    t = t.reindex(_khoi_order(t.index)).fillna(0).rename_axis("Khối").reset_index()
-    t.columns.name = None
-    t = _total_row(t, "Khối")
-    tien = df["Tien"].sum()
-    return Result(t, [("Đã giữ chỗ", int((df["Giu"] == "Đã giữ chỗ").sum())),
-                      ("Tổng tiền giữ chỗ", tien),
-                      ("Hủy / hoàn phí", int(df["Giu"].isin(["Hủy giữ chỗ", "Đã hoàn phí"]).sum()))],
-                  {"kind": "stack_cat", "data": df[df["Giu"] != "Chưa giữ chỗ"].groupby(
-                      ["Khoi", "Giu"]).size().reset_index(name="Số HS").rename(
-                      columns={"Khoi": "Khối", "Giu": "Giữ chỗ"}),
-                   "x": "Khối", "y": "Số HS", "color": "Giữ chỗ"},
-                  note="Theo Data tuyển sinh (kế toán xác nhận giữ chỗ).")
-
-
 def kt_hocphi(c: Ctx) -> Result:
     df = c.nh.assign(Khoi=_blank(c.nh["Khoi"]), Phai=_num(c.nh["SoTienThanhToan"]),
-                     Thu=_num(c.nh["TongDaThu"]), Con=_num(c.nh["SoTienConLai"]),
-                     Giu=_num(c.nh["SoTienXacNhan"]))
+                     Thu=_num(c.nh["TongDaThu"]), Con=_num(c.nh["SoTienConLai"]))
     g = df.groupby("Khoi").agg(**{
         "Số HS": ("id", "count"),
         "HS đã ghi học phí": ("Phai", lambda s: int((s > 0).sum())),
-        "Tiền giữ chỗ (đ)": ("Giu", "sum"), "PHHS thanh toán (đ)": ("Phai", "sum"),
+        "PHHS thanh toán (đ)": ("Phai", "sum"),
         "Đã thu (đ)": ("Thu", "sum"), "Còn lại (đ)": ("Con", "sum"),
         "HS còn nợ": ("Con", lambda s: int((s > 0).sum()))})
     t = g.reindex(_khoi_order(g.index)).rename_axis("Khối").reset_index()
@@ -372,20 +348,6 @@ def kt_congno(c: Ctx) -> Result:
         "SoTienConLai": "Còn lại (đ)", "NgayDongPhi": "Ngày đóng",
         "KeToanXacNhan": "Kế toán"})
     return Result(t, [("HS còn nợ", len(t)), ("Tổng còn lại", _num(df["SoTienConLai"]).sum())])
-
-
-def kt_hoanphi(c: Ctx) -> Result:
-    df = c.ts[c.ts["GiuCho"].isin(["Hủy giữ chỗ", "Đã hoàn phí"])].sort_values(["GiuCho",
-                                                                               "HoTenHS"])
-    t = df[["HoTenHS", "Khoi", "SDT", "GiuCho", "SoTienXacNhan", "TenChuTaiKhoan", "NganHang",
-            "SoTaiKhoan", "NguoiXacNhan"]].rename(columns={
-        "HoTenHS": "Học sinh", "Khoi": "Khối", "SDT": "SĐT", "GiuCho": "Tình trạng",
-        "SoTienXacNhan": "Số tiền (đ)", "TenChuTaiKhoan": "Chủ tài khoản",
-        "NganHang": "Ngân hàng", "SoTaiKhoan": "Số tài khoản", "NguoiXacNhan": "Người xác nhận"})
-    cho = df[df["GiuCho"] == "Hủy giữ chỗ"]
-    return Result(t, [("Chờ hoàn phí", len(cho)),
-                      ("Tiền chờ hoàn", _num(cho["SoTienXacNhan"]).sum()),
-                      ("Đã hoàn phí", int((df["GiuCho"] == "Đã hoàn phí").sum()))])
 
 
 # ------------------------------------------------------------------ nhập học
@@ -1117,14 +1079,10 @@ REPORTS = [
            "Danh sách học sinh ở bước Tư vấn quá lâu chưa chuyển bước — cần gọi lại.",
            ts_quahan, ("ngay",)),
     Report("ts_rut", G_TS, "Danh sách rút hồ sơ", "Học sinh rút hồ sơ kèm lý do.", ts_rut),
-    Report("kt_giucho", G_KT, "Giữ chỗ theo khối",
-           "Số học sinh đã giữ chỗ, hủy, hoàn phí và tổng tiền giữ chỗ theo khối.", kt_giucho),
     Report("kt_hocphi", G_KT, "Tổng hợp học phí theo khối",
            "Tiền PHHS thanh toán, đã thu, còn lại và số học sinh còn nợ theo khối.", kt_hocphi),
     Report("kt_congno", G_KT, "Danh sách còn nợ học phí",
            "Học sinh còn số tiền phải thu.", kt_congno),
-    Report("kt_hoanphi", G_KT, "Danh sách hủy giữ chỗ / hoàn phí",
-           "Học sinh hủy giữ chỗ chờ hoàn phí và đã hoàn phí, kèm tài khoản nhận.", kt_hoanphi),
     Report("nh_siso", G_NH, "Sĩ số theo lớp",
            "Sĩ số, nam/nữ, nội trú/bán trú, IEP/ESL của từng lớp.", nh_siso),
     Report("nh_tinhtrang", G_NH, "Tình trạng hồ sơ nhập học",

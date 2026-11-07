@@ -39,7 +39,7 @@ def test_phan_quyen_va_ghi_nho(tmp_path):
                   "abc123", trang=["Data tuyển sinh", "Báo cáo"])
     items = st.list_items(TAI_KHOAN.name)
     kt = tai_khoan.dang_nhap(items, "kt", "abc123")
-    assert "Kế toán" in kt["Quyen"] and "Data tuyển sinh" not in kt["Quyen"]
+    assert "Hồ sơ nhập học" in kt["Quyen"] and "Data tuyển sinh" not in kt["Quyen"]
     assert tai_khoan.dang_nhap(items, "ts", "abc123")["Quyen"] == ["Data tuyển sinh", "Báo cáo"]
     t = next(x for x in items if x["TenDangNhap"] == "kt")
     ma = tai_khoan.tao_ma_ghi_nho(t, "bi-mat")

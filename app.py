@@ -58,8 +58,6 @@ P = {
                   icon=":material/assignment_ind:", url_path="ho-so-nhap-hoc"),
     "gt": st.Page("views/giay_to.py", title="Giấy tờ cần thu", icon=":material/checklist:",
                   url_path="giay-to"),
-    "kt": st.Page("views/ke_toan.py", title="Kế toán", icon=":material/payments:",
-                  url_path="ke-toan"),
     "nt": st.Page("views/noi_tru.py", title="Nội trú", icon=":material/bed:",
                   url_path="noi-tru"),
     "bc": st.Page("views/bao_cao.py", title="Báo cáo", icon=":material/monitoring:",
@@ -204,17 +202,17 @@ def _dang_xuat():
     S["_xoa_ghi_nho"] = True  # xóa mã ghi nhớ trên máy này
 
 
-# Thanh menu theo bộ phận: Tổng quan · Tuyển sinh ▾ (Data tuyển sinh, Hồ sơ nhập học) · Kế toán ·
+# Thanh menu theo bộ phận: Tổng quan · Tuyển sinh ▾ (Data tuyển sinh, Hồ sơ nhập học) ·
 # Nội trú · Báo cáo · Cài đặt & đồng bộ. Phân quyền: chỉ thấy các trang được phép.
-_pages = [P["home"], P["ts"], P["nh"], P["gt"], P["kt"], P["nt"], P["bc"], P["cd"]]
+_pages = [P["home"], P["ts"], P["nh"], P["gt"], P["nt"], P["bc"], P["cd"]]
 if S.get("tk"):
     _pages = [p for p in _pages if p.title in S["tk"]["Quyen"]] or [P["home"]]
 _FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc", "gt": "giay_to",
-         "kt": "ke_toan", "nt": "noi_tru", "bc": "bao_cao", "cd": "cai_dat"}
+         "nt": "noi_tru", "bc": "bao_cao", "cd": "cai_dat"}
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
 # Thanh bên trái, nhóm theo bộ phận (nhóm không có trang được phép thì ẩn)
-_NHOM = [("", ["home"]), ("Tuyển sinh", ["ts", "nh", "gt"]), ("Kế toán", ["kt"]),
+_NHOM = [("", ["home"]), ("Tuyển sinh", ["ts", "nh", "gt"]),
          ("Nội trú", ["nt"]), ("Báo cáo", ["bc"]), ("Hệ thống", ["cd"])]
 _nav = {}
 for _ten, _ks in _NHOM:
@@ -225,14 +223,14 @@ pg = st.navigation(_nav, position="sidebar", expanded=True)
 # tải trước (nền) dữ liệu của các trang được vào -> chuyển trang không phải chờ SharePoint
 from tuyensinh.schema import (GIAY_TO as _GT, NHAP_HOC as _NH, NOI_TRU_DANH_GIA as _NTD,
                               NOI_TRU_PHONG as _NTP, TUYEN_SINH as _TS)
-_can = {_TS, _NH, _GT} if any(P[k] in _pages for k in ("ts", "nh", "kt", "bc", "home", "gt")) \
+_can = {_TS, _NH, _GT} if any(P[k] in _pages for k in ("ts", "nh", "bc", "home", "gt")) \
     else set()
 if P["nt"] in _pages:
     _can |= {_NH, _NTP, _NTD}
 ui.tai_truoc(*sorted(_can, key=lambda x: x.name))
 ui.chan_thanh_ben()
-# Vừa đăng nhập: mở trang chính của vai trò (vd Kế toán -> Kế toán, GV quản nhiệm -> Nội trú)
-_TRANG_VAI_TRO = {"Tuyển sinh": "ts", "Kế toán": "kt", "Giáo vụ": "nh", "GV quản nhiệm": "nt",
+# Vừa đăng nhập: mở trang chính của vai trò (vd Kế toán -> Hồ sơ nhập học, GV quản nhiệm -> Nội trú)
+_TRANG_VAI_TRO = {"Tuyển sinh": "ts", "Kế toán": "nh", "Giáo vụ": "nh", "GV quản nhiệm": "nt",
                   "Tổ trưởng quản nhiệm": "nt", "Chỉ xem báo cáo": "bc"}
 # (chờ trình duyệt lưu xong mã ghi nhớ: lần chạy do lưu mã luôn quay về trang đầu)
 if "_ghi_nho" not in S and S.pop("_vua_dang_nhap", False) and pg is P["home"] \

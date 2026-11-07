@@ -16,10 +16,9 @@ Thiết kế giao diện: [docs/ux_redesign.md](docs/ux_redesign.md).
 
 | Mục | Nội dung |
 |---|---|
-| **Tổng quan** | Chỉ số chính, phễu tuyển sinh, danh sách *Cần xử lý* (chưa giữ chỗ, hồ sơ thiếu, chờ hoàn phí, tư vấn tồn đọng), liên hệ gần đây |
+| **Tổng quan** | Chỉ số chính, phễu tuyển sinh, danh sách *Cần xử lý* (hồ sơ thiếu, tư vấn tồn đọng), liên hệ gần đây |
 | **Data tuyển sinh** | Form nhập đúng các cột của list *Data tuyển sinh* hiện có (Nam hoc, Ngày liên hệ, SĐT, Nguồn, Tài khoản FB, Người giới thiệu, Họ tên HS, Khối, Giới tính, Chế độ, Trường cũ, điểm Toán/Văn/Anh/TV 1–2, Hạnh kiểm 1–2, …). Danh sách lọc Lớp / Chế độ / Bước, tìm theo tên, SĐT, người đăng ký. Nút **Bước**: Tư vấn → Nộp hồ sơ → Nhập học / Rút hồ sơ (lý do rút ghi vào "Nội dung đã trao đổi"). Cảnh báo trùng tên + SĐT |
 | **Hồ sơ nhập học** | Khi bấm **Nhập học**, hồ sơ được tạo tự động từ Data tuyển sinh (năm học, họ tên, ngày sinh, giới tính, lớp, chế độ, SĐT). Bổ sung đủ 54 cột theo biểu mẫu **Danh sách học sinh (VEMIS)**, chọn Tỉnh → Xã/Phường theo danh mục mới (34 tỉnh, 3.321 xã). Cột "Thiếu" cho biết HS còn thiếu thông tin quan trọng. **Xuất Excel đúng biểu mẫu VEMIS** theo lớp |
-| **Kế toán** | Xác nhận giữ chỗ trên các cột có sẵn (*Tình trạng, Số tiền xác nhận, Người xác nhận*), theo dõi **hoàn phí** khi hủy giữ chỗ (*Tên chủ tài khoản, Ngân hàng, Số tài khoản*), **tổng hợp giữ chỗ** theo khối, xuất Excel |
 | **Báo cáo** | Thống kê khối × trạng thái, tỷ lệ nhập học, nguồn tuyển sinh, liên hệ theo tuần, chế độ nội trú/bán trú; tải báo cáo Excel |
 
 Chọn **năm học** ở thanh bên — mọi trang đều lọc theo năm học. Giao diện hỗ trợ chế độ sáng/tối và điện thoại.
@@ -28,7 +27,7 @@ Chọn **năm học** ở thanh bên — mọi trang đều lọc theo năm họ
 
 | List | Nội dung | Định nghĩa |
 |---|---|---|
-| **Data tuyển sinh** (có sẵn, GUID `d0608833-…`) | HS liên hệ / tư vấn / nộp hồ sơ / giữ chỗ. App khớp cột theo **tên hiển thị** | `TUYEN_SINH` trong [`tuyensinh/schema.py`](tuyensinh/schema.py) |
+| **Data tuyển sinh** (có sẵn, GUID `d0608833-…`) | HS liên hệ / tư vấn / nộp hồ sơ. App khớp cột theo **tên hiển thị** | `TUYEN_SINH` trong [`tuyensinh/schema.py`](tuyensinh/schema.py) |
 | **Data_NhapHoc** (app tạo) | HS đã xác nhận nhập học — đủ 54 cột biểu mẫu VEMIS + *Nam hoc*, liên kết qua `TuyenSinhID` | `NHAP_HOC` |
 
 Cả hai list đều có cột **Nam hoc**; mọi trang lọc theo năm học chọn ở góc trên.
@@ -119,11 +118,11 @@ phải là `https://<địa-chỉ-app>/oauth2callback`.
 
 ```
 app.py                     # điểm vào: sidebar (menu nhóm, năm học), đăng nhập, bắt lỗi chung
-views/                     # các trang: trang_chu, data_tuyen_sinh, ho_so_nhap_hoc, ke_toan, bao_cao
+views/                     # các trang: trang_chu, data_tuyen_sinh, ho_so_nhap_hoc, giay_to, noi_tru, bao_cao
 tuyensinh/ui.py            # hệ thống thiết kế: token màu, component dùng chung
 static/                    # logo, icon
 tuyensinh/schema.py        # định nghĩa list & cột (thêm/sửa trường tại đây)
-tuyensinh/services.py      # nghiệp vụ: lưu, chuyển bước, tạo hồ sơ nhập học, giữ chỗ
+tuyensinh/services.py      # nghiệp vụ: lưu, chuyển bước, tạo hồ sơ nhập học, học phí
 tuyensinh/export_vemis.py  # xuất Excel theo biểu mẫu VEMIS
 tuyensinh/storage/         # powerautomate.py, sharepoint.py (Graph), local.py (SQLite), convert.py (khớp cột)
 scripts/                   # setup_sharepoint, inspect_sharepoint, import_excel, seed_demo

@@ -106,9 +106,9 @@ DASH_CFG = {
                 ("ts_quahan", 0)],
         "panels": ["ts_khoi", "ts_thoigian", "ts_nguon", "ts_chedo", "ts_truongcu", "ts_tuvan"]},
     reports.G_KT: {
-        "kpi": [("kt_giucho", 0), ("kt_giucho", 1), ("kt_hocphi", 0), ("kt_hocphi", 1),
-                ("kt_hocphi", 2), ("kt_hoanphi", 1)],
-        "panels": ["kt_giucho", "kt_hocphi", "kt_congno", "kt_hoanphi"]},
+        "kpi": [("kt_hocphi", 0), ("kt_hocphi", 1), ("kt_hocphi", 2), ("kt_congno", 0),
+                ("kt_congno", 1)],
+        "panels": ["kt_hocphi", "kt_congno"]},
     reports.G_NH: {
         "kpi": [("nh_siso", 0), ("nh_siso", 1), ("nh_siso", 2), ("nh_tinhtrang", 2),
                 ("nh_hoanthien", 0), ("nh_giayto", 0)],

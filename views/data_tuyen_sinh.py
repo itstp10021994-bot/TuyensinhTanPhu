@@ -1,6 +1,6 @@
 """Data tuyển sinh — bố cục như app cũ: danh sách thẻ bên trái, chi tiết bên phải.
 
-Lọc theo bước / khối / chế độ / giữ chỗ, tìm kiếm; học sinh đang chọn nằm ở ?id=...
+Lọc theo bước / khối / chế độ, tìm kiếm; học sinh đang chọn nằm ở ?id=...
 Thêm liên hệ mới bằng hộp thoại nhập nhanh (?new=1 để mở từ trang khác).
 """
 from html import escape
@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from tuyensinh import services, ui
-from tuyensinh.schema import CHE_DO, GIU_CHO, KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
+from tuyensinh.schema import CHE_DO, KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
 
 S = st.session_state
 S.setdefault("ts_v", 0)  # tăng để nạp lại form / xóa lựa chọn trong bảng
@@ -106,9 +106,6 @@ def withdraw_dialog(rec: dict):
     st.write(f"Chuyển **{rec['HoTenHS']}** sang trạng thái **Rút hồ sơ**.")
     ly_do = st.text_area("Lý do rút hồ sơ *", placeholder="Ví dụ: chuyển sang trường khác gần nhà",
                          help="Được ghi thêm vào mục Nội dung đã trao đổi.")
-    if rec.get("GiuCho") == "Đã giữ chỗ":
-        st.info("Học sinh đã giữ chỗ. Nhớ báo kế toán đổi Tình trạng sang **Hủy giữ chỗ** "
-                "để hoàn phí.", icon=":material/payments:")
     c1, c2 = st.columns(2)
     if c1.button("Xác nhận rút hồ sơ", type="primary", width="stretch", disabled=not ly_do.strip()):
         if ui.mutate(services.set_trang_thai, storage, rec["id"], "Rút hồ sơ", ly_do.strip(),
@@ -157,12 +154,11 @@ def card(r: dict, selected: bool):
     with ui.card_box(rid, selected):
         menu = ui.card_head(r["HoTenHS"] or "(Chưa có tên)", rid, open_record)
         color = STEP_COLOR.get(step, "#6B7280")
-        giu = escape(r["GiuCho"] or "Chưa giữ chỗ")
         khoi = escape((r["Khoi"] or "—") + (f'-{r["PhanHe"]}' if r["PhanHe"] else ""))
         st.html(
             f'<p class="tp-card">Khối <b>{khoi}</b> · {escape(r["CheDo"] or "—")} · '
             f'{escape(r["SDT"] or "—")}<br>{ui.pill(step, color)} &nbsp;'
-            f'<span class="k">Liên hệ {ui.fmt_date(r["NgayLienHe"])} · {giu}</span></p>')
+            f'<span class="k">Liên hệ {ui.fmt_date(r["NgayLienHe"])}</span></p>')
         with menu:
             nxt = ui.next_step(step)
             if nxt and st.button(f"Chuyển sang {nxt}", key=f"nxt_{rid}", width="stretch",
@@ -270,7 +266,7 @@ def render_right(item_id: str | None):
     values = {}
     khoa = ui.chi_doc(not sua)
     khoa.__enter__()
-    tabs = st.tabs(["Liên hệ & tư vấn", "Học sinh", "Trường cũ & kết quả", "Giữ chỗ & hồ sơ"])
+    tabs = st.tabs(["Liên hệ & tư vấn", "Học sinh", "Trường cũ & kết quả", "Hồ sơ nhập học"])
     with tabs[0], st.container(border=True):
         values.update(ui.record_form(
             [F(k) for k in ("NgayLienHe", "SDT", "NamHoc", "Nguon", "TenLienHe",
@@ -294,14 +290,7 @@ def render_right(item_id: str | None):
             keys = [f"Toan{n}", f"Van{n}", f"Anh{n}", f"TV{n}", f"HanhKiem{n}"]
             values.update(ui.record_form([F(k) for k in keys], rec, prefix, 5, short))
     with tabs[3], st.container(border=True):
-        c1, c2 = st.columns(2, gap="medium")
-        with c1:
-            st.markdown("**Giữ chỗ**")
-            ui.kv([("Giữ chỗ", rec.get("GiuCho") or "Chưa giữ chỗ"),
-                   ("Số tiền xác nhận", ui.money(rec.get("SoTienXacNhan"))),
-                   ("Người xác nhận", rec.get("NguoiXacNhan")),
-                   ("Ngân hàng hoàn phí", rec.get("NganHang"))])
-            ui.page_link("views/ke_toan.py", label="Mở Kế toán", icon=":material/payments:")
+        c2 = st.container()
         with c2:
             st.markdown("**Hồ sơ nhập học**")
             nh = ui.df(NHAP_HOC)
@@ -339,12 +328,12 @@ def render_right(item_id: str | None):
 
 
 # ================================================================== trang
-FILTER_KEYS = ("ts_q", "ts_khoi", "ts_chedo", "ts_giucho")
+FILTER_KEYS = ("ts_q", "ts_khoi", "ts_chedo")
 
 
 def clear_filters():
     S.ts_q = ""
-    S.ts_khoi = S.ts_chedo = S.ts_giucho = "Tất cả"
+    S.ts_khoi = S.ts_chedo = "Tất cả"
 
 
 def filters(step: str):
@@ -360,7 +349,6 @@ def filters(step: str):
                      type="primary" if n_loc else "secondary"):
         khoi = st.selectbox("Khối", ["Tất cả", *KHOI], key="ts_khoi")
         che_do = st.selectbox("Chế độ", ["Tất cả", *CHE_DO], key="ts_chedo")
-        giu = st.selectbox("Giữ chỗ", ["Tất cả", *GIU_CHO], key="ts_giucho")
     top.segmented_control("Hiển thị", ["Thẻ", "Bảng"], key="ts_kieu", required=True,
                           default="Thẻ", label_visibility="collapsed",
                           help="Thẻ: xem nhanh từng em · Bảng: sắp xếp theo cột, chọn nhiều dòng")
@@ -371,8 +359,6 @@ def filters(step: str):
         view = view[view["Khoi"] == khoi]
     if che_do != "Tất cả":
         view = view[view["CheDo"] == che_do]
-    if giu != "Tất cả":
-        view = view[view["GiuCho"].replace("", "Chưa giữ chỗ") == giu]
     if q.strip():
         ql = q.strip().lower()
         phone = services.phone_query(q)
@@ -385,7 +371,7 @@ def filters(step: str):
         st.button("Xóa bộ lọc", icon=":material/filter_alt_off:", type="tertiary",
                   on_click=clear_filters)
     return (view.sort_values(["NgayLienHe", "id"], ascending=False).reset_index(drop=True),
-            (step, q, khoi, che_do, giu))
+            (step, q, khoi, che_do))
 
 
 def _chuyen_nhieu(ids: list, buoc: str) -> int:
@@ -400,12 +386,11 @@ def bang(view: pd.DataFrame):
         "id": view["id"], "Học sinh": view["HoTenHS"], "Khối": view["Khoi"],
         "Bước": ui.tag_col(view["TrangThai"].replace("", "Tư vấn")), "Chế độ": view["CheDo"],
         "SĐT": view["SDT"], "Ngày liên hệ": pd.to_datetime(view["NgayLienHe"], errors="coerce"),
-        "Nguồn": view["Nguon"], "Giữ chỗ": ui.tag_col(view["GiuCho"].replace("", "Chưa giữ chỗ"))})
+        "Nguồn": view["Nguon"]})
     chon = ui.bang_chon(hien, "ts_bang", {
         "Học sinh": st.column_config.TextColumn(width="medium", pinned=True),
         "Khối": st.column_config.TextColumn(width="small"), "Bước": ui.status_column(),
-        "Ngày liên hệ": st.column_config.DateColumn(**ui.DATE_COL),
-        "Giữ chỗ": ui.giu_cho_column()})
+        "Ngày liên hệ": st.column_config.DateColumn(**ui.DATE_COL)})
     thanh = st.container(horizontal=True, vertical_alignment="center", gap="small")
     if not chon:
         thanh.caption(f"{len(hien)} liên hệ · tick ô đầu dòng để chọn; bấm tiêu đề cột để sắp xếp.")

@@ -223,7 +223,7 @@ def tao_ho_so_hang_loat(storage: Storage, ts_records: list[dict], workers: int =
 # ------------------------------------------------------------------ lên lớp (HS cũ sang năm mới)
 # Trường chỉ đúng cho một năm học: không chép sang hồ sơ năm mới
 KHONG_CHEP_LEN_LOP = {"id", "Created", "Modified", "TuyenSinhID", "NamHoc", "LopHoc", "Khoi",
-                      "TinhTrangHS", "LopCu", "NgayNhanHoSo", "SoTienXacNhan", "SoTienThanhToan",
+                      "TinhTrangHS", "LopCu", "NgayNhanHoSo", "SoTienThanhToan",
                       "SoTienConLai", "TongDaThu", "NgayDongPhi", "KeToanXacNhan",
                       "NguoiNhanHoSo", "NguoiCapNhat", "GhiChu"}
 DA_NGHI = ("Rút hồ sơ", "Không học tiếp")
@@ -560,31 +560,6 @@ def nhap_hoc_df(storage: Storage, nam_hoc: str) -> pd.DataFrame:
     ts = load_df(storage, TUYEN_SINH)
     rut = set(ts.loc[ts["TrangThai"] == "Rút hồ sơ", "id"])
     return df[~df["TuyenSinhID"].isin(rut)].reset_index(drop=True)
-
-
-# ------------------------------------------------------------------ Kế toán (giữ chỗ)
-def xac_nhan_giu_cho(storage: Storage, item_id: str, so_tien, nguoi: str,
-                     tinh_trang: str = "Đã giữ chỗ", **bank) -> dict:
-    """Kế toán xác nhận số tiền giữ chỗ (ghi vào các cột có sẵn của Data tuyển sinh)."""
-    if tinh_trang == "Đã giữ chỗ" and (_empty(so_tien) or float(so_tien) <= 0):
-        raise ValueError("**Số tiền xác nhận** phải lớn hơn 0")
-    upd = {"GiuCho": tinh_trang, "NguoiXacNhan": nguoi}
-    if not _empty(so_tien):
-        upd["SoTienXacNhan"] = float(so_tien)
-    upd.update({k: v for k, v in bank.items()
-                if k in ("TenChuTaiKhoan", "NganHang", "SoTaiKhoan")})
-    return storage.update_item(TUYEN_SINH.name, item_id, _clean(TUYEN_SINH, upd))
-
-
-def giu_cho_summary(ts: pd.DataFrame) -> pd.DataFrame:
-    """Tổng hợp giữ chỗ theo khối: số HS và số tiền theo từng tình trạng."""
-    d = ts.assign(GiuCho=ts["GiuCho"].replace("", "Chưa giữ chỗ"),
-                  SoTien=ts["SoTienXacNhan"].fillna(0))
-    so_hs = pd.crosstab(d["Khoi"], d["GiuCho"])
-    tien = d[d["GiuCho"] == "Đã giữ chỗ"].groupby("Khoi")["SoTien"].sum()
-    out = so_hs.assign(**{"Tiền đã giữ chỗ": tien}).fillna(0)
-    out.index.name = "Khối"
-    return out.reset_index()
 
 
 # ------------------------------------------------------------------ Mức hoàn thiện hồ sơ nhập học
