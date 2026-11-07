@@ -1,5 +1,5 @@
 /* Giao diện chung của app — nạp bởi tuyensinh/ui.py (inject_css).
-   Biến màu / chữ / khoảng cách ở tokens.css. ROBOT_URI được thay bằng ảnh robot lúc nạp. */
+   Biến màu / chữ / khoảng cách ở tokens.css. */
 /* ---- khung trang ---- */
 /* chừa chỗ cho thanh header của Streamlit (cao hơn khi chạy trên Streamlit Cloud) */
 .block-container {padding-top: 4.25rem; padding-bottom: 3rem; max-width: 1480px;}
@@ -115,7 +115,6 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
   border-bottom: 1px solid rgba(0,0,0,.08);}
 [data-testid="stTopNavLinkContainer"] a {border-radius: 8px;}
 /* thanh bên trái: menu theo bộ phận */
-[data-testid="stSidebarNav"] li:has(a[href$="/tro-ly"]) {display: none;}
 [data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"] {font-size: .72rem;
   font-weight: 600; letter-spacing: .06em; text-transform: uppercase; opacity: .6;
   margin-top: .6rem;}
@@ -230,23 +229,6 @@ header[data-testid="stHeader"] {background: rgba(245,245,247,.72) !important;
 .stApp ::-webkit-scrollbar-thumb {background: rgba(0,0,0,.18); border-radius: 8px;
   border: 2px solid transparent; background-clip: padding-box;}
 .stApp ::-webkit-scrollbar-track {background: transparent;}
-/* ---- Trợ lý AI Conan Ro: robot nhún nhảy ở góc phải thanh đầu trang ---- */
-.st-key-tp_ai a {width: 46px; height: 46px; padding: 0 !important; border-radius: 50%;
-  background: url("ROBOT_URI") center / 32px no-repeat,
-              linear-gradient(135deg, #6D28D9 0%, #2563EB 55%, #06B6D4 100%) !important;
-  box-shadow: 0 4px 14px rgba(79,70,229,.45); animation: tp-nhun 2.6s ease-in-out infinite;
-  transform-origin: 50% 100%;}
-.st-key-tp_ai a > * {display: none !important;}
-.st-key-tp_ai a:hover {animation-play-state: paused; transform: scale(1.08);
-  box-shadow: 0 6px 20px rgba(79,70,229,.6);}
-@keyframes tp-nhun {
-  0%, 55%, 100% {transform: translateY(0) scale(1, 1);}
-  62% {transform: translateY(0) scale(1.08, .92);}
-  72% {transform: translateY(-9px) scale(.96, 1.05);}
-  82% {transform: translateY(0) scale(1.05, .95);}
-  90% {transform: translateY(-3px) scale(1, 1);}}
-header [data-testid="stTopNavLink"][href*="tro-ly"], header a[href$="/tro-ly"],
-[data-testid="stTopNavLinkContainer"]:has(a[href$="/tro-ly"]) {display: none !important;}
 .st-key-tp_toolbar {top: .3rem;}
 /* màn vừa: menu chỉ còn chữ (bỏ icon) để chừa chỗ cho thanh công cụ */
 @media (max-width: 1400px) { [data-testid="stTopNavLinkContainer"] a [data-testid="stIconMaterial"],

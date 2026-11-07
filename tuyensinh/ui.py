@@ -63,25 +63,6 @@ GIU_CHO_COLOR = {
 STEPS = ("Tư vấn", "Nộp hồ sơ", "Nhập học")  # luồng chính; "Rút hồ sơ" là nhánh thoát
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-# Biểu tượng robot AI (Conan Ro): đầu robot trắng + ngôi sao AI vàng
-ROBOT_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
-             '<path d="M12 4.2V6.4" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round"/>'
-             '<path fill="#FDE047" d="M12 .7Q12 2.6 13.9 2.6Q12 2.6 12 4.5Q12 2.6 10.1 2.6Q12 2.6 12 .7Z"/>'
-             '<path fill="#FDE047" d="M20.6 2.8Q20.6 4.2 22 4.2Q20.6 4.2 20.6 5.6Q20.6 4.2 19.2 4.2Q20.6 4.2 20.6 2.8Z"/>'
-             '<rect x="2.3" y="10.2" width="1.8" height="4.2" rx=".9" fill="#FFFFFF"/>'
-             '<rect x="19.9" y="10.2" width="1.8" height="4.2" rx=".9" fill="#FFFFFF"/>'
-             '<rect x="4.6" y="6.6" width="14.8" height="11.6" rx="3.6" fill="#FFFFFF"/>'
-             '<circle cx="9.2" cy="11.6" r="1.7" fill="#4F46E5"/>'
-             '<circle cx="14.8" cy="11.6" r="1.7" fill="#4F46E5"/>'
-             '<rect x="9.4" y="14.6" width="5.2" height="1.4" rx=".7" fill="#06B6D4"/></svg>')
-
-
-def _data_uri(svg: str) -> str:
-    import base64
-    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
-
-
-ROBOT_URI = _data_uri(ROBOT_SVG)
 
 def _doc_css(ten: str) -> str:
     """Đọc file CSS trong static/styles (đọc lại khi file đổi — tiện sửa giao diện)."""
@@ -100,7 +81,7 @@ def _doc_css_cache(path: str, mtime: float) -> str:  # mtime: đọc lại khi f
 
 def _css() -> str:
     return ("<style>" + _doc_css("tokens.css") + "\n" +
-            _doc_css("app.css").replace("ROBOT_URI", ROBOT_URI) + "</style>")
+            _doc_css("app.css") + "</style>")
 
 
 def _css_toi() -> str:

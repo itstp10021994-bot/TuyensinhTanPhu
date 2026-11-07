@@ -64,8 +64,6 @@ P = {
                   url_path="noi-tru"),
     "bc": st.Page("views/bao_cao.py", title="Báo cáo", icon=":material/monitoring:",
                   url_path="bao-cao"),
-    "tl": st.Page("views/tro_ly.py", title="Conan Ro", icon=":material/smart_toy:",
-                  url_path="tro-ly"),
     "cd": st.Page("views/cai_dat.py", title="Cài đặt & đồng bộ", icon=":material/settings:",
                   url_path="cai-dat"),
 }
@@ -211,15 +209,13 @@ def _dang_xuat():
 _pages = [P["home"], P["ts"], P["nh"], P["gt"], P["kt"], P["nt"], P["bc"], P["cd"]]
 if S.get("tk"):
     _pages = [p for p in _pages if p.title in S["tk"]["Quyen"]] or [P["home"]]
-# Trợ lý: ai cũng dùng được, câu trả lời tự giới hạn theo quyền xem của tài khoản
-_pages.insert(len(_pages) - (_pages[-1] is P["cd"]), P["tl"])
 _FILE = {"home": "trang_chu", "ts": "data_tuyen_sinh", "nh": "ho_so_nhap_hoc", "gt": "giay_to",
-         "kt": "ke_toan", "nt": "noi_tru", "bc": "bao_cao", "tl": "tro_ly", "cd": "cai_dat"}
+         "kt": "ke_toan", "nt": "noi_tru", "bc": "bao_cao", "cd": "cai_dat"}
 # liên kết giữa các trang chỉ hiện khi tài khoản được vào trang đích (ui.page_link)
 S["_trang_duoc_vao"] = {f"views/{_FILE[k]}.py" for k in P if P[k] in _pages}
 # Thanh bên trái, nhóm theo bộ phận (nhóm không có trang được phép thì ẩn)
 _NHOM = [("", ["home"]), ("Tuyển sinh", ["ts", "nh", "gt"]), ("Kế toán", ["kt"]),
-         ("Nội trú", ["nt"]), ("Báo cáo", ["bc", "tl"]), ("Hệ thống", ["cd"])]
+         ("Nội trú", ["nt"]), ("Báo cáo", ["bc"]), ("Hệ thống", ["cd"])]
 _nav = {}
 for _ten, _ks in _NHOM:
     _ds = [P[k] for k in _ks if P[k] in _pages]
@@ -251,10 +247,6 @@ if _dich and _dich[0] and getattr(pg, "url_path", "") != _dich[0]:
         st.switch_page(_p, query_params=_dich[1] or None)
 elif _dich and _dich[1] and not st.query_params:  # đúng trang nhưng mất ?id=… khi tự đăng nhập
     st.query_params.from_dict(_dich[1])
-# nhớ trang đang xem (khác Trợ lý) để nút đóng / thu nhỏ của khung chat quay về đúng chỗ
-for _k, _p in P.items():
-    if _p is pg and _k != "tl":
-        S["_trang_truoc"] = f"views/{_FILE[_k]}.py"
 
 # Thanh công cụ chung: năm học + người thao tác (thay cho thanh bên)
 years = config.school_years()
@@ -301,11 +293,6 @@ with st.container(horizontal=True, horizontal_alignment="right", vertical_alignm
                          [getattr(P[k], "url_path", "") for k in P])
     st.button("", icon=":material/refresh:", key="tp_refresh", on_click=ui.refresh,
               help="Tải lại dữ liệu mới nhất từ SharePoint", type="tertiary")
-    # Trợ lý AI "Conan Ro": robot nhún nhảy ở góc phải ngoài cùng (thay cho mục menu)
-    if P["tl"] in _pages:
-        with st.container(key="tp_ai", width="content"):
-            st.page_link(P["tl"], label="Conan Ro", icon=":material/smart_toy:",
-                         help="Hỏi trợ lý AI Conan Ro")
 
 try:
     if pg.url_path != "cai-dat":  # tải song song 2 list cho mọi trang (trang Cài đặt tự tải)

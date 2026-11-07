@@ -129,7 +129,7 @@ H_TC = 300  # trình chiếu: vừa màn hình 1920×1080 (16:9) khi bấm F11
 # Trình chiếu: ẩn menu trái, thanh trên, bộ lọc, ô chọn mẫu; nội dung dùng hết bề ngang
 TRINH_CHIEU_CSS = """<style>
 section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
-header[data-testid="stHeader"], .st-key-tp_toolbar, .st-key-tp_ai, .st-key-bc_loc,
+header[data-testid="stHeader"], .st-key-tp_toolbar, .st-key-bc_loc,
 .st-key-tp_page_head,
 .st-key-bc_rep {display: none !important;}
 .block-container {padding: .9rem 1.6rem 1rem !important; max-width: none !important;}

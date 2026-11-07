@@ -22,7 +22,6 @@ Mẫu đầy đủ: `.streamlit/secrets.toml.example`. **Không bao giờ commit
 | `NAM_HOC`, `NAM_HOC_MAC_DINH` | không | Danh sách năm học, năm mặc định |
 | `SP_LIST_<tên list>` | không | Đổi tên / GUID list SharePoint nếu khác mặc định |
 | `[auth]` + `AUTH_DOMAIN` | không | Đăng nhập Microsoft 365, chỉ cho tên miền trường |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | không | Trợ lý AI (chỉ gửi câu hỏi, không gửi dữ liệu học sinh) |
 
 Tạo chuỗi ngẫu nhiên cho `COOKIE_SECRET`: `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 
@@ -84,4 +83,4 @@ nên có thể quay lại từng phần:
       (dashboard + Trình chiếu), Cài đặt mở bình thường.
 - [ ] Lưu thử một hồ sơ → Cài đặt → Nhật ký hoạt động có dòng mới.
 - [ ] Tài khoản không phải Quản trị không thấy nút **Xóa liên hệ**.
-- [ ] `pytest` chạy đủ (122 bài) trước khi đẩy mã mới.
+- [ ] `pytest` chạy đủ (96 bài) trước khi đẩy mã mới.
