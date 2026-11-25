@@ -238,7 +238,7 @@ def danh_gia_dialog(hid: str):
     c1.html(f'<p class="tp-card" style="font-size:1rem"><b style="font-size:1.15rem">'
             f'{escape(h["ten"])}</b><br>Lớp <b>{escape(h["lop"] or "—")}</b> · '
             f'{escape((p or {}).get("TenPhong") or CHUA_XEP)}'
-            + (f' · GV {escape(p["GiaoVien"])}' if p and p.get("GiaoVien") else "")
+            + (f' · GV {escape(NT.ten_giao_vien(p))}' if p and NT.giao_vien(p) else "")
             + f' · <b>{NT.ten_thang(thang)}</b></p>')
     with c2:
         if cu:
@@ -442,7 +442,7 @@ def render_chua_xep():
                                             "Chọn": st.column_config.CheckboxColumn(width="small")},
                              key=f"nt_cx_ed_{tim}_{khoi}_{gt}_{ca}_{ui.data_version()}")
         chon = sua.loc[sua["Chọn"], "id"].tolist()
-        theo_ten = {f"{p['TenPhong']} · {p.get('GiaoVien') or 'chưa có GV'} · "
+        theo_ten = {f"{p['TenPhong']} · {NT.ten_giao_vien(p, 'chưa có GV')} · "
                     f"{len(NT.hs_ids(p))} HS": p for p in phongs}
         c1, c2, c3 = st.columns([2, 1.2, 1.2], vertical_alignment="bottom")
         dich = c1.selectbox("Xếp vào phòng", [*theo_ten, MOI], key="nt_cx_phong")
@@ -496,7 +496,27 @@ def render_khong_con_nt():
                 st.rerun()
 
 
+def _thieu_cot_gv2() -> bool:
+    """List phòng trên SharePoint chưa có cột giáo viên quản nhiệm 2 (tạo trước bản cập nhật)."""
+    try:
+        cm = storage.colmap(NOI_TRU_PHONG.name) if hasattr(storage, "colmap") else None
+    except Exception:  # noqa: BLE001 — lỗi đọc cấu trúc list: không chặn trang
+        return False
+    return bool(cm) and any(k in cm.missing for k in ("GiaoVien2ID", "GiaoVien2"))
+
+
 def render_phong():
+    if _thieu_cot_gv2():
+        c1, c2 = st.columns([3, 1.2], vertical_alignment="center")
+        c1.warning("List phòng trên SharePoint chưa có cột **Giáo viên quản nhiệm 2**. Bấm nút "
+                   "bên cạnh để thêm cột (làm một lần) — chưa thêm thì giáo viên thứ hai không "
+                   "được lưu.", icon=":material/view_column:")
+        if c2.button("Thêm cột giáo viên 2", type="primary", icon=":material/add:",
+                     width="stretch", key="nt_cot_gv2"):
+            if ui.mutate(importer.setup_lists, storage, log=lambda *_: None,
+                         lists=[NOI_TRU_PHONG], success="Đã thêm cột giáo viên 2") is not None:
+                ui.refresh()
+                st.rerun()
     tks = [t for t in ui.records(TAI_KHOAN, optional=True)
            if str(t.get("HoatDong") or "Có") != "Không"]
     tks.sort(key=lambda t: (t.get("VaiTro") != "GV quản nhiệm", str(t.get("HoTen") or "")))
@@ -508,8 +528,8 @@ def render_phong():
     with left, ui.section("Danh sách phòng", f"{len(phongs)} phòng · năm học {nam_hoc}"):
         if phongs:
             st.dataframe(pd.DataFrame([{
-                "Phòng": p.get("TenPhong"), "Khu": p.get("Khu"),
-                "Giáo viên quản nhiệm": p.get("GiaoVien") or "— chưa phân công",
+                "Phòng": p.get("TenPhong"), "Khu": p.get("Khu") or "",
+                "Giáo viên quản nhiệm": NT.ten_giao_vien(p, "— chưa phân công"),
                 "Số HS": len(NT.hs_ids(p))} for p in phongs]), hide_index=True,
                 width="stretch", height=min(38 + 35 * len(phongs), 520))
         else:
@@ -525,13 +545,29 @@ def render_phong():
                             placeholder="vd Nam, Nữ, Dãy A")
         gv_opts = [None, *tks]
         gv_cu = next((t for t in tks if str(t.get("id")) == str(p.get("GiaoVienID"))), None)
-        gv = st.selectbox("Giáo viên quản nhiệm", gv_opts,
-                          index=gv_opts.index(gv_cu) if gv_cu else 0, key=f"{k}_gv",
-                          format_func=lambda t: "— Chưa phân công —" if t is None else
-                          f"{t.get('HoTen')} ({t.get('VaiTro')})",
-                          help="Giáo viên này nhập đánh giá của phòng (Tổ trưởng và Quản trị "
-                               "cũng nhập được mọi phòng). Tạo tài khoản vai trò \"GV quản "
-                               "nhiệm\" ở Cài đặt → Tài khoản.")
+        gv_cu2 = next((t for t in tks if str(t.get("id")) == str(p.get("GiaoVien2ID"))), None)
+        fmt_gv = (lambda t: "— Chưa phân công —" if t is None else
+                  f"{t.get('HoTen')} ({t.get('VaiTro')})")
+        c_gv1, c_gv2 = st.columns(2)
+        gv = c_gv1.selectbox("Giáo viên quản nhiệm", gv_opts,
+                             index=gv_opts.index(gv_cu) if gv_cu else 0, key=f"{k}_gv",
+                             format_func=fmt_gv,
+                             help="Giáo viên này nhập đánh giá của phòng (Tổ trưởng và Quản trị "
+                                  "cũng nhập được mọi phòng). Tạo tài khoản vai trò \"GV quản "
+                                  "nhiệm\" ở Cài đặt → Tài khoản.")
+        gv2_opts = [None, *(t for t in tks if t is not gv)]
+        gv2 = c_gv2.selectbox("Giáo viên quản nhiệm 2 (không bắt buộc)", gv2_opts,
+                              index=gv2_opts.index(gv_cu2) if gv_cu2 in gv2_opts else 0,
+                              key=f"{k}_gv2_{(gv or {}).get('id', '')}",
+                              format_func=lambda t: "— Không có —" if t is None else fmt_gv(t),
+                              help="Phòng có 2 giáo viên quản nhiệm: cả hai cùng thấy và nhập "
+                                   "đánh giá của học sinh trong phòng.")
+        chua_tk = [p.get(ten) for ten, cu in (("GiaoVien", gv_cu), ("GiaoVien2", gv_cu2))
+                   if p.get(ten) and cu is None]
+        if chua_tk:
+            st.caption("Phòng đang ghi giáo viên chưa gắn tài khoản: " + ", ".join(chua_tk)
+                       + ". Chọn tài khoản rồi lưu để gắn đúng người (lưu mà để trống thì tên "
+                       "này bị bỏ).")
         o_khac = {i for q in phongs if q.get("id") != p.get("id") for i in NT.hs_ids(q)}
         lua_chon = [i for i in HS if i not in o_khac]
         hien_tai = NT.hs_ids(p)
@@ -543,7 +579,7 @@ def render_phong():
         ghi = st.text_area("Ghi chú", p.get("GhiChu", ""), key=f"{k}_gc", height=70)
         if st.button("Lưu phòng", type="primary", icon=":material/save:", width="stretch"):
             if ui.mutate(NT.luu_phong, storage, phongs_all, nam_hoc, ten, khu, gv, hs, ghi,
-                         p.get("id"), success=f"Đã lưu phòng {ten}") is not None:
+                         p.get("id"), gv2, success=f"Đã lưu phòng {ten}") is not None:
                 S.pop("nt_p_chon", None)
                 st.rerun()
         if p:

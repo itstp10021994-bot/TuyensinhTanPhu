@@ -34,10 +34,14 @@ def nhap_phan_phong(up, storage, nam_hoc: str, phongs_all: list[dict], nh: list[
            f"chưa có hồ sơ {nam_hoc}")
     ui.kpi(k[3], "Trùng tên, chưa rõ", int((g["Kết quả"] == NT.TT_TRUNG).sum()))
     bang_phong = pd.DataFrame([{
-        "Phòng": x["TenPhong"], "Giáo viên": x["GiaoVien"],
-        "Tài khoản": (x["TaiKhoan"] or {}).get("TenDangNhap") or "— chưa có, khớp theo tên",
+        "Phòng": x["TenPhong"],
+        "Giáo viên": ", ".join(v for v in (x["GiaoVien"], x.get("GiaoVien2")) if v),
+        "Tài khoản": ", ".join(
+            (t or {}).get("TenDangNhap") or "— chưa có, khớp theo tên"
+            for v, t in ((x["GiaoVien"], x["TaiKhoan"]), (x.get("GiaoVien2"), x.get("TaiKhoan2")))
+            if v),
         "Số HS ghép được": len(x["HocSinhIDs"]),
-        "Ghi chú": ("File có nhiều GV: " + ", ".join(x["NhieuGV"])) if x["NhieuGV"] else ""}
+        "Ghi chú": ("File có hơn 2 GV: " + ", ".join(x["NhieuGV"])) if x["NhieuGV"] else ""}
         for x in kh])
     st.dataframe(bang_phong, hide_index=True, width="stretch",
                  height=min(38 + 35 * len(bang_phong), 420))
@@ -64,7 +68,7 @@ def nhap_phan_phong(up, storage, nam_hoc: str, phongs_all: list[dict], nh: list[
             ui.download_excel("Tải danh sách", bang, f"NoiTru_KhongCoTrongFile_{nam_hoc}.xlsx",
                               key=f"{key}_ngoai")
     if any(x["NhieuGV"] for x in kh):
-        st.warning("Có phòng mà file ghi nhiều giáo viên — app lấy giáo viên xuất hiện nhiều "
+        st.warning("Có phòng mà file ghi hơn 2 giáo viên — app lấy 2 giáo viên xuất hiện nhiều "
                    "nhất; sửa lại ở khung Thêm / sửa phòng nếu cần.", icon=":material/warning:")
     st.caption("Khi áp dụng: phòng trùng tên trong năm được **cập nhật** (học sinh theo file), "
                "phòng mới được tạo; em có trong file sẽ được bỏ khỏi phòng khác. Giáo viên chưa "

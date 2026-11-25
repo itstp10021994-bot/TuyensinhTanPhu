@@ -298,6 +298,9 @@ NOI_TRU_PHONG = ListDef(
         Field("Khu", "Khu / dãy nhà"),
         Field("GiaoVienID", "ID tài khoản giáo viên quản nhiệm"),
         Field("GiaoVien", "Giáo viên quản nhiệm"),
+        # giáo viên quản nhiệm thứ hai (không bắt buộc) — cùng quyền đánh giá phòng
+        Field("GiaoVien2ID", "ID tài khoản giáo viên quản nhiệm 2"),
+        Field("GiaoVien2", "Giáo viên quản nhiệm 2"),
         Field("HocSinhIDs", "Học sinh trong phòng (ID hồ sơ nhập học)", NOTE),
         Field("GhiChu", "Ghi chú", NOTE),
     ),

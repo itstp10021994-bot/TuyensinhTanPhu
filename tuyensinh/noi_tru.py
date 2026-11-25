@@ -41,16 +41,32 @@ def la_quan_ly(tk: dict | None) -> bool:
     return not tk or tk.get("VaiTro") in VAI_QUAN_LY
 
 
+GV_O = (("GiaoVienID", "GiaoVien"), ("GiaoVien2ID", "GiaoVien2"))  # 2 giáo viên quản nhiệm
+
+
+def giao_vien(phong: dict) -> list[str]:
+    """Họ tên các giáo viên quản nhiệm của phòng (1 hoặc 2 người)."""
+    return [_s(phong.get(ten)) for _, ten in GV_O if _s(phong.get(ten))]
+
+
+def ten_giao_vien(phong: dict, trong: str = "") -> str:
+    return ", ".join(giao_vien(phong)) or trong
+
+
 def duoc_nhap(phong: dict, tk: dict | None) -> bool:
-    """Giáo viên quản nhiệm nhập phòng mình; Tổ trưởng quản nhiệm / Quản trị nhập mọi phòng."""
+    """Giáo viên quản nhiệm (1 trong 2 người) nhập phòng mình; Tổ trưởng quản nhiệm / Quản trị
+    nhập mọi phòng."""
     if la_quan_ly(tk):
         return True
-    if tk.get("id") and str(phong.get("GiaoVienID") or "") == str(tk["id"]):
-        return True
-    # phòng nhập từ Excel trước khi giáo viên có tài khoản: khớp theo họ tên
     from .danh_muc import fold
-    return (not _s(phong.get("GiaoVienID")) and bool(_s(phong.get("GiaoVien")))
-            and fold(phong.get("GiaoVien")) == fold(tk.get("HoTen")))
+    for cot_id, cot_ten in GV_O:
+        if tk.get("id") and str(phong.get(cot_id) or "") == str(tk["id"]):
+            return True
+        # phòng nhập từ Excel trước khi giáo viên có tài khoản: khớp theo họ tên
+        if (not _s(phong.get(cot_id)) and bool(_s(phong.get(cot_ten)))
+                and fold(phong.get(cot_ten)) == fold(tk.get("HoTen"))):
+            return True
+    return False
 
 
 # ------------------------------------------------------------------ phòng
@@ -78,8 +94,9 @@ def phong_cua_hs(phongs: list[dict]) -> dict[str, dict]:
 
 def luu_phong(storage: Storage, phongs: list[dict], nam_hoc: str, ten: str, khu: str,
               gv: dict | None, hoc_sinh: list[str], ghi_chu: str = "",
-              item_id: str | None = None) -> dict:
-    """Thêm / sửa phòng. Tên phòng không trùng trong năm; mỗi học sinh chỉ ở một phòng."""
+              item_id: str | None = None, gv2: dict | None = None) -> dict:
+    """Thêm / sửa phòng. Tên phòng không trùng trong năm; mỗi học sinh chỉ ở một phòng.
+    `gv2`: giáo viên quản nhiệm thứ hai (không bắt buộc)."""
     ten = _s(ten)
     if not ten:
         raise ValueError("Cần nhập **Tên phòng**.")
@@ -95,7 +112,15 @@ def luu_phong(storage: Storage, phongs: list[dict], nam_hoc: str, ten: str, khu:
                          "Bỏ các em khỏi phòng cũ trước.")
     data = {"NamHoc": nam_hoc, "TenPhong": ten, "Khu": _s(khu),
             "GiaoVienID": _s((gv or {}).get("id")), "GiaoVien": _s((gv or {}).get("HoTen")),
+            "GiaoVien2ID": _s((gv2 or {}).get("id")), "GiaoVien2": _s((gv2 or {}).get("HoTen")),
             "HocSinhIDs": ";".join(dict.fromkeys(hoc_sinh)), "GhiChu": _s(ghi_chu)}
+    if not data["GiaoVien"] and data["GiaoVien2"]:  # chỉ chọn ô thứ hai: đưa lên ô đầu
+        data["GiaoVienID"], data["GiaoVien2ID"] = data["GiaoVien2ID"], ""
+        data["GiaoVien"], data["GiaoVien2"] = data["GiaoVien2"], ""
+    if data["GiaoVien2"] and (
+            (data["GiaoVien2ID"] and data["GiaoVien2ID"] == data["GiaoVienID"])
+            or data["GiaoVien2"] == data["GiaoVien"]):
+        raise ValueError("Hai giáo viên quản nhiệm của phòng phải là hai người khác nhau.")
     if item_id:
         return storage.update_item(NOI_TRU_PHONG.name, item_id, data)
     return storage.create_item(NOI_TRU_PHONG.name, data)
@@ -167,9 +192,10 @@ def them_vao_phong(storage: Storage, phongs: list[dict], nam_hoc: str, phong: di
     if not phong:
         return luu_phong(storage, phongs, nam_hoc, ten_moi, "", None, hoc_sinh)
     gv = {"id": _s(phong.get("GiaoVienID")), "HoTen": _s(phong.get("GiaoVien"))}
+    gv2 = {"id": _s(phong.get("GiaoVien2ID")), "HoTen": _s(phong.get("GiaoVien2"))}
     return luu_phong(storage, phongs, nam_hoc, _s(phong.get("TenPhong")), _s(phong.get("Khu")),
                      gv, hs_ids(phong) + [i for i in hoc_sinh if i not in hs_ids(phong)],
-                     _s(phong.get("GhiChu")), phong.get("id"))
+                     _s(phong.get("GhiChu")), phong.get("id"), gv2)
 
 
 # ------------------------------------------------------------------ đánh giá theo tháng
@@ -358,7 +384,7 @@ def tong_hop_phong(x: pd.DataFrame, phongs: list[dict], dang_nt: set[str]) -> pd
         ids = [i for i in hs_ids(p) if i in dang_nt]
         y = x[x["HocSinhID"].isin(ids)]
         da = y["HocSinhID"].nunique()
-        out.append({"Phòng": _s(p.get("TenPhong")), "Giáo viên": _s(p.get("GiaoVien")),
+        out.append({"Phòng": _s(p.get("TenPhong")), "Giáo viên": ten_giao_vien(p),
                     "Số HS": len(ids), "Đã nhận xét": da, "Chưa nhận xét": max(len(ids) - da, 0),
                     "Hoàn thành (%)": round(100 * da / len(ids), 1) if ids else None,
                     "Đủ 6 mục": int((y["Số mục"] == len(KHOAN)).sum())})
@@ -521,8 +547,8 @@ def ghep_hs(ds: pd.DataFrame, nh: list[dict], nam_hoc: str) -> pd.DataFrame:
 
 
 def ke_hoach_phong(ghep: pd.DataFrame, tks: list[dict]) -> list[dict]:
-    """Mỗi phòng: tên, giáo viên (nhiều tên thì lấy tên xuất hiện nhiều nhất), tài khoản khớp
-    theo họ tên, danh sách HocSinhID đã ghép."""
+    """Mỗi phòng: tên, 1–2 giáo viên quản nhiệm (nhiều tên thì lấy 2 tên xuất hiện nhiều nhất),
+    tài khoản khớp theo họ tên, danh sách HocSinhID đã ghép."""
     from .danh_muc import fold
 
     theo_ten = {fold(t.get("HoTen")): t for t in tks if _s(t.get("HoTen"))}
@@ -531,9 +557,11 @@ def ke_hoach_phong(ghep: pd.DataFrame, tks: list[dict]) -> list[dict]:
         if not _s(phong):
             continue
         gv_ds = g["Giáo viên"][g["Giáo viên"] != ""]
-        gv = gv_ds.value_counts().index[0] if len(gv_ds) else ""
+        top = list(gv_ds.value_counts().index[:2])
+        gv, gv2 = (top + ["", ""])[:2]
         out.append({"TenPhong": _s(phong), "GiaoVien": gv, "TaiKhoan": theo_ten.get(fold(gv)),
-                    "NhieuGV": sorted(set(gv_ds)) if gv_ds.nunique() > 1 else [],
+                    "GiaoVien2": gv2, "TaiKhoan2": theo_ten.get(fold(gv2)) if gv2 else None,
+                    "NhieuGV": sorted(set(gv_ds)) if gv_ds.nunique() > 2 else [],
                     "HocSinhIDs": [i for i in g["HocSinhID"] if i]})
     return sorted(out, key=lambda x: _so_tu_nhien(x["TenPhong"]))
 
@@ -555,9 +583,11 @@ def ap_dung_phan_phong(storage: Storage, phongs_all: list[dict], nam_hoc: str,
     for k in ke_hoach:
         cu = theo_ten.get(k["TenPhong"].lower())
         phong_file.add(k["TenPhong"].lower())
-        tk = k["TaiKhoan"] or {}
+        tk, tk2 = k["TaiKhoan"] or {}, k.get("TaiKhoan2") or {}
         data = {"NamHoc": nam_hoc, "TenPhong": k["TenPhong"],
                 "GiaoVienID": _s(tk.get("id")), "GiaoVien": _s(tk.get("HoTen")) or k["GiaoVien"],
+                "GiaoVien2ID": _s(tk2.get("id")),
+                "GiaoVien2": _s(tk2.get("HoTen")) or k.get("GiaoVien2", ""),
                 "HocSinhIDs": ";".join(dict.fromkeys(k["HocSinhIDs"]))}
         if cu:
             data["Khu"] = _s(cu.get("Khu"))

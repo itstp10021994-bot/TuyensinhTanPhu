@@ -311,3 +311,42 @@ def test_sua_ho_so_dong_bo_che_do_va_phong(st_):
     services.save_tuyen_sinh(st_, {**st_.get_item(TUYEN_SINH.name, t["id"]),
                                    "CheDo": "Ngoại trú"}, t["id"])
     assert not st_.get_item(NHAP_HOC.name, nh["id"]).get("NoiTruBanTru")
+
+
+def test_phong_hai_giao_vien(st_):
+    """Phòng có 2 giáo viên quản nhiệm: cả hai cùng nhập được, giữ khi xếp thêm học sinh."""
+    GV3 = {"id": "14", "HoTen": "Cô Lan", "VaiTro": "GV quản nhiệm"}
+    p = NT.luu_phong(st_, [], NAM, "P201", "", GV1, ["1"], gv2=GV2)
+    assert (p["GiaoVien"], p["GiaoVien2"], p["GiaoVien2ID"]) == ("Cô Hoa", "Thầy Nam", "12")
+    assert NT.duoc_nhap(p, GV1) and NT.duoc_nhap(p, GV2) and not NT.duoc_nhap(p, GV3)
+    assert NT.ten_giao_vien(p) == "Cô Hoa, Thầy Nam"
+    with pytest.raises(ValueError, match="hai người khác nhau"):
+        NT.luu_phong(st_, [], NAM, "P202", "", GV1, [], gv2=GV1)
+    # chỉ chọn ô thứ hai -> đưa lên ô đầu
+    q = NT.luu_phong(st_, st_.list_items(NOI_TRU_PHONG.name), NAM, "P203", "", None, [], gv2=GV3)
+    assert (q["GiaoVien"], q["GiaoVien2"]) == ("Cô Lan", "")
+    # xếp thêm học sinh: giữ cả hai giáo viên
+    NT.them_vao_phong(st_, st_.list_items(NOI_TRU_PHONG.name), NAM, p, "", ["2"])
+    p = st_.get_item(NOI_TRU_PHONG.name, p["id"])
+    assert NT.hs_ids(p) == ["1", "2"] and p["GiaoVien2ID"] == "12"
+    # phòng nhập từ Excel, giáo viên 2 chưa có tài khoản: khớp theo họ tên
+    excel = {"GiaoVien": "Cô Hoa", "GiaoVienID": "11", "GiaoVien2": "Thầy Nam", "GiaoVien2ID": ""}
+    assert NT.duoc_nhap(excel, {"id": "99", "HoTen": "thầy nam", "VaiTro": "GV quản nhiệm"})
+
+
+def test_ke_hoach_phong_lay_hai_giao_vien():
+    import pandas as pd
+    g = pd.DataFrame({"Phòng": ["507"] * 5, "Giáo viên": ["Cô Hoa", "Cô Hoa", "Thầy Nam",
+                                                          "Thầy Nam", "Cô Hoa"],
+                      "HocSinhID": ["1", "2", "3", "4", "5"]})
+    kh = NT.ke_hoach_phong(g, [{"id": "12", "HoTen": "Thầy Nam"}])[0]
+    assert (kh["GiaoVien"], kh["GiaoVien2"]) == ("Cô Hoa", "Thầy Nam")
+    assert kh["TaiKhoan"] is None and kh["TaiKhoan2"]["id"] == "12" and kh["NhieuGV"] == []
+
+
+def test_list_phong_cu_thieu_cot_giao_vien_2():
+    """List phòng tạo trước bản này: app nhận ra thiếu cột giáo viên 2 (để nhắc thêm cột)."""
+    from tuyensinh.storage.convert import ColumnMap
+    cu = [{"name": f.key, "title": f.sp_title, "type": "Text"} for f in NOI_TRU_PHONG.fields
+          if f.key not in ("GiaoVien2ID", "GiaoVien2")]
+    assert ColumnMap(NOI_TRU_PHONG.name, cu).missing == ["GiaoVien2ID", "GiaoVien2"]
