@@ -1,6 +1,6 @@
 # Triển khai, sao lưu & khôi phục
 
-Áp dụng cho bản 2.0.0 (nhánh `claude/affectionate-hamilton-yqdr6u`). Chỉ cần làm theo thứ tự.
+Áp dụng cho bản 2.1.0 (nhánh `claude/affectionate-hamilton-yqdr6u`). Chỉ cần làm theo thứ tự.
 
 ## 1. Yêu cầu
 

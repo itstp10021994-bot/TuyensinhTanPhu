@@ -625,10 +625,17 @@ def inject_css():
     st.session_state["_dlg_mo"] = False  # chưa mở hộp thoại nào trong lần chạy này
 
 
-def chan_thanh_ben():
-    """Chân thanh bên: người đang dùng (chữ cái đầu, họ tên, vai trò) + phiên bản app."""
+def ban_quyen() -> str:
+    """Dòng thông tin bản quyền (chân thanh bên và màn hình đăng nhập)."""
     from . import __version__
 
+    return ('<div class="tp-ban-quyen"><p>© 2026 Trường TH, THCS &amp; THPT Tân Phú</p>'
+            '<p>Thiết kế và phát triển bởi Chuyên viên Quản lý hệ thống</p>'
+            f'<p>Phiên bản {escape(__version__)} · Bảo lưu mọi quyền</p></div>')
+
+
+def chan_thanh_ben():
+    """Chân thanh bên: người đang dùng (chữ cái đầu, họ tên, vai trò) + dòng bản quyền."""
     tk = st.session_state.get("tk") or {}
     ten = current_user() or "Chưa đăng nhập"
     vai = tk.get("VaiTro") or ("Microsoft 365" if ten != "Chưa đăng nhập" else "")
@@ -636,7 +643,7 @@ def chan_thanh_ben():
     with st.sidebar:
         st.html(f'<div class="tp-side-user"><span class="av" aria-hidden="true">{escape(chu)}'
                 f'</span><span class="ten"><b>{escape(ten)}</b><em>{escape(vai)}</em></span></div>'
-                f'<p class="tp-side-ver">Quản lý tuyển sinh · phiên bản {__version__}</p>')
+                + ban_quyen())
 
 
 def page_header(title: str, subtitle: str | None = None, eyebrow: str | None = None):

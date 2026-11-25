@@ -70,6 +70,7 @@ P = {
 def _dung_lai():
     """Dừng ở màn hình đăng nhập nhưng vẫn khai báo các trang (ẩn) để giữ trang đang mở trên
     đường dẫn — đăng nhập xong (hoặc F5) quay về đúng trang đó, không về Tổng quan."""
+    st.html(ui.ban_quyen().replace('class="tp-ban-quyen"', 'class="tp-ban-quyen giua"'))
     from urllib.parse import urlparse
 
     try:  # nhớ trang + tham số đang mở (vd ?id=…) để mở lại sau khi tự đăng nhập bằng mã ghi nhớ
