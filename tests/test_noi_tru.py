@@ -361,3 +361,65 @@ def test_rut_ho_so_bo_khoi_phong(st_):
     r = st_.get_item(NHAP_HOC.name, a["id"])
     assert r["TinhTrangHS"] == "Rút hồ sơ" and "Chuyển trường" in r["GhiChu"]
     assert NT.hs_ids(st_.get_item(NOI_TRU_PHONG.name, p["id"])) == ["9"]
+
+
+def test_rut_ho_so_luu_tru_mot_dong(st_):
+    from tuyensinh import services
+    from tuyensinh.schema import NHAP_HOC, RUT_HO_SO, TUYEN_SINH
+    t = st_.create_item(TUYEN_SINH.name, {"HoTenHS": "Bình", "TrangThai": "Nhập học",
+                                          "NamHoc": NAM, "SDT": "0901", "Khoi": "6"})
+    a = st_.create_item(NHAP_HOC.name, {"HoTen": "Bình", "LopHoc": "6A1", "NamHoc": NAM,
+                                        "TuyenSinhID": str(t["id"]), "NoiTruBanTru": "Bán trú"})
+    services.rut_ho_so_nhap_hoc(st_, a, "Chuyển trường", "Cô Quỳnh")
+    (r,) = st_.list_items(RUT_HO_SO.name)
+    assert (r["HoTen"], r["LopHoc"], r["LyDo"], r["NguoiThucHien"], r["Buoc"]) == \
+        ("Bình", "6A1", "Chuyển trường", "Cô Quỳnh", "Sau nhập học")
+    assert r["SDT"] == "0901" and r["TuyenSinhID"] == str(t["id"]) and r["CheDo"] == "Bán trú"
+    # đã rút: không có hồ sơ nào cần bổ sung
+    assert services.rut_chua_luu_tru(st_.list_items(TUYEN_SINH.name),
+                                     st_.list_items(NHAP_HOC.name),
+                                     st_.list_items(RUT_HO_SO.name)) == []
+
+
+def test_rut_o_data_tuyen_sinh_luu_tru(st_):
+    from tuyensinh import services
+    from tuyensinh.schema import RUT_HO_SO, TUYEN_SINH
+    t = st_.create_item(TUYEN_SINH.name, {"HoTenHS": "Chi", "TrangThai": "Tư vấn", "NamHoc": NAM})
+    services.set_trang_thai(st_, t["id"], "Rút hồ sơ", "Học gần nhà", "Thầy Nam")
+    services.set_trang_thai(st_, t["id"], "Rút hồ sơ", "lần 2")  # đã rút rồi: không ghi trùng
+    (r,) = st_.list_items(RUT_HO_SO.name)
+    assert (r["HoTen"], r["LyDo"], r["Buoc"], r["NguoiThucHien"]) == \
+        ("Chi", "Học gần nhà", "Tư vấn", "Thầy Nam")
+
+
+def test_bo_sung_ho_so_rut_cu_tu_ghi_chu():
+    from tuyensinh import services
+    ts = [{"id": "1", "HoTenHS": "Dũng", "TrangThai": "Rút hồ sơ",
+           "GhiChu": "gọi lại\n03/02/2026 rút hồ sơ: rút sau nhập học"},
+          {"id": "2", "HoTenHS": "Em", "TrangThai": "Rút hồ sơ",
+           "GhiChu": "05/01/2026 rút hồ sơ: Gia đình chuyển vào TP.HCM"},
+          {"id": "3", "HoTenHS": "Gấm", "TrangThai": "Rút hồ sơ", "GhiChu": ""},
+          {"id": "4", "HoTenHS": "Đã lưu", "TrangThai": "Rút hồ sơ"},
+          {"id": "6", "HoTenHS": "Hà", "TrangThai": "Nhập học"}]
+    nh = [{"id": "9", "HoTen": "Dũng", "LopHoc": "7A2", "TuyenSinhID": "1",
+           "TinhTrangHS": "Rút hồ sơ",
+           "GhiChu": "03/02/2026 rút hồ sơ (Cô Quỳnh): Chuyển trường quốc tế"},
+          {"id": "10", "HoTen": "Khang", "TinhTrangHS": "Rút hồ sơ", "Modified": "2026-03-01T08:00"}]
+    out = {d["HoTen"]: d for d in services.rut_chua_luu_tru(ts, nh, [{"TuyenSinhID": "4"}])}
+    assert set(out) == {"Dũng", "Em", "Gấm", "Khang"}
+    assert (out["Dũng"]["LyDo"], out["Dũng"]["NguoiThucHien"], out["Dũng"]["NgayRut"],
+            out["Dũng"]["LopHoc"]) == ("Chuyển trường quốc tế", "Cô Quỳnh", "2026-02-03", "7A2")
+    assert out["Em"]["LyDo"] == "Gia đình chuyển vào TP.HCM" and out["Em"]["NgayRut"] == "2026-01-05"
+    assert out["Gấm"]["LyDo"] == "" and out["Khang"]["NgayRut"] == "2026-03-01"
+
+
+def test_luu_tru_rut_ban_ghi_tu_bang_co_nan_timestamp(st_):
+    import pandas as pd
+    from tuyensinh import services
+    from tuyensinh.schema import NHAP_HOC, RUT_HO_SO
+    a = st_.create_item(NHAP_HOC.name, {"HoTen": "Hải", "NamHoc": NAM})
+    rec = {**a, "NgaySinh": pd.Timestamp("2014-05-03"), "LopHoc": float("nan"),
+           "Khoi": 7.0, "PhanHe": None, "DienThoaiSLL": pd.NA}
+    services.rut_ho_so_nhap_hoc(st_, rec, "Lý do", "Cô A")
+    (r,) = st_.list_items(RUT_HO_SO.name)
+    assert (r["NgaySinh"], r["Khoi"], r.get("LopHoc"), r.get("SDT")) == ("2014-05-03", "7", None, None)

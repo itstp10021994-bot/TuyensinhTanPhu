@@ -7,7 +7,8 @@ from datetime import date
 
 import pandas as pd
 
-from .schema import BOOL, DATE, GIAY_TO_NHAP_HOC, NHAP_HOC, NUMBER, TUYEN_SINH, ListDef
+from .schema import (BOOL, DATE, GIAY_TO_NHAP_HOC, NHAP_HOC, NUMBER, RUT_HO_SO, TUYEN_SINH,
+                     ListDef)
 from .storage.base import Storage
 
 
@@ -135,7 +136,7 @@ def save_tuyen_sinh(storage: Storage, data: dict, item_id: str | None = None) ->
 
 
 def set_trang_thai(storage: Storage, item_id: str, trang_thai: str,
-                   ly_do: str | None = None, nguoi: str = "") -> dict:
+                   ly_do: str | None = None, nguoi: str = "", luu_tru: bool = True) -> dict:
     """Chuyển "Bước": Tư vấn → Nộp hồ sơ → Nhập học, hoặc Rút hồ sơ.
 
     Khi chuyển sang "Nhập học" sẽ tạo hồ sơ trong Data_NhapHoc (nếu chưa có).
@@ -150,9 +151,13 @@ def set_trang_thai(storage: Storage, item_id: str, trang_thai: str,
     if ly_do:
         note = f"{date.today():%d/%m/%Y} rút hồ sơ: {ly_do}"
         upd["GhiChu"] = f"{rec.get('GhiChu') or ''}\n{note}".strip()
+    buoc_cu = rec.get("TrangThai")
     rec = storage.update_item(TUYEN_SINH.name, item_id, upd)
     if trang_thai == "Nhập học":
         sync_nhap_hoc(storage, rec)
+    if trang_thai == "Rút hồ sơ" and luu_tru and buoc_cu != "Rút hồ sơ":
+        _luu_tru_an_toan(storage, ts={**rec, "TrangThai": buoc_cu},
+                         nh=nhap_hoc_of(storage, item_id), ly_do=ly_do or "", nguoi=nguoi)
     return rec
 
 
@@ -549,9 +554,152 @@ def rut_ho_so_nhap_hoc(storage: Storage, rec: dict, ly_do: str, nguoi: str = "")
     out = cap_nhat_nhap_hoc(storage, rec["id"], {
         "TinhTrangHS": "Rút hồ sơ", "GhiChu": f"{rec.get('GhiChu') or ''}\n{note}".strip()})
     if rec.get("TuyenSinhID") and storage.get_item(TUYEN_SINH.name, rec["TuyenSinhID"]):
+        ts = storage.get_item(TUYEN_SINH.name, rec["TuyenSinhID"])
         set_trang_thai(storage, rec["TuyenSinhID"], "Rút hồ sơ", ly_do or "rút sau nhập học",
-                       nguoi)
+                       nguoi, luu_tru=False)
+    else:
+        ts = None
     _bo_khoi_phong(storage, rec["id"])  # rút hồ sơ: không còn ở phòng nội trú
+    _luu_tru_an_toan(storage, ts=ts, nh=rec, ly_do=ly_do or "", nguoi=nguoi,
+                     buoc="Sau nhập học")
+    return out
+
+
+# ------------------------------------------------------------------ Lưu trữ rút hồ sơ
+_DONG_RUT = re.compile(r"(\d{1,2}/\d{1,2}/\d{4}) rút hồ sơ(?: \(([^)\n]*)\))?(?:: ?(.*))?")
+
+
+def dong_rut_ho_so(ts: dict | None = None, nh: dict | None = None, ly_do: str = "",
+                   nguoi: str = "", ngay: date | str | None = None,
+                   buoc: str | None = None) -> dict:
+    """Một dòng lưu trữ rút hồ sơ từ bản ghi Data tuyển sinh (ts) và / hoặc hồ sơ nhập học (nh)."""
+    # bản ghi lấy từ bảng có thể chứa NaN / Timestamp: chuẩn hóa trước
+    ts = {k: v for k, v in ((k, _gia_tri_luu(v)) for k, v in (ts or {}).items()) if v}
+    nh = {k: v for k, v in ((k, _gia_tri_luu(v)) for k, v in (nh or {}).items()) if v}
+    khoi = str(nh.get("Khoi") or ts.get("Khoi") or "")
+    ph = str(nh.get("PhanHe") or ts.get("PhanHe") or "")
+    if ph and ph not in khoi:
+        khoi = f"{khoi} {ph}".strip()
+    ngay = ngay or date.today()
+    return {
+        "NamHoc": nh.get("NamHoc") or ts.get("NamHoc") or "",
+        "NgayRut": ngay.isoformat() if isinstance(ngay, date) else ngay,
+        "HoTen": nh.get("HoTen") or ts.get("HoTenHS") or "",
+        "NgaySinh": nh.get("NgaySinh") or ts.get("NgaySinh") or None,
+        "Khoi": khoi,
+        "LopHoc": nh.get("LopHoc") or "",
+        "SDT": ts.get("SDT") or nh.get("DienThoaiSLL") or nh.get("DienThoaiMe")
+        or nh.get("DienThoaiBo") or "",
+        "CheDo": nh.get("NoiTruBanTru") or ts.get("CheDo") or "",
+        "Buoc": buoc or ("Sau nhập học" if nh else ts.get("TrangThai") or ""),
+        "LyDo": ly_do or "",
+        "NguoiThucHien": nguoi or "",
+        "TuyenSinhID": str(ts.get("id") or nh.get("TuyenSinhID") or ""),
+        "NhapHocID": str(nh.get("id") or ""),
+    }
+
+
+def _dam_bao_list_rut(storage: Storage) -> None:
+    """List LuuTru_RutHoSo chưa có / thiếu cột thì tự tạo (SharePoint); kho cục bộ bỏ qua."""
+    if not hasattr(storage, "colmap"):
+        return
+    try:
+        thieu = bool(storage.colmap(RUT_HO_SO.name).missing)
+    except Exception:  # noqa: BLE001 — chưa có list
+        thieu = True
+    if thieu:
+        from . import importer  # tránh vòng import
+
+        importer.setup_lists(storage, log=lambda *_: None, lists=[RUT_HO_SO])
+        getattr(storage, "_maps", {}).pop(RUT_HO_SO.name, None)
+
+
+def ghi_rut_ho_so(storage: Storage, dong: dict) -> dict:
+    """Ghi một dòng vào Lưu trữ rút hồ sơ."""
+    _dam_bao_list_rut(storage)
+    return storage.create_item(RUT_HO_SO.name, {k: v for k, v in
+                                                ((k, _gia_tri_luu(v)) for k, v in dong.items())
+                                                if v not in (None, "")})
+
+
+def _gia_tri_luu(v):
+    """Giá trị lấy từ bảng (Timestamp, NaN, số) → chuỗi ghi được lên list."""
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(v, "isoformat"):
+        return v.date().isoformat() if hasattr(v, "date") and callable(v.date) else v.isoformat()
+    s = str(v).strip()
+    return s[:-2] if s.endswith(".0") and s[:-2].isdigit() else s
+
+
+def _luu_tru_an_toan(storage: Storage, **kw) -> None:
+    """Ghi lưu trữ sau khi đã rút: lỗi thì báo rõ (hồ sơ vẫn đã rút, bổ sung lại được)."""
+    try:
+        ghi_rut_ho_so(storage, dong_rut_ho_so(**kw))
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(
+            "Đã rút hồ sơ nhưng chưa ghi được vào Lưu trữ rút hồ sơ (" + str(e)[:200] + "). "
+            "Mở Công cụ → Lưu trữ rút hồ sơ → “Bổ sung hồ sơ đã rút” để ghi lại.") from e
+
+
+def _tach_ghi_chu(ghi_chu: str) -> tuple[str, str, str]:
+    """(ngày dd/mm/yyyy, người, lý do) của lần rút cuối trong ghi chú; không có → ("","","")."""
+    m = None
+    for m in _DONG_RUT.finditer(str(ghi_chu or "")):
+        pass
+    if not m:
+        return "", "", ""
+    return m.group(1), (m.group(2) or "").strip(), (m.group(3) or "").strip()
+
+
+def _ngay_iso(dmy: str, du_phong) -> str | None:
+    try:
+        d, mth, y = (int(x) for x in dmy.split("/"))
+        return date(y, mth, d).isoformat()
+    except (ValueError, AttributeError):
+        s = str(du_phong or "")[:10]
+        return s or None
+
+
+def rut_chua_luu_tru(ts_items: list[dict], nh_items: list[dict],
+                     da_luu: list[dict]) -> list[dict]:
+    """Các hồ sơ đã rút (trước khi có lưu trữ) chưa có dòng lưu trữ, dựng lại từ ghi chú."""
+    co_ts = {str(r.get("TuyenSinhID")) for r in da_luu if r.get("TuyenSinhID")}
+    co_nh = {str(r.get("NhapHocID")) for r in da_luu if r.get("NhapHocID")}
+    nh_theo_ts = {str(r.get("TuyenSinhID")): r for r in nh_items if r.get("TuyenSinhID")}
+    out = []
+
+    def them(ts, nh):
+        nguon = nh if nh and nh.get("TinhTrangHS") == "Rút hồ sơ" else None
+        ngay, nguoi, ly_do = _tach_ghi_chu((nguon or {}).get("GhiChu"))
+        if not ngay and ts:
+            ngay, nguoi2, ly_do = _tach_ghi_chu(ts.get("GhiChu"))
+            nguoi = nguoi or nguoi2
+        goc = nguon or ts or nh
+        out.append(dong_rut_ho_so(
+            ts=ts, nh=nh, ly_do=ly_do, nguoi=nguoi,
+            ngay=_ngay_iso(ngay, goc.get("Modified")),
+            buoc="Sau nhập học" if nguon else ("Không rõ (bổ sung)" if ts else "Sau nhập học")))
+
+    for ts in ts_items:
+        if ts.get("TrangThai") != "Rút hồ sơ" or str(ts.get("id")) in co_ts:
+            continue
+        nh = nh_theo_ts.get(str(ts.get("id")))
+        if nh and str(nh.get("id")) in co_nh:
+            continue
+        them(ts, nh)
+    for nh in nh_items:
+        if (nh.get("TinhTrangHS") == "Rút hồ sơ" and str(nh.get("id")) not in co_nh
+                and str(nh.get("TuyenSinhID") or "") not in co_ts
+                and not (nh.get("TuyenSinhID") and any(
+                    str(t.get("id")) == str(nh["TuyenSinhID"]) and t.get("TrangThai") == "Rút hồ sơ"
+                    for t in ts_items))):
+            them(None, nh)
     return out
 
 

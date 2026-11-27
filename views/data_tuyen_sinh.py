@@ -8,7 +8,7 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import services, ui
+from tuyensinh import services, ui, ui_rut_ho_so
 from tuyensinh.schema import CHE_DO, KHOI, NHAP_HOC, TRANG_THAI, TUYEN_SINH
 
 S = st.session_state
@@ -413,10 +413,18 @@ def bang(view: pd.DataFrame):
                 st.rerun()
 
 
+@ui.dialog("Lưu trữ rút hồ sơ", width="large")
+def luu_tru_rut_dialog():
+    ui_rut_ho_so.render(storage, key="ts_rut")
+
+
 def render_page():
     actions = ui.page_header("Data tuyển sinh", f"Liên hệ, tư vấn và hồ sơ tuyển sinh · năm học {nam_hoc}",
                              eyebrow="Tuyển sinh")
     export_slot = actions.container(width="content")
+    if actions.button("Đã rút", icon=":material/inventory_2:",
+                      help="Lưu trữ danh sách rút hồ sơ và lý do"):
+        luu_tru_rut_dialog()
     add = actions.button("Thêm liên hệ", icon=":material/person_add:", type="primary")
     if add:
         new_contact_dialog()

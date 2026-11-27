@@ -29,6 +29,9 @@ Tạo chuỗi ngẫu nhiên cho `COOKIE_SECRET`: `python -c "import secrets; pri
 
 1. Mở app → **Cài đặt & đồng bộ → Nhật ký hoạt động** → bấm **Tạo list nhật ký** (tạo list
    `NhatKy_HoatDong` trên SharePoint). Từ đó app tự ghi mọi thao tác lưu / xóa / nhập và đăng nhập.
+   List `LuuTru_RutHoSo` (lưu trữ rút hồ sơ và lý do) được app tự tạo ở lần rút hồ sơ đầu
+   tiên; hồ sơ đã rút từ trước thì vào **Hồ sơ nhập học → Công cụ → Lưu trữ rút hồ sơ** bấm
+   **Bổ sung hồ sơ đã rút** (một lần).
 2. Kiểm tra **Tài khoản & phân quyền**: có ít nhất một tài khoản **Quản trị**. Bản 2.0 chỉ cho
    *Quản trị* xóa liên hệ Data tuyển sinh, *Quản trị / Giáo vụ* xóa hồ sơ nhập học.
 3. (Khuyến nghị) đặt `COOKIE_SECRET` trong Secrets (mục 2).
@@ -83,4 +86,4 @@ nên có thể quay lại từng phần:
       (dashboard + Trình chiếu), Cài đặt mở bình thường.
 - [ ] Lưu thử một hồ sơ → Cài đặt → Nhật ký hoạt động có dòng mới.
 - [ ] Tài khoản không phải Quản trị không thấy nút **Xóa liên hệ**.
-- [ ] `pytest` chạy đủ (99 bài) trước khi đẩy mã mới.
+- [ ] `pytest` chạy đủ (104 bài) trước khi đẩy mã mới.

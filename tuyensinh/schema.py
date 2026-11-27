@@ -371,9 +371,31 @@ NHAT_KY = ListDef(
     ),
 )
 
+# Lưu trữ rút hồ sơ: mỗi lần rút (ở Data tuyển sinh hoặc Hồ sơ nhập học) ghi một dòng, không
+# sửa / xóa theo hồ sơ gốc — tra cứu lý do rút về sau
+RUT_HO_SO = ListDef(
+    name="LuuTru_RutHoSo",
+    title="Lưu trữ danh sách rút hồ sơ và lý do",
+    fields=(
+        Field("NamHoc", "Năm học"),
+        Field("NgayRut", "Ngày rút", DATE),
+        Field("HoTen", "Họ tên HS", required=True),
+        Field("NgaySinh", "Ngày sinh", DATE),
+        Field("Khoi", "Khối"),
+        Field("LopHoc", "Lớp"),
+        Field("SDT", "SĐT liên hệ"),
+        Field("CheDo", "Chế độ"),
+        Field("Buoc", "Rút ở bước"),
+        Field("LyDo", "Lý do rút", NOTE),
+        Field("NguoiThucHien", "Người thực hiện"),
+        Field("TuyenSinhID", "Mã Data tuyển sinh"),
+        Field("NhapHocID", "Mã hồ sơ nhập học"),
+    ),
+)
+
 # list có file mẫu nhập Excel (nhật ký do app tự ghi, không nhập tay)
 NHAP_DUOC = (TUYEN_SINH, NHAP_HOC, GIAY_TO, TAI_KHOAN, NOI_TRU_PHONG, NOI_TRU_DANH_GIA)
-ALL_LISTS = NHAP_DUOC + (NHAT_KY,)
+ALL_LISTS = NHAP_DUOC + (NHAT_KY, RUT_HO_SO)
 
 
 # Cột của Data_NhapHoc không có trong biểu mẫu VEMIS (chỉ dùng trong app / SharePoint)

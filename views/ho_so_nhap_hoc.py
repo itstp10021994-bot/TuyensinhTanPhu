@@ -14,7 +14,7 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
-from tuyensinh import bien_nhan, config, export_vemis, importer, services, ui
+from tuyensinh import bien_nhan, config, export_vemis, importer, services, ui, ui_rut_ho_so
 from tuyensinh.schema import (G_CHUNG, G_DIACHI, G_GIADINH, G_GIAYTO, G_HOCPHI, G_HOCTAP,
                               G_KHANCAP, G_LIENLAC, G_MON, G_NGANHANG, GIAY_TO_NHAP_HOC, MON_HOC,
                               NHAP_HOC, NOI_TRU_PHONG, TINH_TRANG_HS, TUYEN_SINH)
@@ -928,6 +928,11 @@ def doi_chieu_dialog():
             st.rerun()
 
 
+@ui.dialog("Lưu trữ rút hồ sơ", width="large")
+def luu_tru_rut_dialog():
+    ui_rut_ho_so.render(storage, key="nh_rut")
+
+
 def render_page():
     actions = ui.page_header("Hồ sơ nhập học", f"Hồ sơ học sinh, giấy tờ, xếp lớp · năm học {nam_hoc}",
                              eyebrow="Tuyển sinh")
@@ -943,6 +948,9 @@ def render_page():
         if cong_cu.button("Đối chiếu danh sách hiện hữu", icon=":material/rule:", width="stretch",
                           help="So với file VEMIS học sinh đang học, xóa hồ sơ không còn học"):
             doi_chieu_dialog()
+    if cong_cu.button("Lưu trữ rút hồ sơ", icon=":material/inventory_2:", width="stretch",
+                      help="Danh sách học sinh đã rút hồ sơ và lý do"):
+        luu_tru_rut_dialog()
     actions.button("Thêm hồ sơ", icon=":material/add:", on_click=open_record, args=("new",),
                    type="primary", help="Thêm học sinh nhập học không qua Data tuyển sinh")
 

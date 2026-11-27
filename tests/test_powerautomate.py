@@ -26,7 +26,8 @@ class FakeFlow:
                       "lists/GetByTitle('DanhMuc_TaiKhoan')": {"cols": [], "items": {}},
                       "lists/GetByTitle('NoiTru_Phong')": {"cols": [], "items": {}},
                       "lists/GetByTitle('NoiTru_DanhGiaThang')": {"cols": [], "items": {}},
-                      "lists/GetByTitle('NhatKy_HoatDong')": {"cols": [], "items": {}}}
+                      "lists/GetByTitle('NhatKy_HoatDong')": {"cols": [], "items": {}},
+                      "lists/GetByTitle('LuuTru_RutHoSo')": {"cols": [], "items": {}}}
         self.next_id = 1
         self.calls = []
 
@@ -193,6 +194,17 @@ def test_setup_hien_du_cot(pa):
     n = len(flow.calls)
     importer.setup_lists(st, log=lambda m: None)  # chạy lại: không thêm trùng
     assert not any("AddViewField" in u for _, u in flow.calls[n:])
+
+
+def test_luu_tru_rut_tu_them_cot_truoc_khi_ghi(pa):
+    from tuyensinh import services
+    st, flow = pa
+    lst = flow.lists["lists/GetByTitle('LuuTru_RutHoSo')"]
+    services.ghi_rut_ho_so(st, services.dong_rut_ho_so(
+        nh={"id": "5", "HoTen": "Lê An", "LopHoc": "6A1"}, ly_do="Chuyển trường", nguoi="Cô Q"))
+    assert {c["title"] for c in lst["cols"]} >= {"Lý do rút", "Họ tên HS"}
+    (row,) = lst["items"].values()
+    assert "Chuyển trường" in row.values() and "Lê An" in row.values()
 
 
 def test_timeout_doc_thu_lai_ghi_khong(monkeypatch):
