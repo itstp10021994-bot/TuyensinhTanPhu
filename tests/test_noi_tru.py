@@ -350,3 +350,14 @@ def test_list_phong_cu_thieu_cot_giao_vien_2():
     cu = [{"name": f.key, "title": f.sp_title, "type": "Text"} for f in NOI_TRU_PHONG.fields
           if f.key not in ("GiaoVien2ID", "GiaoVien2")]
     assert ColumnMap(NOI_TRU_PHONG.name, cu).missing == ["GiaoVien2ID", "GiaoVien2"]
+
+
+def test_rut_ho_so_bo_khoi_phong(st_):
+    from tuyensinh import services
+    from tuyensinh.schema import NHAP_HOC
+    a = st_.create_item(NHAP_HOC.name, {"HoTen": "An", "NoiTruBanTru": "Nội trú", "NamHoc": NAM})
+    p = NT.luu_phong(st_, [], NAM, "P1", "", GV1, [str(a["id"]), "9"])
+    services.rut_ho_so_nhap_hoc(st_, a, "Chuyển trường", "Cô Quỳnh")
+    r = st_.get_item(NHAP_HOC.name, a["id"])
+    assert r["TinhTrangHS"] == "Rút hồ sơ" and "Chuyển trường" in r["GhiChu"]
+    assert NT.hs_ids(st_.get_item(NOI_TRU_PHONG.name, p["id"])) == ["9"]

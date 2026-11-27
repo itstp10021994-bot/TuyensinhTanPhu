@@ -292,7 +292,7 @@ def xe_dialog(rec: dict):
 def rut_dialog(rec: dict):
     st.markdown(f"Rút hồ sơ của **{rec.get('HoTen')}**?")
     st.caption("Hồ sơ được giữ lại với tình trạng *Rút hồ sơ*; Data tuyển sinh cũng chuyển sang "
-               "Rút hồ sơ.")
+               "Rút hồ sơ; em được bỏ khỏi phòng nội trú (nếu có). Lý do được ghi vào Ghi chú.")
     ly_do = st.text_area("Lý do", placeholder="Vd: chuyển trường gần nhà")
     c1, c2 = st.columns(2)
     if c1.button("Rút hồ sơ", type="primary", icon=":material/person_remove:", width="stretch"):
@@ -691,13 +691,19 @@ def render_right(item_id: str | None):
         with tab, st.container(border=True, height=560):
             values.update(render_tab(name, groups, rec, prefix))
 
-    bar = st.columns(3, gap="small")
+    bar = st.columns(4, gap="small")
     if not new:
         if bar[0].button("Thu hồ sơ", icon=":material/folder_open:", width="stretch"):
             mo_sau(thu_ho_so_dialog, rec)
         if bar[1].button("Thanh toán học phí", icon=":material/payments:", width="stretch"):
             mo_sau(hoc_phi_dialog, rec)
-    save_bottom = bar[2].button("Lưu hồ sơ", type="primary", icon=":material/save:",
+        da_rut = rec.get("TinhTrangHS") == "Rút hồ sơ"
+        if bar[2].button("Đã rút hồ sơ" if da_rut else "Rút hồ sơ…",
+                         icon=":material/person_remove:", width="stretch", disabled=da_rut,
+                         key="rut_bot", help="Học sinh nghỉ / không nhập học nữa: hồ sơ được giữ "
+                                             "lại với tình trạng Rút hồ sơ"):
+            mo_sau(rut_dialog, rec)
+    save_bottom = bar[3].button("Lưu hồ sơ", type="primary", icon=":material/save:",
                                 key="save_bot", width="stretch")
 
     if save_top or save_bottom:

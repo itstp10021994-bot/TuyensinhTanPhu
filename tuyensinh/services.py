@@ -551,6 +551,7 @@ def rut_ho_so_nhap_hoc(storage: Storage, rec: dict, ly_do: str, nguoi: str = "")
     if rec.get("TuyenSinhID") and storage.get_item(TUYEN_SINH.name, rec["TuyenSinhID"]):
         set_trang_thai(storage, rec["TuyenSinhID"], "Rút hồ sơ", ly_do or "rút sau nhập học",
                        nguoi)
+    _bo_khoi_phong(storage, rec["id"])  # rút hồ sơ: không còn ở phòng nội trú
     return out
 
 
