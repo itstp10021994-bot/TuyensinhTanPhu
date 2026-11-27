@@ -511,28 +511,29 @@ def card(r: dict, selected: bool):
             + (ui.pill(tt, TT_HEX.get(tt, "#6B7280")) + " &nbsp;" if tt else "")
             + f'<span class="k">{escape(r["DienThoaiSLL"] or "—")}{gt}{xe}</span></p>')
         with menu:
-            st.button("Mở hồ sơ", key=f"mo_{rid}", width="stretch", icon=":material/open_in_new:",
-                      on_click=open_record, args=(rid,))
-            if st.button("Xếp lớp", key=f"lop_{rid}", width="stretch", icon=":material/school:"):
-                xep_lop_dialog(r)
-            if noi_tru(r) and st.button("Đăng ký xe", key=f"xe_{rid}", width="stretch",
-                                        icon=":material/directions_bus:"):
-                xe_dialog(r)
+            # lưới 2 cột dạng ô: gọn, không phải cuộn (thao tác thường dùng trước, rút / xóa sau)
             khoi = int(r["Khoi"]) if str(r["Khoi"]).isdigit() else 0
-            if khoi >= 10 and st.button("Nhóm môn", key=f"mon_{rid}", width="stretch",
-                                        icon=":material/menu_book:"):
-                mon_dialog(r)
-            if st.button("Chuyển chế độ", key=f"cd_{rid}", width="stretch",
-                         icon=":material/swap_horiz:"):
-                che_do_dialog(r)
-            st.divider()
-            if tt != "Rút hồ sơ" and st.button("Rút hồ sơ…", key=f"rut_{rid}", width="stretch",
-                                                icon=":material/block:"):
-                rut_dialog(r)
-            if ui.duoc_xoa(ui.XOA_NH) and st.button("Xóa hồ sơ…", key=f"xoa_{rid}",
-                                                    width="stretch", icon=":material/delete:"):
-                delete_dialog(r)
-
+            o = [("Mở hồ sơ", ":material/open_in_new:", "mo", None),
+                 ("Xếp lớp", ":material/school:", "lop", xep_lop_dialog)]
+            if noi_tru(r):
+                o.append(("Đăng ký xe", ":material/directions_bus:", "xe", xe_dialog))
+            if khoi >= 10:
+                o.append(("Nhóm môn", ":material/menu_book:", "mon", mon_dialog))
+            o.append(("Chế độ", ":material/swap_horiz:", "cd", che_do_dialog))
+            nguy = []
+            if tt != "Rút hồ sơ":
+                nguy.append(("Rút hồ sơ…", ":material/block:", "rut", rut_dialog))
+            if ui.duoc_xoa(ui.XOA_NH):
+                nguy.append(("Xóa hồ sơ…", ":material/delete:", "xoa", delete_dialog))
+            for nhom in (o, nguy):
+                for i in range(0, len(nhom), 2):
+                    cot = st.columns(2, gap="small")
+                    for c, (nhan, icon, k, dlg) in zip(cot, nhom[i:i + 2]):
+                        if dlg is None:
+                            c.button(nhan, key=f"{k}_{rid}", width="stretch", icon=icon,
+                                     on_click=open_record, args=(rid,))
+                        elif c.button(nhan, key=f"{k}_{rid}", width="stretch", icon=icon):
+                            dlg(r)
 
 def filters() -> pd.DataFrame:
     # thanh lọc gọn: tìm kiếm nổi bật · Bộ lọc (thu gọn) · kiểu hiển thị Thẻ / Bảng
