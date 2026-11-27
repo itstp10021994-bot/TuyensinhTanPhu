@@ -278,3 +278,9 @@ section[data-testid="stSidebar"] {border-right: 1px solid var(--border);}
     min-width: calc(33.3% - .5rem) !important; width: auto !important;}
   .bi-dai {grid-template-columns: repeat(3, minmax(0, 1fr));}
 }
+/* menu ⋯ / Bộ lọc / Công cụ: gọn hơn, không bao giờ tràn khỏi màn hình (tự cuộn khi màn thấp) */
+[data-testid="stPopoverBody"] {max-height: min(78vh, 560px); overflow-y: auto;}
+[data-testid="stPopoverBody"] [data-testid="stVerticalBlock"] {gap: .4rem;}
+[data-testid="stPopoverBody"] .stButton button {min-height: 2.15rem; padding-top: .2rem;
+  padding-bottom: .2rem;}
+[data-testid="stPopoverBody"] hr {margin: .25rem 0 !important;}
