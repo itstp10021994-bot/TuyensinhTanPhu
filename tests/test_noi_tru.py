@@ -423,3 +423,40 @@ def test_luu_tru_rut_ban_ghi_tu_bang_co_nan_timestamp(st_):
     services.rut_ho_so_nhap_hoc(st_, rec, "Lý do", "Cô A")
     (r,) = st_.list_items(RUT_HO_SO.name)
     assert (r["NgaySinh"], r["Khoi"], r.get("LopHoc"), r.get("SDT")) == ("2014-05-03", "7", None, None)
+
+
+def test_vao_noi_tru_giua_nam_ghi_ngay(st_):
+    from tuyensinh import services
+    from tuyensinh.schema import NHAP_HOC, TUYEN_SINH
+    hom_nay = date.today().isoformat()
+    a = st_.create_item(NHAP_HOC.name, {"HoTen": "A", "NoiTruBanTru": "Bán trú", "NamHoc": NAM})
+    b = st_.create_item(NHAP_HOC.name, {"HoTen": "B", "NoiTruBanTru": "", "NamHoc": NAM})
+    c = st_.create_item(NHAP_HOC.name, {"HoTen": "C", "NoiTruBanTru": "Bán trú", "NamHoc": NAM})
+    nh = st_.list_items(NHAP_HOC.name)
+    NT.doi_che_do(st_, nh, [], [str(a["id"]), str(b["id"])], "Nội trú")
+    assert st_.get_item(NHAP_HOC.name, a["id"])["NgayVaoNoiTru"] == hom_nay
+    assert not st_.get_item(NHAP_HOC.name, b["id"]).get("NgayVaoNoiTru")  # chưa ghi chế độ
+    # sửa trong hồ sơ: tự ghi ngày; người dùng tự nhập ngày thì giữ ngày đó
+    services.cap_nhat_nhap_hoc(st_, c["id"], {"NoiTruBanTru": "Nội trú",
+                                              "NgayVaoNoiTru": "2026-10-15"})
+    assert st_.get_item(NHAP_HOC.name, c["id"])["NgayVaoNoiTru"] == "2026-10-15"
+    # đổi từ Data tuyển sinh
+    t = st_.create_item(TUYEN_SINH.name, {"HoTenHS": "D", "CheDo": "Bán trú", "NamHoc": NAM,
+                                          "TrangThai": "Nhập học"})
+    d = st_.create_item(NHAP_HOC.name, {"HoTen": "D", "NoiTruBanTru": "Bán trú", "NamHoc": NAM,
+                                        "TuyenSinhID": str(t["id"])})
+    services._che_do_tu_tuyen_sinh(st_, {**t, "CheDo": "Nội trú"})
+    assert st_.get_item(NHAP_HOC.name, d["id"])["NgayVaoNoiTru"] == hom_nay
+
+
+def test_thang_vao_va_tien_do_theo_thang():
+    assert NT.thang_vao({"NgayVaoNoiTru": "2026-11-20"}) == "2026-11"
+    assert NT.thang_vao({"NgayVaoNoiTru": ""}) == "" and NT.thang_vao({}) == ""
+    hs = {"1": "", "2": "2026-11"}
+    thangs = ["2026-10", "2026-11"]
+    co_ten = {t: sorted(i for i, tu in hs.items() if tu <= t) for t in thangs}
+    assert co_ten == {"2026-10": ["1"], "2026-11": ["1", "2"]}
+    import pandas as pd
+    x = pd.DataFrame({"Tháng": ["2026-10"], "HocSinhID": ["1"]})
+    td = NT.tien_do_thang(x, thangs, {"2026-10": 1, "2026-11": 2})
+    assert td["Số HS"].tolist() == [1, 2] and td["Đã nhận xét"].tolist() == [1, 0]

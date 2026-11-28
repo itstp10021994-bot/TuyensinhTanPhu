@@ -355,7 +355,8 @@ def render_tab(name: str, groups: tuple, rec: dict, prefix: str) -> dict:
         st.caption("Chọn Tỉnh/Tp trước để hiện danh sách Xã/Phường tương ứng.")
     elif name == G_GIAYTO:
         v.update(form([F(k) for k in ("CanCuoc", "NgayCapCanCuoc", "NoiCapCanCuoc", "MaBHYT",
-                                      "DienChinhSach", "KhuyetTat", "NoiTruBanTru")],
+                                      "DienChinhSach", "KhuyetTat", "NoiTruBanTru",
+                                      "NgayVaoNoiTru")],
                       rec, prefix, 3))
         st.markdown("**Đối tượng**")
         v.update(form([F(k) for k in ("CanNgheo", "DoanVien", "DoiVien")], rec, prefix, 3))

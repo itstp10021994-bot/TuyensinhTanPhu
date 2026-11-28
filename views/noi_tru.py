@@ -83,7 +83,7 @@ nt = nh[nh["NoiTruBanTru"].str.startswith("Nội trú")
         & ~nh["TinhTrangHS"].isin(["Rút hồ sơ", "Không học tiếp"])]
 HS = {str(r["id"]): {"ten": r["HoTen"] or "(Chưa có tên)",
                      "lop": r["LopHoc"] or (f"Khối {r['Khoi']}" if r["Khoi"] else ""),
-                     "khoi": r["Khoi"], "gt": r["GioiTinh"]}
+                     "khoi": r["Khoi"], "gt": r["GioiTinh"], "tu": NT.thang_vao(r)}
       for _, r in nt.iterrows()}
 o_phong = NT.phong_cua_hs(phongs)
 
@@ -102,13 +102,15 @@ thang = actions.selectbox("Tháng đánh giá", THANG, key="nt_thang", format_fu
                           width=190, label_visibility="collapsed")
 x_thang = long[long["Tháng"] == thang]
 da_dg = {str(r.get("HocSinhID")): r for r in dg if NT._s(r.get("Thang")) == thang}
+# Em chuyển Bán trú -> Nội trú giữa năm chỉ đánh giá từ tháng chuyển; tháng trước không có tên
+HS_THANG = {i for i, h in HS.items() if h["tu"] <= thang}
 
 phong_cua_toi = [p for p in phongs if NT.duoc_nhap(p, tk)]  # GV: phòng mình; quản lý: mọi phòng
 # Chỉ người được đánh giá mới thấy nhận xét: GV quản nhiệm -> em phòng mình; Tổ trưởng quản
 # nhiệm, Quản trị -> mọi em nội trú (kể cả em chưa xếp phòng)
-HS_XEM = [(i, p) for p in phong_cua_toi for i in NT.hs_ids(p) if i in HS]
+HS_XEM = [(i, p) for p in phong_cua_toi for i in NT.hs_ids(p) if i in HS_THANG]
 if quan_ly:
-    HS_XEM += [(i, None) for i in HS if i not in o_phong]
+    HS_XEM += [(i, None) for i in HS_THANG if i not in o_phong]
 DU = len(NT.KHOAN)
 
 
@@ -133,9 +135,11 @@ BANG = _bang_xem()
 # ------------------------------------------------------------------ chỉ số tháng
 k = ui.kpi_row(4, key="nt_kpis")
 n_da = int(BANG["Đã"].sum())
+_sau = len(HS) - len(HS_THANG)
 ui.kpi(k[0], "Học sinh nội trú", len(BANG),
-       f"{len(phongs)} phòng · {sum(1 for _, p in HS_XEM if p is None)} em chưa xếp phòng"
-       if quan_ly else f"{len(phong_cua_toi)} phòng của bạn")
+       (f"{len(phongs)} phòng · {sum(1 for _, p in HS_XEM if p is None)} em chưa xếp phòng"
+        if quan_ly else f"{len(phong_cua_toi)} phòng của bạn")
+       + (f" · {_sau} em vào nội trú sau tháng này" if _sau else ""))
 ui.kpi(k[1], f"Đã nhận xét {NT.ten_thang(thang).lower()}", n_da,
        f"{n_da / len(BANG):.0%} học sinh" if len(BANG) else None)
 ui.kpi(k[2], "Chưa nhận xét", len(BANG) - n_da)
@@ -280,7 +284,7 @@ def danh_gia_dialog(hid: str):
 
 # ------------------------------------------------------------------ báo cáo
 def render_bao_cao():
-    dang_nt = set(HS)
+    dang_nt = HS_THANG
     th = NT.tong_hop_phong(x_thang, phongs, dang_nt)
     x = x_thang[x_thang["HocSinhID"].isin(dang_nt)]
     i = THANG.index(thang)
@@ -297,7 +301,8 @@ def render_bao_cao():
 
     c1, c2 = st.columns(2, gap="small")
     with c1, ui.section("Tiến độ theo tháng", "Số học sinh đã có nhận xét mỗi tháng"):
-        td = NT.tien_do_thang(long[long["HocSinhID"].isin(dang_nt)], THANG[:i + 1], n)
+        td = NT.tien_do_thang(long[long["HocSinhID"].isin(set(HS))], THANG[:i + 1],
+                              {t: sum(h["tu"] <= t for h in HS.values()) for t in THANG})
         if td["Đã nhận xét"].sum() == 0:
             ui.empty_state("bar_chart", "Chưa có dữ liệu")
         else:
@@ -337,7 +342,7 @@ def render_bao_cao():
                          height=min(38 + 35 * len(nx), 520),
                          column_config={c: st.column_config.TextColumn(width="medium")
                                         for c in NT.COT_LOI})
-    nam = long[long["HocSinhID"].isin(dang_nt)]
+    nam = long[long["HocSinhID"].isin(set(HS))]
     ui.download_excel("Tải báo cáo (Excel)", {
         "Tong_hop_phong": th,
         "Thang_nay": x.drop(columns=["PhongID", "HocSinhID", "Số mục"]).assign(

@@ -143,6 +143,7 @@ def doi_che_do(storage: Storage, nh: list[dict], ts: list[dict], hoc_sinh: list[
     và Chế độ của liên hệ Data tuyển sinh liên kết. Em không còn Nội trú được bỏ khỏi phòng."""
     from concurrent.futures import ThreadPoolExecutor
 
+    from . import services
     from .schema import NHAP_HOC, TUYEN_SINH
     chon = {str(i) for i in hoc_sinh}
     ts_ids = {str(t.get("id")): t for t in ts}
@@ -151,11 +152,16 @@ def doi_che_do(storage: Storage, nh: list[dict], ts: list[dict], hoc_sinh: list[
         if str(r.get("id")) not in chon:
             continue
         if nhom_che_do(r.get("NoiTruBanTru")) != che_do:
-            viec.append((NHAP_HOC.name, r["id"],
-                         {"NoiTruBanTru": gia_tri_nh(r.get("NoiTruBanTru"), che_do)}))
+            upd = {"NoiTruBanTru": gia_tri_nh(r.get("NoiTruBanTru"), che_do)}
+            if services.la_vao_noi_tru(r.get("NoiTruBanTru"), che_do):
+                upd["NgayVaoNoiTru"] = date.today().isoformat()  # đánh giá từ tháng này
+            viec.append((NHAP_HOC.name, r["id"], upd))
         t = ts_ids.get(_s(r.get("TuyenSinhID")))
         if t is not None and _s(t.get("CheDo")) != che_do:
             viec.append((TUYEN_SINH.name, t["id"], {"CheDo": che_do}))
+    if any("NgayVaoNoiTru" in v[2] for v in viec) and \
+            not services.dam_bao_cot(storage, NHAP_HOC, "NgayVaoNoiTru"):
+        viec = [(a, b, {k: x for k, x in c.items() if k != "NgayVaoNoiTru"}) for a, b, c in viec]
     done = 0
     with ThreadPoolExecutor(max_workers=4) as pool:
         for _ in pool.map(lambda v: storage.update_item(*v), viec):
@@ -206,6 +212,12 @@ def thang_cua_nam(nam_hoc: str) -> list[str]:
     except ValueError:
         y = date.today().year
     return [f"{y + (m < 8)}-{m:02d}" for m in (*range(8, 13), *range(1, 8))]
+
+
+def thang_vao(rec: dict) -> str:
+    """Tháng (YYYY-MM) học sinh vào nội trú giữa năm; "" = nội trú từ đầu năm."""
+    d = pd.to_datetime(rec.get("NgayVaoNoiTru") or None, errors="coerce")
+    return "" if pd.isna(d) else f"{d:%Y-%m}"
 
 
 def thang_mac_dinh(nam_hoc: str, hom_nay: date | None = None) -> str:
@@ -405,11 +417,13 @@ def nhan_xet(x: pd.DataFrame) -> pd.DataFrame:
     return x.loc[x[COT_LOI].fillna("").ne("").any(axis=1), cols]
 
 
-def tien_do_thang(x: pd.DataFrame, thangs: list[str], n_hs: int) -> pd.DataFrame:
-    """Số học sinh đã có nhận xét mỗi tháng (đến tháng đang xem)."""
+def tien_do_thang(x: pd.DataFrame, thangs: list[str], n_hs: int | dict) -> pd.DataFrame:
+    """Số học sinh đã có nhận xét mỗi tháng (đến tháng đang xem). `n_hs`: số HS cần đánh giá
+    (một số, hoặc theo từng tháng khi có em vào nội trú giữa năm)."""
     return pd.DataFrame([{"Tháng": ten_thang(t).removeprefix("Tháng "),
                           "Đã nhận xét": int(x.loc[x["Tháng"] == t, "HocSinhID"].nunique()),
-                          "Số HS": n_hs} for t in thangs])
+                          "Số HS": n_hs.get(t, 0) if isinstance(n_hs, dict) else n_hs}
+                         for t in thangs])
 
 
 # ------------------------------------------------------------------ nhập phân phòng từ Excel

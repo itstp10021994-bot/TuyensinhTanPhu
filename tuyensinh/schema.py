@@ -220,6 +220,8 @@ NHAP_HOC = ListDef(
         Field("DoiVien", "Đội viên", BOOL, group=G_GIAYTO),
         Field("KhuyetTat", "Khuyết tật", CHOICE, "@khuyet_tat", group=G_GIAYTO),
         Field("NoiTruBanTru", "N.trú, B.trú", CHOICE, "@noi_tru_ban_tru", group=G_GIAYTO),
+        # chuyển Bán trú -> Nội trú giữa năm: đánh giá nội trú tính từ tháng này
+        Field("NgayVaoNoiTru", "Ngày vào nội trú", DATE, group=G_GIAYTO),
         Field("MaBHYT", "Mã số BHYT", group=G_GIAYTO),
         Field("HoSoDaNop", "Hồ sơ đã nộp", NOTE, group=G_GIAYTO),
         # --- Gia đình
@@ -404,5 +406,5 @@ NHAP_HOC_NGOAI_VEMIS = tuple(
     if f.key in ("TuyenSinhID", "NamHoc", "TruongCu_Tinh", "TruongCu_PhuongXa", "TruongCu",
                  "Khoi", "PhanHe", "TinhTrangHS", "LopCu", "MaBHYT", "HoSoDaNop", "EmailCha",
                  "EmailMe", "NguoiGiamHo", "NamSinhNGH", "NgheNghiepNGH", "CanCuocNGH",
-                 "DienThoaiNGH", "EmailNGH")
+                 "DienThoaiNGH", "EmailNGH", "NgayVaoNoiTru")
     or f.group in (G_HOCTAP, G_KHANCAP, G_NGANHANG, G_MON, G_HOCPHI))

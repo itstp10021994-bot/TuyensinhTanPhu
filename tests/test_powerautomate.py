@@ -207,6 +207,15 @@ def test_luu_tru_rut_tu_them_cot_truoc_khi_ghi(pa):
     assert "Chuyển trường" in row.values() and "Lê An" in row.values()
 
 
+def test_dam_bao_cot_ngay_vao_noi_tru(pa):
+    from tuyensinh import services
+    st, flow = pa
+    flow.lists["lists/GetByTitle('Data_NhapHoc')"]["cols"] = []
+    assert "NgayVaoNoiTru" in st.colmap(NHAP_HOC.name).missing
+    assert services.dam_bao_cot(st, NHAP_HOC, "NgayVaoNoiTru")
+    assert "NgayVaoNoiTru" not in st.colmap(NHAP_HOC.name).missing
+
+
 def test_timeout_doc_thu_lai_ghi_khong(monkeypatch):
     import requests
     monkeypatch.setattr(powerautomate.time, "sleep", lambda s: None)

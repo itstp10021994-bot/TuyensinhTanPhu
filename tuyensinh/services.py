@@ -304,6 +304,7 @@ def save_nhap_hoc(storage: Storage, data: dict, item_id: str | None = None) -> d
     clean = _clean(NHAP_HOC, data)
     if item_id:
         old = storage.get_item(NHAP_HOC.name, item_id) or {}
+        clean = _vao_noi_tru(storage, old, clean)
         rec = storage.update_item(NHAP_HOC.name, item_id, clean)
         _che_do_tu_nhap_hoc(storage, old, rec)
         return rec
@@ -313,13 +314,49 @@ def save_nhap_hoc(storage: Storage, data: dict, item_id: str | None = None) -> d
 def cap_nhat_nhap_hoc(storage: Storage, item_id: str, data: dict) -> dict:
     """Cập nhật một phần hồ sơ (xếp lớp, thu hồ sơ, học phí, xe…) — không kiểm tra bắt buộc."""
     old = (storage.get_item(NHAP_HOC.name, item_id) or {}) if "NoiTruBanTru" in data else {}
-    rec = storage.update_item(NHAP_HOC.name, item_id, _clean(NHAP_HOC, data))
+    rec = storage.update_item(NHAP_HOC.name, item_id,
+                              _vao_noi_tru(storage, old, _clean(NHAP_HOC, data)))
     if "NoiTruBanTru" in data:
         _che_do_tu_nhap_hoc(storage, old, rec)
     return rec
 
 
 # ------------------------------------------------------------------ đồng bộ chế độ nội / bán trú
+def dam_bao_cot(storage: Storage, ld: ListDef, key: str) -> bool:
+    """Cột `key` có trên list SharePoint chưa — chưa thì tự thêm (các cột thiếu của list).
+    Kho cục bộ luôn True; không thêm được (lỗi kết nối / quyền) -> False."""
+    if not hasattr(storage, "colmap"):
+        return True
+    try:
+        if key not in storage.colmap(ld.name).missing:
+            return True
+        from . import importer  # tránh vòng import
+
+        importer.setup_lists(storage, log=lambda *_: None, lists=[ld])
+        getattr(storage, "_maps", {}).pop(ld.name, None)
+        return key not in storage.colmap(ld.name).missing
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def la_vao_noi_tru(cu, moi) -> bool:
+    """Chuyển từ Bán trú sang Nội trú (không tính hồ sơ trước đó chưa ghi chế độ)."""
+    from . import noi_tru as NT
+    return NT.nhom_che_do(cu) == "Bán trú" and NT.nhom_che_do(moi) == "Nội trú"
+
+
+def _vao_noi_tru(storage: Storage, old: dict, clean: dict) -> dict:
+    """Bán trú -> Nội trú: ghi Ngày vào nội trú = hôm nay (trừ khi người dùng tự nhập ngày)."""
+    if "NoiTruBanTru" in clean and la_vao_noi_tru(old.get("NoiTruBanTru"),
+                                                   clean["NoiTruBanTru"]):
+        if not clean.get("NgayVaoNoiTru") or \
+                str(clean["NgayVaoNoiTru"])[:10] == str(old.get("NgayVaoNoiTru") or "")[:10]:
+            clean = {**clean, "NgayVaoNoiTru": date.today().isoformat()}
+    if clean.get("NgayVaoNoiTru") and not dam_bao_cot(storage, NHAP_HOC, "NgayVaoNoiTru"):
+        clean = {k: v for k, v in clean.items() if k != "NgayVaoNoiTru"}
+    return clean
+
+
 def _bo_khoi_phong(storage: Storage, nh_id: str) -> None:
     """Em không còn Nội trú: bỏ khỏi phòng nội trú (list phòng chưa tạo thì bỏ qua)."""
     from . import noi_tru as NT
@@ -359,8 +396,8 @@ def _che_do_tu_tuyen_sinh(storage: Storage, ts: dict) -> None:
     moi = che_do if che_do != "Ngoại trú" else ""
     if cu == moi:
         return
-    storage.update_item(NHAP_HOC.name, nh["id"],
-                        {"NoiTruBanTru": NT.gia_tri_nh(nh.get("NoiTruBanTru"), moi)})
+    storage.update_item(NHAP_HOC.name, nh["id"], _vao_noi_tru(
+        storage, nh, {"NoiTruBanTru": NT.gia_tri_nh(nh.get("NoiTruBanTru"), moi)}))
     if cu == "Nội trú":
         _bo_khoi_phong(storage, nh["id"])
 
